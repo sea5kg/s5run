@@ -1,5 +1,8 @@
-# remote-run-scripts
+# sea5kg-run-scripts-server
 
+
+## sea5kg-run-scripts-client.json
+sea5kg-run-scripts-client.json
 
 ```
 $ ./sea5kg-run-scripts-server 7777 8

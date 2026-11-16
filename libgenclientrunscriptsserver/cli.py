@@ -5,7 +5,7 @@ import sys
 
 from .generator import Generator
 
-SCHEMA_FILE = "schema-clients-run-scripts-server.json"
+SCHEMA_FILE = "sea5kg-run-scripts-client.json"
 
 
 def main(argv=None) -> int:

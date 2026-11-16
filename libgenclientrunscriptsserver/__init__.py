@@ -1,6 +1,6 @@
 """Code generator for the run-scripts-server client protocol.
 
-Reads schema-clients-run-scripts-server.json and emits typed stubs
+Reads sea5kg-run-scripts-client.json and emits typed stubs
 for C++, Python and Java.
 """
 from .generator import Generator
