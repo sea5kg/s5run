@@ -1,0 +1,67 @@
+{
+  "namespace": "example",
+  "cpp-output-dir": "src/test_client/run_script_services/",
+  "java-output-dir": "examples/java/test_client/run_script_services/",
+  "py-output-dir": "examples/py/",
+  "version": 1,
+  "functions": [
+    {
+      "name": "GetFile",
+      "return": "IFile",
+      "arguments": [
+        {
+          "type": "string",
+          "name": "filepath"
+        }
+      ]
+    },
+    {
+      "name": "GetTimeNow",
+      "return": "int",
+      "arguments": []
+    },
+    {
+      "name": "HasFile",
+      "return": "bool",
+      "arguments": [
+        {
+          "type": "string",
+          "name": "filepath"
+        }
+      ]
+    },
+    {
+      "name": "GetFileList",
+      "return": "array<string>",
+      "arguments": [
+        {
+          "type": "string",
+          "name": "filepath"
+        }
+      ]
+    }
+  ],
+  "classes": [
+    {
+      "name": "File",
+      "aggregate-interface": "IFile",
+      "methods": [
+        {
+          "name": "GetSize",
+          "return": "int",
+          "arguments": []
+        },
+        {
+          "name": "ReadBytes",
+          "return": "array<byte>",
+          "arguments": [
+            {
+              "type": "int",
+              "name": "readBytes"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

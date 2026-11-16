@@ -1,0 +1,180 @@
+"""Java code generator. Writes one .java file per class/interface."""
+
+import os
+
+from .types import parse
+
+
+def _encode_lines(ref, expr: str, indent: str) -> list[str]:
+    if ref.is_prim():
+        fn = {"bool": "putBool", "u8": "putU8",
+              "i64": "putU64", "u64": "putU64",
+              "f64": "putF64", "str": "putStr"}[ref.wire()]
+        return [f"{indent}Wire.{fn}(b, {expr});"]
+    if ref.is_array():
+        inner = parse(ref.inner)
+        return [
+            f"{indent}Wire.putU32(b, {expr}.size());",
+            f"{indent}for (var _e : {expr}) {{",
+            *_encode_lines(inner, "_e", indent + "    "),
+            f"{indent}}}",
+        ]
+    if ref.is_iface():
+        return [f"{indent}Wire.putU64(b, {expr} != null ? {expr}.getThisId() : 0);"]
+    raise ValueError(ref.name)
+
+
+def _decode_lines(ref, target: str, indent: str) -> list[str]:
+    if ref.is_prim():
+        fn = {"bool": "getBool", "u8": "getU8",
+              "i64": "getU64", "u64": "getU64",
+              "f64": "getF64", "str": "getStr"}[ref.wire()]
+        return [f"{indent}{target} = Wire.{fn}(b);"]
+    if ref.is_array():
+        inner = parse(ref.inner)
+        inner_t = inner.java()
+        unboxed = {"Long": "long", "Boolean": "boolean",
+                   "Double": "double", "Byte": "byte"}.get(inner_t, inner_t)
+        return [
+            f"{indent}{{",
+            f"{indent}    long _n = Wire.getU32(b);",
+            f"{indent}    {target} = new ArrayList<>();",
+            f"{indent}    for (long _i = 0; _i < _n; ++_i) {{",
+            f"{indent}        {unboxed} _e;",
+            *_decode_lines(inner, "_e", indent + "        "),
+            f"{indent}        {target}.add(_e);",
+            f"{indent}    }}",
+            f"{indent}}}",
+        ]
+    if ref.is_iface():
+        return [f"{indent}/* iface ref in array: unsupported */",
+                f"{indent}Wire.getU64(b);"]
+    raise ValueError(ref.name)
+
+
+def _write_struct(pkg_dir: str, pkg: str, name: str, fields, prefix_id: bool) -> None:
+    L = ["// AUTO-GENERATED. DO NOT EDIT.", f"package {pkg};", "",
+         "import java.util.*;", "import java.io.*;", "import java.nio.*;", ""]
+    L.append(f"public class {name} {{")
+    if prefix_id:
+        L.append("    public long this_id;")
+    for a in fields:
+        L.append(f"    public {parse(a.type).java()} {a.name};")
+    L.append("")
+    L.append("    public byte[] encode() {")
+    L.append("        ByteArrayOutputStream b = new ByteArrayOutputStream();")
+    if prefix_id:
+        L.append("        Wire.putU64(b, this_id);")
+    for a in fields:
+        L += _encode_lines(parse(a.type), f"this.{a.name}", "        ")
+    L.append("        return b.toByteArray();")
+    L.append("    }")
+    L.append(f"    public static {name} decode(byte[] data) {{")
+    L.append(f"        {name} r = new {name}();")
+    L.append("        ByteBuffer b = ByteBuffer.wrap(data);")
+    if prefix_id:
+        L.append("        r.this_id = Wire.getU64(b);")
+    for a in fields:
+        L += _decode_lines(parse(a.type), f"r.{a.name}", "        ")
+    L.append("        return r;")
+    L.append("    }")
+    L.append("}")
+    with open(os.path.join(pkg_dir, f"{name}.java"), "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+
+
+def _write_wire(pkg_dir: str, pkg: str) -> None:
+    L = ["// AUTO-GENERATED. DO NOT EDIT.", f"package {pkg};", "",
+         "import java.io.*;", "import java.nio.*;",
+         "import java.nio.charset.StandardCharsets;", "",
+         "public final class Wire {",
+         "    private Wire() {}",
+         "    public static void putU8(ByteArrayOutputStream b, byte v) { b.write(v); }",
+         "    public static void putBool(ByteArrayOutputStream b, boolean v) { b.write(v ? 1 : 0); }",
+         "    public static void putU32(ByteArrayOutputStream b, long v) {",
+         "        for (int i = 0; i < 4; ++i) b.write((int)((v >> (8*i)) & 0xFF));",
+         "    }",
+         "    public static void putU64(ByteArrayOutputStream b, long v) {",
+         "        for (int i = 0; i < 8; ++i) b.write((int)((v >> (8*i)) & 0xFF));",
+         "    }",
+         "    public static void putF64(ByteArrayOutputStream b, double v) {",
+         "        putU64(b, Double.doubleToRawLongBits(v));",
+         "    }",
+         "    public static void putStr(ByteArrayOutputStream b, String s) {",
+         "        byte[] raw = s.getBytes(StandardCharsets.UTF_8);",
+         "        putU32(b, raw.length); b.writeBytes(raw);",
+         "    }",
+         "    public static byte    getU8(ByteBuffer b)   { return b.get(); }",
+         "    public static boolean getBool(ByteBuffer b) { return b.get() != 0; }",
+         "    public static long    getU32(ByteBuffer b) {",
+         "        long v = 0; for (int i = 0; i < 4; ++i) v |= (long)(b.get() & 0xFF) << (8*i);",
+         "        return v;",
+         "    }",
+         "    public static long    getU64(ByteBuffer b) {",
+         "        long v = 0; for (int i = 0; i < 8; ++i) v |= (long)(b.get() & 0xFF) << (8*i);",
+         "        return v;",
+         "    }",
+         "    public static double  getF64(ByteBuffer b) {",
+         "        return Double.longBitsToDouble(getU64(b));",
+         "    }",
+         "    public static String  getStr(ByteBuffer b) {",
+         "        long n = getU32(b); byte[] raw = new byte[(int)n]; b.get(raw);",
+         "        return new String(raw, StandardCharsets.UTF_8);",
+         "    }",
+         "}"]
+    with open(os.path.join(pkg_dir, "Wire.java"), "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+
+
+def generate(schema, java_output_dir: str) -> None:
+    pkg = schema.namespace
+    pkg_dir = os.path.join(java_output_dir, pkg)
+    os.makedirs(pkg_dir, exist_ok=True)
+
+    for c in schema.classes:
+        L = ["// AUTO-GENERATED. DO NOT EDIT.", f"package {pkg};", "",
+             "import java.util.*;", "",
+             f"public interface {c.aggregate_interface} {{",
+             "    long getThisId();",
+             "    void setThisId(long id);"]
+        for m in c.methods:
+            ret = m.return_ref.java()
+            args = ", ".join(f"{a.type_ref().java()} {a.name}" for a in m.arguments)
+            L.append(f"    {ret} {m.name}({args});")
+        L.append("}")
+        with open(os.path.join(pkg_dir, f"{c.aggregate_interface}.java"),
+                  "w", encoding="utf-8") as f:
+            f.write("\n".join(L))
+
+    L = ["// AUTO-GENERATED. DO NOT EDIT.", f"package {pkg};", "",
+         "import java.util.*;", "",
+         "public interface IRunScriptGlobalFunctions {"]
+    for f in schema.functions:
+        ret = f.return_ref.java()
+        args = ", ".join(f"{a.type_ref().java()} {a.name}" for a in f.arguments)
+        L.append(f"    {ret} {f.name}({args});")
+    L.append("}")
+    with open(os.path.join(pkg_dir, "IRunScriptGlobalFunctions.java"),
+              "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+
+    _write_wire(pkg_dir, pkg)
+
+    for f in schema.functions:
+        _write_struct(pkg_dir, pkg, f"{f.name}Request", f.arguments, prefix_id=False)
+        if not f.return_ref.is_iface():
+            _write_struct(pkg_dir, pkg, f"{f.name}Response",
+                          [_ValueField(f.return_ref.name)], prefix_id=False)
+
+    for c in schema.classes:
+        for m in c.methods:
+            _write_struct(pkg_dir, pkg, f"{m.name}Request", m.arguments, prefix_id=True)
+            if not m.return_ref.is_iface():
+                _write_struct(pkg_dir, pkg, f"{m.name}Response",
+                              [_ValueField(m.return_ref.name)], prefix_id=False)
+
+
+class _ValueField:
+    def __init__(self, type_name: str):
+        self.name = "value"
+        self.type = type_name
