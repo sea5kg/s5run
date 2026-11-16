@@ -2,7 +2,22 @@
 
 
 ## sea5kg-run-scripts-client.json
-sea5kg-run-scripts-client.json
+
+It's schema share classes and functions.
+
+For regenerate client libraries:
+
+```
+python3 -u gen_clients_code.py
+```
+
+## build
+
+```
+$ ./build_simple.sh
+```
+
+## Example run
 
 ```
 $ ./sea5kg-run-scripts-server 7777 8
