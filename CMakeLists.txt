@@ -66,7 +66,7 @@ target_link_libraries(
 # client for tests
 add_executable(
   test-client
-  src/test_client/run_script_services/example.cpp
+  src/test_client/example/example.cpp
   src/test_client/client.cpp
   src/protocol.cpp
 )
