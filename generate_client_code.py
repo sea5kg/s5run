@@ -4,7 +4,7 @@
 # import sys
 # from libgenclientrunscriptsserver.cli import main
 
-from libgenclientrunscriptsserver import Generator
+from libs5rungen import Generator
 
 gen = Generator.from_file("s5run-client.json")
 gen.generate_all()
