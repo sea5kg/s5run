@@ -3,7 +3,7 @@
 
 #include <cstring>
 
-namespace example {
+namespace s5run {
 
 void value_to_wire(const Value &v, wire::Writer &w) {
   switch (v.kind()) {
@@ -115,10 +115,10 @@ Value value_from_wire(wire::Reader &r) {
     return Value(o);
   }
   case wire::T_REF:
-    return Value(ObjectRef(r.get_i32()));
+    return Value(ObjectRef(r.get_i32(), "File"));
   default:
     throw std::runtime_error("wire: unknown value tag");
   }
 }
 
-} // namespace example
+} // namespace s5run

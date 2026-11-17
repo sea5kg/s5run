@@ -7,7 +7,7 @@
 #include <cerrno>
 #include <cstring>
 
-namespace proto {
+namespace s5run {
 
 bool read_exact(int fd, void *buf, size_t n) {
   auto *p = static_cast<char *>(buf);
@@ -82,4 +82,4 @@ bool read_message(int fd, uint8_t &msg_type, std::vector<uint8_t> &body) {
   return true;
 }
 
-} // namespace proto
+} // namespace s5run

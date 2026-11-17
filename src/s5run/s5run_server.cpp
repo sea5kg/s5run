@@ -1,7 +1,9 @@
+#include "internal/s5run_globals.h"
+
 #include "json_mini.h"
 #include "s5run_protocol.h"
 #include "script_engine.h"
-#include "thread_pool.h"
+#include "internal/s5run_thread_pool.h"
 #include "s5run_server.h"
 
 #include <arpa/inet.h>
@@ -18,14 +20,10 @@
 
 namespace s5run {
 
-static std::atomic<bool> g_stop{false};
+std::atomic<bool> g_stop{false};
+
 static int g_listen_fd = -1;
 
-static void on_signal(int) {
-  g_stop = true;
-  if (g_listen_fd >= 0)
-    ::shutdown(g_listen_fd, SHUT_RDWR);
-}
 
 namespace {
 
@@ -76,66 +74,97 @@ private:
 } // namespace
 
 
-enum MsgType : uint8_t {
-    M_EXEC_REQ       = 0x01,  // client -> server: script, entry, args
-    M_EXEC_RESP      = 0x02,  // server -> client: ok, value, error
-    M_CALLBACK_REQ   = 0x03,  // server -> client: id, method, args
-    M_CALLBACK_RESP  = 0x04,  // client -> server: id, ok, value, error
-    M_REGISTER_FUNC  = 0x05,  // client -> server: name
-    M_REGISTER_OBJ   = 0x06,  // client -> server: name, this_id, type, methods
-    M_REGISTER_TYPE  = 0x07,  // client -> server: name, methods
-    M_REGISTER_RESP  = 0x08,  // server -> client: ok, error
+class client_handler : public thread_pool_task {
+public:
+  client_handler(int fd);
+  virtual void handle() override;
+private:
+  int m_fd;
+  void handle_register_function(engine::IScriptEngine *, const std::vector<uint8_t> &body);
+  void handle_register_object(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
+  void handle_register_object_type(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
+  void handle_exec(engine::IScriptEngine *, const std::vector<uint8_t> &body, int fd);
+  void send_exec_error(int fd, std::string);
+  void send_register_resp(int fd, bool, std::string);
 };
 
-static void handle_client(int fd) {
-  s5run::set_recv_timeout(fd, 10'000);
+client_handler::client_handler(int fd) : m_fd(fd) {
 
-  std::unique_ptr<engine::IScriptEngine> eng;
+};
+
+void client_handler::handle() {
+  s5run::set_recv_timeout(m_fd, 10'000);
+
+  std::shared_ptr<engine::IScriptEngine> eng;
   try {
     eng = engine::make_quickjs_engine();
   } catch (const std::exception &e) {
     std::fprintf(stderr, "engine init: %s\n", e.what());
-    ::close(fd);
+    ::close(m_fd);
     return;
   }
 
-  ClientChannel channel(fd);
+  ClientChannel channel(m_fd);
 
   while (true) {
     uint8_t msg_type;
     std::vector<uint8_t> body;
-    if (!s5run::read_message(fd, msg_type, body))
+    if (!s5run::read_message(m_fd, msg_type, body))
       break;
 
     try {
       switch (msg_type) {
-      case MsgType::M_REGISTER_FUNC:
+      case protocol_msg_type::M_REGISTER_FUNC:
         handle_register_function(eng.get(), body);
-        send_register_resp(fd, true, "");
+        send_register_resp(m_fd, true, "");
         break;
-      case MsgType::M_REGISTER_OBJ:
+      case protocol_msg_type::M_REGISTER_OBJ:
         handle_register_object(eng.get(), channel, body);
-        send_register_resp(fd, true, "");
+        send_register_resp(m_fd, true, "");
         break;
-      case MsgType::M_REGISTER_TYPE:
+      case protocol_msg_type::M_REGISTER_TYPE:
         handle_register_object_type(eng.get(), channel, body);
-        send_register_resp(fd, true, "");
+        send_register_resp(m_fd, true, "");
         break;
-      case MsgType::M_EXEC_REQ:
-        handle_exec(eng.get(), body, fd);
+      case protocol_msg_type::M_EXEC_REQ:
+        handle_exec(eng.get(), body, m_fd);
         break;
       default:
         throw std::runtime_error("unknown message type");
       }
     } catch (const std::exception &e) {
-      if (msg_type == MsgType::M_EXEC_REQ) {
-        send_exec_error(fd, e.what());
+      if (msg_type == protocol_msg_type::M_EXEC_REQ) {
+        send_exec_error(m_fd, e.what());
       } else {
-        send_register_resp(fd, false, e.what());
+        send_register_resp(m_fd, false, e.what());
       }
     }
   }
-  ::close(fd);
+  ::close(m_fd);
+}
+
+void client_handler::handle_register_function(engine::IScriptEngine *, const std::vector<uint8_t> &body) {
+  // TODO
+}
+
+void client_handler::handle_register_object(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body) {
+  // TODO
+}
+
+void client_handler::handle_register_object_type(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body) {
+  // TODO
+}
+
+void client_handler::handle_exec(engine::IScriptEngine *, const std::vector<uint8_t> &body, int fd) {
+  // TODO
+}
+
+void client_handler::send_exec_error(int fd, std::string) {
+  // TODO
+}
+
+void client_handler::send_register_resp(int fd, bool, std::string) {
+  // TODO
 }
 
 
@@ -143,11 +172,18 @@ server::server() {
 
 }
 
+// static
+void server::on_signal(int) {
+  g_stop = true;
+  if (g_listen_fd >= 0)
+    ::shutdown(g_listen_fd, SHUT_RDWR);
+}
+
 int server::run(uint16_t listen_port, int threads) {
 
   std::signal(SIGPIPE, SIG_IGN);
-  std::signal(SIGINT, on_signal);
-  std::signal(SIGTERM, on_signal);
+  std::signal(SIGINT, &server::on_signal);
+  std::signal(SIGTERM, &server::on_signal);
 
   g_listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (g_listen_fd < 0) {
@@ -174,7 +210,7 @@ int server::run(uint16_t listen_port, int threads) {
 
   std::printf("s5run-server listening on :%u, threads=%zu\n", listen_port, threads);
 
-  ThreadPool pool(threads);
+  thread_pool pool(threads);
 
   while (!g_stop) {
     sockaddr_in caddr{};
@@ -190,9 +226,7 @@ int server::run(uint16_t listen_port, int threads) {
     inet_ntop(AF_INET, &caddr.sin_addr, ip, sizeof(ip));
     std::printf("client %s:%u connected\n", ip, ntohs(caddr.sin_port));
 
-    pool.submit([cfd] {
-      handle_client(cfd);
-    });
+    pool.submit(std::make_shared<client_handler>(cfd));
   }
 
   if (g_listen_fd >= 0)

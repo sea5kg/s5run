@@ -1,18 +1,18 @@
 // tests/value_wire_test.cpp
-#include "value.h"
+#include "s5run_value.h"
 #include "value_wire.h"
 
 #include <cassert>
 #include <cstdio>
 
-using example::Value;
-using example::ValueArray;
-using example::ValueObject;
-using example::ObjectRef;
+using s5run::Value;
+using s5run::ValueArray;
+using s5run::ValueObject;
+using s5run::ObjectRef;
 
-static Value roundtrip(const Value& v) {
-    std::vector<uint8_t> buf = example::value_encode(v);
-    return example::value_decode(buf.data(), buf.size());
+static s5run::Value roundtrip(const s5run::Value& v) {
+    std::vector<uint8_t> buf = s5run::value_encode(v);
+    return s5run::value_decode(buf.data(), buf.size());
 }
 
 int main() {
@@ -64,9 +64,10 @@ int main() {
     assert(ro.as_object().at("name").as_string() == "file.txt");
 
     // ref
-    Value rr = roundtrip(Value(ObjectRef(123)));
+    Value rr = roundtrip(Value(s5run::ObjectRef(123, "File")));
     assert(rr.is_ref());
     assert(rr.as_ref().this_id == 123);
+    assert(rr.as_ref().type == "File");
 
     // nested
     ValueObject inner;

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "value.h"
+#include "s5run_value.h"
 
 namespace example {
 
@@ -27,7 +27,7 @@ public:
   std::string name() const {
     return m_name;
   }
-  virtual Value execute(IRunScriptClient &client, const std::vector<Value> &args) = 0;
+  virtual s5run::Value execute(IRunScriptClient &client, const std::vector<s5run::Value> &args) = 0;
 };
 
 class RunScriptClientObject {
@@ -50,7 +50,7 @@ public:
     m_this_id = id;
   };
   virtual std::vector<std::string> methods() const = 0;
-  virtual Value execute(IRunScriptClient &client, const std::string &method, const std::vector<Value> &args) = 0;
+  virtual s5run::Value execute(IRunScriptClient &client, const std::string &method, const std::vector<s5run::Value> &args) = 0;
 };
 
 class RunScriptClientGlobalObject {
@@ -68,7 +68,7 @@ public:
   }
 
   virtual std::vector<std::string> methods() const = 0;
-  virtual Value execute(IRunScriptClient &client, const std::string &method, const std::vector<Value> &args) = 0;
+  virtual s5run::Value execute(IRunScriptClient &client, const std::string &method, const std::vector<s5run::Value> &args) = 0;
 };
 
 class RunScriptClientObjectType {
@@ -84,7 +84,7 @@ public:
     return m_name;
   }
   virtual std::shared_ptr<RunScriptClientGlobalObject>
-  create(IRunScriptClient &client, const std::vector<Value> &args) = 0;
+  create(IRunScriptClient &client, const std::vector<s5run::Value> &args) = 0;
 };
 
 // TCP client for run-scripts-server.
@@ -99,7 +99,7 @@ public:
   // Calls obj->set_this_id(id) before returning.
   virtual int register_object(std::shared_ptr<RunScriptClientObject> obj) = 0;
 
-  virtual Value run(const std::string &script, const std::string &entry, const std::vector<Value> &args) = 0;
+  virtual s5run::Value run(const std::string &script, const std::string &entry, const std::vector<s5run::Value> &args) = 0;
 };
 
 std::unique_ptr<IRunScriptClient> createRunScriptClient(const std::string &host, uint16_t port);

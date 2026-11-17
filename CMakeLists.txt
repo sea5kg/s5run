@@ -52,7 +52,7 @@ add_executable(sea5kg-run-scripts-server
     src/s5run/script_engines/lua_script_engine.cpp
     src/s5run/s5run_protocol.cpp
     src/s5run/s5run_server.cpp
-    src/s5run/thread_pool.cpp
+    src/s5run/s5run_thread_pool.cpp
 )
 
 target_include_directories(
@@ -70,19 +70,19 @@ target_link_libraries(
   Threads::Threads
 )
 
-# client for tests
-add_executable(
-  test-client
-  src/test_client/example/example.cpp
-  src/test_client/example/run_script_client.cpp
-  src/test_client/client.cpp
-  src/s5run/s5run_protocol.cpp
-)
-target_include_directories(
-  test-client
-  PRIVATE
-  src/s5run
-)
+# # client for tests
+# add_executable(
+#   test-client
+#   src/test_client/example/example.cpp
+#   src/test_client/example/run_script_client.cpp
+#   src/test_client/client.cpp
+#   src/s5run/s5run_protocol.cpp
+# )
+# target_include_directories(
+#   test-client
+#   PRIVATE
+#   src/s5run
+# )
 
 # enable testing functionality
 enable_testing()

@@ -55,6 +55,6 @@ public:
                                const json::Array& args) = 0;
 };
 
-std::unique_ptr<IScriptEngine> make_quickjs_engine();
+std::shared_ptr<IScriptEngine> make_quickjs_engine();
 
 } // namespace engine

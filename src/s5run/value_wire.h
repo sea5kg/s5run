@@ -1,9 +1,9 @@
 #pragma once
 
-#include "value.h"
+#include "s5run_value.h"
 #include "wire.h"
 
-namespace example {
+namespace s5run {
 
 void value_to_wire(const Value& v, wire::Writer& w);
 
@@ -20,4 +20,4 @@ inline Value value_decode(const uint8_t* p, size_t n) {
     return value_from_wire(r);
 }
 
-} // namespace example
+} // namespace s5run

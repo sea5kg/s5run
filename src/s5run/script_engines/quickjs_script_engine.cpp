@@ -473,8 +473,8 @@ private:
 
 } // namespace
 
-std::unique_ptr<IScriptEngine> make_quickjs_engine() {
-  return std::make_unique<QuickJSEngine>();
+std::shared_ptr<IScriptEngine> make_quickjs_engine() {
+  return std::make_shared<QuickJSEngine>();
 }
 
 } // namespace engine

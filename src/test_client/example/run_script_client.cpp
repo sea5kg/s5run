@@ -1,5 +1,5 @@
 #include "run_script_client.h"
-#include "protocol.h"
+#include "s5run_protocol.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>

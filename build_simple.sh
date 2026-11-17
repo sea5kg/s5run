@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# Original repository: https://github.com/sea5kg/sea5kg-server-scripts
+# Original repository: https://github.com/sea5kg/s5run
 #
 ##################################################################################
 
@@ -47,4 +47,4 @@ check_ret $? "configure"
 cmake --build ./tmp/release --config Release
 check_ret $? "build"
 
-# cd ./tmp/release && ctest --output-on-failure
+cd ./tmp/release && ctest --output-on-failure

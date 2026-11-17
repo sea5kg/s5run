@@ -1,13 +1,15 @@
-#include "thread_pool.h"
+#include "internal/s5run_thread_pool.h"
 
-ThreadPool::ThreadPool(size_t n) {
+namespace s5run {
+
+thread_pool::thread_pool(size_t n) {
   for (size_t i = 0; i < n; ++i)
     workers_.emplace_back([this] {
       worker_loop();
     });
 }
 
-ThreadPool::~ThreadPool() {
+thread_pool::~thread_pool() {
   {
     std::lock_guard lk(m_);
     stop_ = true;
@@ -17,7 +19,7 @@ ThreadPool::~ThreadPool() {
     t.join();
 }
 
-void ThreadPool::submit(std::function<void()> task) {
+void thread_pool::submit(std::shared_ptr<thread_pool_task> task) {
   {
     std::lock_guard lk(m_);
     tasks_.push(std::move(task));
@@ -25,9 +27,9 @@ void ThreadPool::submit(std::function<void()> task) {
   cv_.notify_one();
 }
 
-void ThreadPool::worker_loop() {
+void thread_pool::worker_loop() {
   while (true) {
-    std::function<void()> task;
+    std::shared_ptr<thread_pool_task> task;
     {
       std::unique_lock lk(m_);
       cv_.wait(lk, [this] {
@@ -39,8 +41,10 @@ void ThreadPool::worker_loop() {
       tasks_.pop();
     }
     try {
-      task();
+      task->handle();
     } catch (...) { /* log */
     }
   }
 }
+
+} // namespace s5run
