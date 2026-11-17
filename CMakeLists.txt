@@ -54,7 +54,12 @@ add_executable(sea5kg-run-scripts-server
     src/thread_pool.cpp
 )
 
-target_include_directories(sea5kg-run-scripts-server PRIVATE include)
+target_include_directories(
+  sea5kg-run-scripts-server
+  PRIVATE
+  src/include
+)
+
 target_link_libraries(
   sea5kg-run-scripts-server
   PRIVATE
@@ -67,11 +72,16 @@ target_link_libraries(
 add_executable(
   test-client
   src/test_client/example/example.cpp
+  src/test_client/example/run_script_client.cpp
   src/test_client/client.cpp
   src/protocol.cpp
 )
 target_include_directories(
   test-client
   PRIVATE
-  include
+  src/include
 )
+
+# enable testing functionality
+enable_testing()
+add_subdirectory(src/tests)
