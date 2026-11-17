@@ -7,7 +7,7 @@
 #include <string>
 #include <sys/socket.h>
 
-namespace proto {
+namespace s5run {
 
 constexpr uint32_t kMaxFrame = 8 * 1024 * 1024;
 
@@ -25,4 +25,4 @@ bool write_message(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);
 // Read a message: returns (msg_type, body). nullopt on EOF/error.
 bool read_message(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);
 
-} // namespace proto
+} // namespace s5run

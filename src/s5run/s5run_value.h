@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace example {
+namespace s5run {
 
 class Value;
 typedef std::vector<Value> ValueArray;
@@ -240,4 +240,4 @@ private:
   Storage u_;
 };
 
-} // namespace example
+} // namespace s5run

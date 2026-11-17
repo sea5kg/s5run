@@ -48,16 +48,18 @@ set_target_properties(quickjs_static PROPERTIES
 # server
 add_executable(sea5kg-run-scripts-server
     src/main.cpp
-    src/script_engines/quickjs_script_engine.cpp
-    src/script_engines/lua_script_engine.cpp
-    src/protocol.cpp
-    src/thread_pool.cpp
+    src/s5run/script_engines/quickjs_script_engine.cpp
+    src/s5run/script_engines/lua_script_engine.cpp
+    src/s5run/s5run_protocol.cpp
+    src/s5run/s5run_server.cpp
+    src/s5run/thread_pool.cpp
 )
 
 target_include_directories(
   sea5kg-run-scripts-server
   PRIVATE
-  src/include
+  src/s5run
+  src/s5run/include
 )
 
 target_link_libraries(
@@ -74,12 +76,12 @@ add_executable(
   src/test_client/example/example.cpp
   src/test_client/example/run_script_client.cpp
   src/test_client/client.cpp
-  src/protocol.cpp
+  src/s5run/s5run_protocol.cpp
 )
 target_include_directories(
   test-client
   PRIVATE
-  src/include
+  src/s5run
 )
 
 # enable testing functionality

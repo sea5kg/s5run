@@ -1,5 +1,4 @@
-// src/protocol.cpp
-#include "protocol.h"
+#include "s5run_protocol.h"
 
 #include <arpa/inet.h>
 #include <sys/time.h>
@@ -44,7 +43,7 @@ std::optional<std::string> read_frame(int fd) {
   if (!read_exact(fd, &net_len, sizeof(net_len)))
     return std::nullopt;
   uint32_t len = ntohl(net_len);
-  if (len > kMaxFrame)
+  if (len > s5run::kMaxFrame)
     return std::nullopt;
   std::string out(len, '\0');
   if (len && !read_exact(fd, out.data(), len))
