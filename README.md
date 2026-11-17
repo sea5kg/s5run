@@ -16,7 +16,7 @@ It's schema share classes and functions.
 For regenerate client libraries:
 
 ```
-python3 -u gen_clients_code.py
+python3 -u generate_client_code.py
 ```
 
 ## Build
