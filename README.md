@@ -147,21 +147,41 @@ For regenerate client libraries:
 $ python3 -u generate_client_code.py
 ```
 
-## Build
+### How add your implementation
+
+Looks by example in `tests/cpp11-client/`
+
+- Script generated base class and interfaces will be putted here: `tests/cpp11-client/s5run-cli`
+
+```cpp
+// TODO
+```
+
+How to run:
 
 ```
+auto cli = s5run_cli_example::make_client();
+cli->registry_class<MyFile>();
+cli->registry_global_function<MyGetFile>();
+cli->registry_global_function<MyHasFile>();
+cli->registry_global_function<MyGetTimeNow>();
+cli->registry_global_object(new MyConsole());
+cli->registry_global_object(new MyFileSystem());
+cli->set_server_address("s5run://localhost:7777");
+auto result = cli->run(script, "main", {s5run_cli_example::value("test.txt")});
+
+```
+
+## Build
+
+```sh
 $ ./build_simple.sh
 ```
 
 ## Example run
 
-```
+```sh
 $ ./s5run-server 7777 8
 script_service listening on :7777, threads=8
 client 127.0.0.1:53421 connected
-
-$ ./test-client
-add -> {"ok":true,"value":5}
-hello -> {"ok":true,"value":{"len":5,"msg":"hello, world"}}
-fact -> {"ok":true,"value":3628800}
 ```
