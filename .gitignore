@@ -1,5 +1,5 @@
 /tmp
-/sea5kg-run-scripts-server
+/s5run-server
 /test-client
 __pycache__
 /tests/cpp11-client/bin

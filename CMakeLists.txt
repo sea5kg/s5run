@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(sea5kg-run-scripts-server C CXX)
+project(s5run-server C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(EXECUTABLE_OUTPUT_PATH ${sea5kg-run-scripts-server_SOURCE_DIR})
+set(EXECUTABLE_OUTPUT_PATH ${s5run-server_SOURCE_DIR})
 
 find_package(Threads REQUIRED)
 
@@ -46,7 +46,7 @@ set_target_properties(quickjs_static PROPERTIES
 )
 
 # server
-add_executable(sea5kg-run-scripts-server
+add_executable(s5run-server
     src/main.cpp
     src/s5run/script_engines/quickjs_script_engine.cpp
     src/s5run/script_engines/lua_script_engine.cpp
@@ -56,33 +56,19 @@ add_executable(sea5kg-run-scripts-server
 )
 
 target_include_directories(
-  sea5kg-run-scripts-server
+  s5run-server
   PRIVATE
   src/s5run
   src/s5run/include
 )
 
 target_link_libraries(
-  sea5kg-run-scripts-server
+  s5run-server
   PRIVATE
   lua_static
   quickjs_static
   Threads::Threads
 )
-
-# # client for tests
-# add_executable(
-#   test-client
-#   src/test_client/example/example.cpp
-#   src/test_client/example/run_script_client.cpp
-#   src/test_client/client.cpp
-#   src/s5run/s5run_protocol.cpp
-# )
-# target_include_directories(
-#   test-client
-#   PRIVATE
-#   src/s5run
-# )
 
 # enable testing functionality
 enable_testing()
