@@ -14,5 +14,5 @@ int main(int argc, char **argv) {
     threads = static_cast<size_t>(std::atoi(argv[2]));
 
   s5run::server s;
-  return s.run(7777, threads);
+  return s.run(port, threads);
 }

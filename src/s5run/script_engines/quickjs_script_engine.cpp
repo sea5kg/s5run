@@ -109,7 +109,11 @@ json::Value js_to_json(JSContext *ctx, JSValueConst v) {
 
 JSValue json_to_js(JSContext *ctx, const json::Value &v) {
   std::string s = json::dump(v);
-  std::string code = "JSON.parse(" + s + ")";
+  // JSON is a valid JS expression; wrap in parentheses so a leading
+  // '{' is not parsed as a block statement. Do not use JSON.parse:
+  // its argument would be a JS value, not a string (arrays/objects
+  // would break through ToString).
+  std::string code = "(" + s + ")";
   return JS_Eval(ctx, code.data(), code.size(), "<json>", JS_EVAL_TYPE_GLOBAL);
 }
 
@@ -154,7 +158,6 @@ public:
 
     JSValue holder = wrap_opaque(callback_class_id_, cctx);
     JSValue fn = make_cfunction(&QuickJSEngine::js_global_trampoline, callback_class_id_, holder);
-    JS_FreeValue(ctx_.get(), holder);
 
     JSValue global = JS_GetGlobalObject(ctx_.get());
     JS_SetPropertyStr(ctx_.get(), global, method.c_str(), fn);
@@ -169,7 +172,6 @@ public:
 
     JSValue holder = wrap_opaque(callback_class_id_, cctx);
     JSValue fn = make_cfunction(&QuickJSEngine::js_global_js_trampoline, callback_class_id_, holder);
-    JS_FreeValue(ctx_.get(), holder);
 
     JSValue global = JS_GetGlobalObject(ctx_.get());
     JS_SetPropertyStr(ctx_.get(), global, method.c_str(), fn);
@@ -193,11 +195,15 @@ public:
 
       JSValue holder = wrap_opaque(method_class_id_, mctx);
       JSValue fn = make_cfunction(&QuickJSEngine::js_method_trampoline, method_class_id_, holder);
-      JS_FreeValue(ctx, holder);
 
       JS_SetPropertyStr(ctx, obj, name.c_str(), fn);
     }
     return to_handle(obj);
+  }
+
+  JsValue make_value(JsContext ctx_handle, const json::Value &v) override {
+    JSContext *ctx = to_ctx(ctx_handle);
+    return to_handle(json_to_js(ctx, v));
   }
 
   ExecResult execute(const std::string &script, const std::string &entry, const json::Array &args) override {

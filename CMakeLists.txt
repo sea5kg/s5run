@@ -53,6 +53,7 @@ add_executable(s5run-server
     src/s5run/s5run_protocol.cpp
     src/s5run/s5run_server.cpp
     src/s5run/s5run_thread_pool.cpp
+    src/s5run/value_wire.cpp
 )
 
 target_include_directories(

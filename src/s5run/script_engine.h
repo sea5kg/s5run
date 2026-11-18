@@ -50,6 +50,8 @@ public:
                                 int64_t this_id,
                                 const json::Array& methods) = 0;
 
+    virtual JsValue make_value(JsContext ctx, const json::Value& v) = 0;
+
     virtual ExecResult execute(const std::string& script,
                                const std::string& entry,
                                const json::Array& args) = 0;

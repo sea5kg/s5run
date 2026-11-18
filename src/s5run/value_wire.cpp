@@ -61,6 +61,7 @@ void value_to_wire(const Value &v, wire::Writer &w) {
   case Value::K_REF:
     w.put_u8(wire::T_REF);
     w.put_i32(v.as_ref().this_id);
+    w.put_string(v.as_ref().type);
     return;
   }
 }
@@ -114,8 +115,11 @@ Value value_from_wire(wire::Reader &r) {
     }
     return Value(o);
   }
-  case wire::T_REF:
-    return Value(ObjectRef(r.get_i32(), "File"));
+  case wire::T_REF: {
+    int32_t this_id = r.get_i32();
+    std::string type = r.get_string();
+    return Value(ObjectRef(this_id, type));
+  }
   default:
     throw std::runtime_error("wire: unknown value tag");
   }
