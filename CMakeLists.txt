@@ -8,21 +8,21 @@ set(EXECUTABLE_OUTPUT_PATH ${s5run-server_SOURCE_DIR})
 
 find_package(Threads REQUIRED)
 
-# Lua-engine
-file(GLOB LUA_SRC CONFIGURE_DEPENDS src/third_party/lua/*.c)
-if(NOT LUA_SRC)
-  message(FATAL_ERROR
-    "Lua sources not found in src/third_party/lua. "
-    "Run: git clone -b v5.4.6 https://github.com/lua/lua third_party/lua")
-endif()
-list(FILTER LUA_SRC EXCLUDE REGEX "/lua\\.c$")
-list(FILTER LUA_SRC EXCLUDE REGEX "/luac\\.c$")
-add_library(lua_static STATIC ${LUA_SRC})
-target_include_directories(lua_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/lua)
-set_target_properties(lua_static PROPERTIES
-  LINKER_LANGUAGE C
-  C_STANDARD 99
-)
+# # Lua-engine
+# file(GLOB LUA_SRC CONFIGURE_DEPENDS src/third_party/lua/*.c)
+# if(NOT LUA_SRC)
+#   message(FATAL_ERROR
+#     "Lua sources not found in src/third_party/lua. "
+#     "Run: git clone -b v5.4.6 https://github.com/lua/lua third_party/lua")
+# endif()
+# list(FILTER LUA_SRC EXCLUDE REGEX "/lua\\.c$")
+# list(FILTER LUA_SRC EXCLUDE REGEX "/luac\\.c$")
+# add_library(lua_static STATIC ${LUA_SRC})
+# target_include_directories(lua_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/lua)
+# set_target_properties(lua_static PROPERTIES
+#   LINKER_LANGUAGE C
+#   C_STANDARD 99
+# )
 
 # QuickJS-engine
 file(GLOB QJS_SRC CONFIGURE_DEPENDS
@@ -49,7 +49,7 @@ set_target_properties(quickjs_static PROPERTIES
 add_executable(s5run-server
     src/main.cpp
     src/s5run/script_engines/quickjs_script_engine.cpp
-    src/s5run/script_engines/lua_script_engine.cpp
+    # src/s5run/script_engines/lua_script_engine.cpp
     src/s5run/s5run_protocol.cpp
     src/s5run/s5run_server.cpp
     src/s5run/s5run_thread_pool.cpp
@@ -65,7 +65,7 @@ target_include_directories(
 target_link_libraries(
   s5run-server
   PRIVATE
-  lua_static
+  # lua_static
   quickjs_static
   Threads::Threads
 )
