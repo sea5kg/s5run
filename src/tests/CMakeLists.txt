@@ -8,6 +8,7 @@ list (APPEND TEST_S5RUN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../")
 
 
 list (APPEND TEST_S5RUN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/value_wire.cpp")
+list (APPEND TEST_S5RUN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/s5run_protocol.cpp")
 list (APPEND TEST_S5RUN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/include/")
 list (APPEND TEST_S5RUN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/")
 
@@ -23,7 +24,7 @@ foreach(_TEST ${ALL_TESTS})
 
     add_test(
       NAME ${TEST_NAME}
-      COMMAND $<TARGET_FILE:${TEST_NAME}>
+      COMMAND $<TARGET_FILE:${TEST_NAME}> $<TARGET_FILE:s5run-server>
     )
     message(${CMAKE_CURRENT_BINARY_DIR}/tests)
     set_target_properties (${TEST_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY tests)

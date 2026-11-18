@@ -20,8 +20,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SERVER_BIN = os.path.join(ROOT, "s5run-server")
 CPP_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp11-client")
 CPP_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp11-client")
-CPP_CLIENT_BIN = os.path.join(CPP_CLIENT_DIR, "bin", "cpp-client-test")
-CPP_GEN_BIN = os.path.join(CPP_CLIENT_DIR, "bin", "cpp-gen-test")
+CPP_GEN_BIN = os.path.join(CPP_CLIENT_DIR, "bin", "cpp11-client")
 JAVA_CLIENT_DIR = os.path.join(ROOT, "tests", "java-client")
 
 sys.path.insert(0, ROOT)
@@ -104,7 +103,7 @@ def ensure_server():
 
 def ensure_cpp_client():
     inputs = _iter_files(CPP_CLIENT_DIR)
-    if not os.path.exists(CPP_CLIENT_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP_CLIENT_BIN):
+    if not os.path.exists(CPP_GEN_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP_GEN_BIN):
         _run(["cmake", "-H" + CPP_CLIENT_DIR, "-B" + CPP_CLIENT_BUILD,
               "-DCMAKE_BUILD_TYPE=Release"], "configure cpp11-client", cwd=ROOT)
         _run(["cmake", "--build", CPP_CLIENT_BUILD, "--config", "Release"], "build cpp11-client")
@@ -240,17 +239,12 @@ def test_callback_error(host, port):
     print("  PASS")
 
 
-def test_cpp_client(port):
-    print("== cpp11-client: scenarios")
-    ret = subprocess.call([CPP_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "cpp-client-test failed with code %d" % ret
-    print("  PASS")
 
 
 def test_cpp_gen_client(port):
-    print("== cpp-gen-client: generated api scenarios")
+    print("== cpp11-client: scenarios")
     ret = subprocess.call([CPP_GEN_BIN, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "cpp-gen-test failed with code %d" % ret
+    assert ret == 0, "cpp11-client failed with code %d" % ret
     print("  PASS")
 
 
@@ -278,7 +272,6 @@ def main():
     try:
         test_happy_path("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
-        test_cpp_client(port)
         test_cpp_gen_client(port)
     finally:
         stop_server(proc)

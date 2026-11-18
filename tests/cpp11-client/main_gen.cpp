@@ -1,6 +1,6 @@
 // Smoke test client built on the GENERATED s5run client API.
 //
-// Usage: ./cpp-gen-test [host] [port]
+// Usage: ./cpp11-client [host] [port]
 #include "s5run_cli_example.h"
 
 #include <cstdio>
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     snprintf(address, sizeof(address), "s5run://%s:%u", host.c_str(), (unsigned)port);
 
     // == happy path
-    std::printf("== cpp-gen-client: happy path\n");
+    std::printf("== cpp11-client: happy path\n");
     {
         std::shared_ptr<MyConsole> con(new MyConsole());
 
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
     }
 
     // == error path
-    std::printf("== cpp-gen-client: error path\n");
+    std::printf("== cpp11-client: error path\n");
     {
         std::shared_ptr<client> cli = make_client();
         cli->registry_global_function<MyHasFile>();
@@ -141,6 +141,6 @@ int main(int argc, char **argv) {
         std::printf("  PASS\n");
     }
 
-    std::printf("cpp-gen-client: all smoke tests passed\n");
+    std::printf("cpp11-client: all smoke tests passed\n");
     return 0;
 }

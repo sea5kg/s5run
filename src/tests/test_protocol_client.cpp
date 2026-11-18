@@ -1,15 +1,19 @@
-// Smoke test client for the s5run binary protocol.
+// Raw binary protocol smoke test: spawns the s5run-server and runs
+// client scenarios against it (registration, exec, callbacks, errors).
 //
-// Usage: ./cpp-client-test [host] [port]
+// Usage: test_protocol_client <path-to-s5run-server>
 #include "internal/s5run_globals.h"
 #include "s5run_protocol.h"
 #include "value_wire.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
@@ -53,7 +57,6 @@ void expect_register_ok(int fd, const std::string &what) {
     throw std::runtime_error(what + " failed: " + r.get_string());
 }
 
-// Serves callbacks until M_EXEC_RESP; returns (ok, value|error).
 void run_with_dispatch(int fd, bool &ok, s5run::Value &value, std::string &error) {
   while (true) {
     uint8_t msg_type = 0;
@@ -95,8 +98,7 @@ void run_with_dispatch(int fd, bool &ok, s5run::Value &value, std::string &error
   }
 }
 
-void test_happy_path(const std::string &host, uint16_t port) {
-  std::printf("== cpp-client: happy path\n");
+int connect_to(const std::string &host, uint16_t port) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0)
     throw std::runtime_error("socket failed");
@@ -107,8 +109,13 @@ void test_happy_path(const std::string &host, uint16_t port) {
     throw std::runtime_error("bad host");
   if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0)
     throw std::runtime_error("connect failed");
+  s5run::set_recv_timeout(fd, 10000);
+  return fd;
+}
 
-  s5run::set_recv_timeout(fd, 10'000);
+void test_happy_path(const std::string &host, uint16_t port) {
+  std::printf("== protocol: happy path\n");
+  int fd = connect_to(host, port);
 
   send_register_type(fd, "File", {"GetSize", "ReadBytes"});
   expect_register_ok(fd, "register_type(File)");
@@ -149,18 +156,8 @@ function main(path) {
 }
 
 void test_callback_error(const std::string &host, uint16_t port) {
-  std::printf("== cpp-client: callback error path\n");
-  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0)
-    throw std::runtime_error("socket failed");
-  sockaddr_in addr{};
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  ::inet_pton(AF_INET, host.c_str(), &addr.sin_addr);
-  if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0)
-    throw std::runtime_error("connect failed");
-
-  s5run::set_recv_timeout(fd, 10'000);
+  std::printf("== protocol: callback error path\n");
+  int fd = connect_to(host, port);
 
   send_register_func(fd, "Fail");
   expect_register_ok(fd, "register_func(Fail)");
@@ -201,18 +198,85 @@ void test_callback_error(const std::string &host, uint16_t port) {
   std::printf("  PASS\n");
 }
 
+uint16_t free_port() {
+  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0)
+    throw std::runtime_error("socket failed");
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  ::bind(fd, (sockaddr *)&addr, sizeof(addr));
+  sockaddr_in bound{};
+  socklen_t len = sizeof(bound);
+  ::getsockname(fd, (sockaddr *)&bound, &len);
+  uint16_t port = ntohs(bound.sin_port);
+  ::close(fd);
+  return port;
+}
+
+pid_t spawn_server(const std::string &server_bin, uint16_t port) {
+  pid_t pid = ::fork();
+  if (pid < 0)
+    throw std::runtime_error("fork failed");
+  if (pid == 0) {
+    int devnull = ::open("/dev/null", O_WRONLY);
+    if (devnull >= 0) {
+      ::dup2(devnull, STDOUT_FILENO);
+      ::dup2(devnull, STDERR_FILENO);
+    }
+    std::string port_str = std::to_string(port);
+    ::execl(server_bin.c_str(), server_bin.c_str(), port_str.c_str(), "2", (char *)NULL);
+    ::_exit(127);
+  }
+  return pid;
+}
+
+void wait_server_up(uint16_t port) {
+  for (int i = 0; i < 100; ++i) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) == 0) {
+      ::close(fd);
+      return;
+    }
+    ::close(fd);
+    usleep(50000);
+  }
+  throw std::runtime_error("server did not start");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
-  std::string host = argc > 1 ? argv[1] : "127.0.0.1";
-  uint16_t port = argc > 2 ? (uint16_t)std::atoi(argv[2]) : 7777;
+  if (argc < 2) {
+    std::fprintf(stderr, "usage: %s <path-to-s5run-server>\n", argv[0]);
+    return 2;
+  }
+  std::string server_bin = argv[1];
+  std::signal(SIGPIPE, SIG_IGN);
+
   try {
-    test_happy_path(host, port);
-    test_callback_error(host, port);
+    uint16_t port = free_port();
+    pid_t server = spawn_server(server_bin, port);
+    int rc = 0;
+    try {
+      wait_server_up(port);
+      test_happy_path("127.0.0.1", port);
+      test_callback_error("127.0.0.1", port);
+    } catch (...) {
+      ::kill(server, SIGKILL);
+      ::waitpid(server, NULL, 0);
+      throw;
+    }
+    ::kill(server, SIGTERM);
+    ::waitpid(server, NULL, 0);
+    std::printf("protocol client: all tests passed\n");
+    return rc;
   } catch (const std::exception &e) {
     std::fprintf(stderr, "!!! FAIL: %s\n", e.what());
     return 1;
   }
-  std::printf("cpp-client: all smoke tests passed\n");
-  return 0;
 }
