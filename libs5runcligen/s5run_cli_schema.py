@@ -1,0 +1,274 @@
+"""Schema model and validation."""
+
+import os
+import sys
+import json
+from typing import List
+
+from .s5run_cli_typeref import S5RunCliTypeRef, s5run_parse_type
+
+
+class S5RunCliArgument:
+
+    def __init__(self, type: str, name: str):
+        self.__type = type
+        self.__name = name
+
+    def type(self) -> str:
+        return self.__type
+
+    def name(self) -> str:
+        return self.__name
+
+    def type_ref(self) -> S5RunCliTypeRef:
+        return s5run_parse_type(self.__type)
+
+
+class S5RunCliFunction:
+
+    def __init__(self, name: str, return_type: str, arguments: List[S5RunCliArgument] = None):
+        self.__name = name
+        self.__return_type = return_type
+        self.__arguments = arguments if arguments is not None else []
+
+    def name(self) -> str:
+        return self.__name
+
+    def return_type(self) -> str:
+        return self.__return_type
+
+    def arguments(self) -> List[S5RunCliArgument]:
+        return self.__arguments
+
+    def return_ref(self):
+        return s5run_parse_type(self.__return_type)
+
+
+class S5RunCliMethod:
+
+    def __init__(self, name: str, return_type: str, arguments: List[S5RunCliArgument] = None):
+        self.__name = name
+        self.__return_type = return_type
+        self.__arguments = arguments if arguments is not None else []
+
+    def name(self) -> str:
+        return self.__name
+
+    def return_type(self) -> str:
+        return self.__return_type
+
+    def arguments(self) -> List[S5RunCliArgument]:
+        return self.__arguments
+
+    def return_ref(self):
+        return s5run_parse_type(self.__return_type)
+
+
+class S5RunCliClass:
+
+    def __init__(self, name: str, methods: List[S5RunCliMethod] = None):
+        self.__name = name
+        self.__aggregate_interface = "I" + name
+        self.__methods = methods if methods is not None else []
+
+    def name(self) -> str:
+        return self.__name
+
+    def aggregate_interface(self) -> str:
+        return self.__aggregate_interface
+
+    def methods(self) -> List[S5RunCliMethod]:
+        return self.__methods
+
+
+class S5RunCliSchema:
+
+    def __init__(self):
+        self.__schema = {}
+        self.version = 1
+        self.namespace = ""
+        self.java_package = ""
+        self.py_module = ""
+        self.cpp_output_dir = ""
+        self.java_output_dir = ""
+        self.py_output_dir = ""
+        self.functions: List[S5RunCliFunction] = []
+        self.classes: List[S5RunCliClass] = []
+
+    def load(self, schema_filepath):
+        if not os.path.isfile(schema_filepath):
+            sys.exit("Not found file: " + schema_filepath)
+        with open(schema_filepath, "r", encoding="utf-8") as f:
+            self.__schema = json.load(f)
+        self.__parse_version()
+        self.__parse_cpp11_options()
+        self.__parse_java_options()
+        self.__parse_py_options()
+        self.__resolve_names()
+        self.__parse_functions()
+        self.__parse_classes()
+        self.__validate()
+
+    def __parse_version(self):
+        if "version" in self.__schema:
+            self.version = self.__schema["version"]
+
+    def __parse_cpp11_options(self):
+        section = self.__parse_options_section("cpp11", required=False)
+        if section is None:
+            return
+        if "namespace" not in section:
+            sys.exit("Missing 'namespace' in options.cpp11 " + str(section))
+        self.cpp_output_dir = section["output-dir"]
+        self.namespace = section["namespace"]
+
+    def __parse_java_options(self):
+        section = self.__parse_options_section("java", required=False)
+        if section is None:
+            return
+        self.java_output_dir = section["output-dir"]
+        if "package" in section:
+            self.java_package = section["package"]
+            if not self.namespace:
+                self.namespace = section["package"]
+
+    def __parse_py_options(self):
+        section = self.__parse_options_section("py", required=False)
+        if section is None:
+            return
+        self.py_output_dir = section["output-dir"]
+        if "module" in section:
+            self.py_module = section["module"]
+            if not self.namespace:
+                self.namespace = section["module"]
+
+    def __resolve_names(self):
+        # Languages without an explicit name fall back to the shared namespace.
+        if not self.java_package:
+            self.java_package = self.namespace
+        if not self.py_module:
+            self.py_module = self.namespace
+
+    def __parse_options_section(self, name, required=True):
+        if "options" not in self.__schema:
+            if required:
+                sys.exit("Not found section 'options' in schema")
+            return None
+        options = self.__schema["options"]
+        if name not in options:
+            if required:
+                sys.exit("Not found section 'options." + name + "' in schema")
+            return None
+        section = options[name]
+        if "output-dir" not in section:
+            sys.exit("Missing 'output-dir' in options." + name + " " + str(section))
+        return section
+
+    def __parse_arguments(self, func):
+        ret = []
+        for a in func["arguments"]:
+            if "type" not in a:
+                sys.exit("Missing argument type in function " + str(func))
+            if "name" not in a:
+                sys.exit("Missing argument name in function " + str(func))
+
+            a0 = S5RunCliArgument(type=a["type"], name=a["name"])
+            ret.append(a0)
+        return ret
+
+    def __parse_functions(self):
+        self.functions = []
+        if "functions" in self.__schema:
+            for f in self.__schema["functions"]:
+                if "name" not in f:
+                    sys.exit("Not found name in function define " + str(f))
+                f_name = f["name"]
+                f_return = "void"
+                if "return" in f:
+                    f_return = f["return"]
+                f_args = []
+                if "arguments" in f:
+                    f_args = self.__parse_arguments(f)
+                self.functions.append(
+                    S5RunCliFunction(
+                        name=f_name,
+                        return_type=f_return,
+                        arguments=f_args,
+                    )
+                )
+
+    def __parse_classes(self):
+        self.classes = []
+        if "classes" in self.__schema:
+            for c in self.__schema["classes"]:
+                if "name" not in c:
+                    sys.exit("Not found name in class define " + str(c))
+                c_methods = []
+                if "methods" in c:
+                    for m in c["methods"]:
+                        if "name" not in m:
+                            sys.exit("Not found name in method define " + str(m))
+                        m_name = m["name"]
+                        m_return = "void"
+                        if "return" in m:
+                            m_return = m["return"]
+                        m_args = []
+                        if "arguments" in m:
+                            m_args = self.__parse_arguments(m)
+                        c_methods.append(
+                            S5RunCliMethod(
+                                name=m_name,
+                                return_type=m_return,
+                                arguments=m_args,
+                            )
+                        )
+                self.classes.append(
+                    S5RunCliClass(
+                        name=c["name"],
+                        methods=c_methods,
+                    )
+                )
+
+    # -- lookups --
+    @property
+    def iface_names(self) -> set:
+        return {c.aggregate_interface() for c in self.classes}
+
+    @property
+    def class_names(self) -> set:
+        return {c.name() for c in self.classes}
+
+    def __validate(self) -> None:
+        if not self.cpp_output_dir and not self.java_output_dir and not self.py_output_dir:
+            sys.exit("S5RunCliSchema: no output dirs configured (options.cpp11/java/py)")
+
+        if (self.java_output_dir or self.py_output_dir) and not self.namespace:
+            sys.exit("S5RunCliSchema: 'namespace' is required when java or py is configured "
+                     "(set it in options.cpp11 'namespace', options.java 'package' "
+                     "or options.py 'module')")
+
+        known = self.iface_names | self.class_names
+        unresolved = {}  # type name -> list of usages
+
+        def collect(ref, where):
+            if ref.is_array():
+                collect(s5run_parse_type(ref.inner()), where)
+            elif ref.is_ref():
+                if ref.name() not in known:
+                    unresolved.setdefault(ref.name(), []).append(where)
+        for f in self.functions:
+            collect(f.return_ref(), "function " + f.name() + " return")
+            for a in f.arguments():
+                collect(a.type_ref(), "function " + f.name() + " arg " + a.name())
+        for c in self.classes:
+            for m in c.methods():
+                collect(m.return_ref(), "class " + c.name() + " method " + m.name() + " return")
+                for a in m.arguments():
+                    collect(a.type_ref(), "class " + c.name() + " method " + m.name() + " arg " + a.name())
+
+        if unresolved:
+            lines = ["S5RunCliSchema: unresolved types (no class defined):"]
+            for t in sorted(unresolved):
+                for where in unresolved[t]:
+                    lines.append("  '" + t + "' used in " + where)
+            sys.exit("\n".join(lines))

@@ -1,13 +1,23 @@
 {
-  "namespace": "example",
-  "cpp-output-dir": "src/test_client/run_script_services/",
-  "java-output-dir": "examples/java/test_client/example/",
-  "py-output-dir": "examples/py/",
+  "options": {
+    "cpp11": {
+      "output-dir": "tests/cpp11-client/s5run_cli_example/",
+      "namespace": "s5run_cli_example"
+    },
+    "java": {
+      "output-dir": "tests/java-client/src/",
+      "package": "com.s5run.example"
+    },
+    "py": {
+      "output-dir": "tests/py-client/",
+      "module": "libs5run_cli_example"
+    }
+  },
   "version": 1,
   "functions": [
     {
       "name": "GetFile",
-      "return": "IFile",
+      "return": "File",
       "arguments": [
         {
           "type": "string",
@@ -44,7 +54,6 @@
   "classes": [
     {
       "name": "File",
-      "aggregate-interface": "IFile",
       "methods": [
         {
           "name": "GetSize",
@@ -58,6 +67,53 @@
             {
               "type": "int",
               "name": "readBytes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "FileSystem",
+      "methods": [
+        {
+          "name": "GetList",
+          "return": "array<string>",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "filepath"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "console",
+      "methods": [
+        {
+          "name": "log",
+          "arguments": [
+            {
+              "type": "array<string>",
+              "name": "args"
+            }
+          ]
+        },
+        {
+          "name": "warning",
+          "arguments": [
+            {
+              "type": "array<string>",
+              "name": "args"
+            }
+          ]
+        },
+        {
+          "name": "error",
+          "arguments": [
+            {
+              "type": "array<string>",
+              "name": "args"
             }
           ]
         }

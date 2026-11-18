@@ -2,3 +2,6 @@
 /sea5kg-run-scripts-server
 /test-client
 __pycache__
+/tests/cpp11-client/bin
+/tests/java-client/bin
+/tests/java-client/s5run-client.jar

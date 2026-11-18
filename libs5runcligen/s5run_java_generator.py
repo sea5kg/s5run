@@ -2,37 +2,61 @@
 
 import os
 
-from .types import parse
+from .s5run_cli_typeref import S5RunCliTypeRef, s5run_parse_type
+
+# schema primitive name -> java type
+PRIMITIVES = {
+    "bool":   "boolean",
+    "int":    "long",
+    "uint":   "long",
+    "float":  "double",
+    "double": "double",
+    "string": "String",
+    "byte":   "byte",
+}
+
+_BOXED = {"long": "Long", "boolean": "Boolean", "double": "Double", "byte": "Byte"}
+
+
+def type_to_java(ref: S5RunCliTypeRef) -> str:
+    if ref.is_prim():
+        return PRIMITIVES[ref.name()]
+    if ref.is_array():
+        inner = type_to_java(s5run_parse_type(ref.inner()))
+        return f"List<{_BOXED.get(inner, inner)}>"
+    return ref.name()
 
 
 def _encode_lines(ref, expr: str, indent: str) -> list[str]:
     if ref.is_prim():
-        fn = {"bool": "putBool", "u8": "putU8",
-              "i64": "putU64", "u64": "putU64",
-              "f64": "putF64", "str": "putStr"}[ref.wire()]
+        fn = {"bool": "putBool", "byte": "putU8",
+              "int": "putU64", "uint": "putU64",
+              "float": "putF64", "double": "putF64",
+              "string": "putStr"}[ref.wire()]
         return [f"{indent}Wire.{fn}(b, {expr});"]
     if ref.is_array():
-        inner = parse(ref.inner)
+        inner = s5run_parse_type(ref.inner())
         return [
             f"{indent}Wire.putU32(b, {expr}.size());",
             f"{indent}for (var _e : {expr}) {{",
             *_encode_lines(inner, "_e", indent + "    "),
             f"{indent}}}",
         ]
-    if ref.is_iface():
+    if ref.is_ref():
         return [f"{indent}Wire.putU64(b, {expr} != null ? {expr}.getThisId() : 0);"]
-    raise ValueError(ref.name)
+    raise ValueError(ref.name())
 
 
 def _decode_lines(ref, target: str, indent: str) -> list[str]:
     if ref.is_prim():
-        fn = {"bool": "getBool", "u8": "getU8",
-              "i64": "getU64", "u64": "getU64",
-              "f64": "getF64", "str": "getStr"}[ref.wire()]
+        fn = {"bool": "getBool", "byte": "getU8",
+              "int": "getU64", "uint": "getU64",
+              "float": "getF64", "double": "getF64",
+              "string": "getStr"}[ref.wire()]
         return [f"{indent}{target} = Wire.{fn}(b);"]
     if ref.is_array():
-        inner = parse(ref.inner)
-        inner_t = inner.java()
+        inner = s5run_parse_type(ref.inner())
+        inner_t = type_to_java(inner)
         unboxed = {"Long": "long", "Boolean": "boolean",
                    "Double": "double", "Byte": "byte"}.get(inner_t, inner_t)
         return [
@@ -46,10 +70,10 @@ def _decode_lines(ref, target: str, indent: str) -> list[str]:
             f"{indent}    }}",
             f"{indent}}}",
         ]
-    if ref.is_iface():
-        return [f"{indent}/* iface ref in array: unsupported */",
+    if ref.is_ref():
+        return [f"{indent}/* ref in array: unsupported */",
                 f"{indent}Wire.getU64(b);"]
-    raise ValueError(ref.name)
+    raise ValueError(ref.name())
 
 
 def _write_struct(pkg_dir: str, pkg: str, name: str, fields, prefix_id: bool) -> None:
@@ -59,14 +83,14 @@ def _write_struct(pkg_dir: str, pkg: str, name: str, fields, prefix_id: bool) ->
     if prefix_id:
         L.append("    public long this_id;")
     for a in fields:
-        L.append(f"    public {parse(a.type).java()} {a.name};")
+        L.append(f"    public {type_to_java(s5run_parse_type(a.type()))} {a.name()};")
     L.append("")
     L.append("    public byte[] encode() {")
     L.append("        ByteArrayOutputStream b = new ByteArrayOutputStream();")
     if prefix_id:
         L.append("        Wire.putU64(b, this_id);")
     for a in fields:
-        L += _encode_lines(parse(a.type), f"this.{a.name}", "        ")
+        L += _encode_lines(s5run_parse_type(a.type()), f"this.{a.name()}", "        ")
     L.append("        return b.toByteArray();")
     L.append("    }")
     L.append(f"    public static {name} decode(byte[] data) {{")
@@ -75,7 +99,7 @@ def _write_struct(pkg_dir: str, pkg: str, name: str, fields, prefix_id: bool) ->
     if prefix_id:
         L.append("        r.this_id = Wire.getU64(b);")
     for a in fields:
-        L += _decode_lines(parse(a.type), f"r.{a.name}", "        ")
+        L += _decode_lines(s5run_parse_type(a.type()), f"r.{a.name()}", "        ")
     L.append("        return r;")
     L.append("    }")
     L.append("}")
@@ -127,22 +151,22 @@ def _write_wire(pkg_dir: str, pkg: str) -> None:
 
 
 def generate(schema, java_output_dir: str) -> None:
-    pkg = schema.namespace
-    pkg_dir = os.path.join(java_output_dir, pkg)
+    pkg = schema.java_package
+    pkg_dir = os.path.join(java_output_dir, *pkg.split("."))
     os.makedirs(pkg_dir, exist_ok=True)
 
     for c in schema.classes:
         L = ["// AUTO-GENERATED. DO NOT EDIT.", f"package {pkg};", "",
              "import java.util.*;", "",
-             f"public interface {c.aggregate_interface} {{",
+             f"public interface {c.name()} {{",
              "    long getThisId();",
              "    void setThisId(long id);"]
-        for m in c.methods:
-            ret = m.return_ref.java()
-            args = ", ".join(f"{a.type_ref().java()} {a.name}" for a in m.arguments)
-            L.append(f"    {ret} {m.name}({args});")
+        for m in c.methods():
+            ret = type_to_java(m.return_ref())
+            args = ", ".join(f"{type_to_java(a.type_ref())} {a.name()}" for a in m.arguments())
+            L.append(f"    {ret} {m.name()}({args});")
         L.append("}")
-        with open(os.path.join(pkg_dir, f"{c.aggregate_interface}.java"),
+        with open(os.path.join(pkg_dir, f"{c.name()}.java"),
                   "w", encoding="utf-8") as f:
             f.write("\n".join(L))
 
@@ -150,9 +174,9 @@ def generate(schema, java_output_dir: str) -> None:
          "import java.util.*;", "",
          "public interface IRunScriptGlobalFunctions {"]
     for f in schema.functions:
-        ret = f.return_ref.java()
-        args = ", ".join(f"{a.type_ref().java()} {a.name}" for a in f.arguments)
-        L.append(f"    {ret} {f.name}({args});")
+        ret = type_to_java(f.return_ref())
+        args = ", ".join(f"{type_to_java(a.type_ref())} {a.name()}" for a in f.arguments())
+        L.append(f"    {ret} {f.name()}({args});")
     L.append("}")
     with open(os.path.join(pkg_dir, "IRunScriptGlobalFunctions.java"),
               "w", encoding="utf-8") as f:
@@ -161,20 +185,26 @@ def generate(schema, java_output_dir: str) -> None:
     _write_wire(pkg_dir, pkg)
 
     for f in schema.functions:
-        _write_struct(pkg_dir, pkg, f"{f.name}Request", f.arguments, prefix_id=False)
-        if not f.return_ref.is_iface():
-            _write_struct(pkg_dir, pkg, f"{f.name}Response",
-                          [_ValueField(f.return_ref.name)], prefix_id=False)
+        _write_struct(pkg_dir, pkg, f"{f.name()}Request", f.arguments(), prefix_id=False)
+        if not f.return_ref().is_ref() and not f.return_ref().is_void():
+            _write_struct(pkg_dir, pkg, f"{f.name()}Response",
+                          [_ValueField(f.return_ref().name())], prefix_id=False)
 
     for c in schema.classes:
-        for m in c.methods:
-            _write_struct(pkg_dir, pkg, f"{m.name}Request", m.arguments, prefix_id=True)
-            if not m.return_ref.is_iface():
-                _write_struct(pkg_dir, pkg, f"{m.name}Response",
-                              [_ValueField(m.return_ref.name)], prefix_id=False)
+        for m in c.methods():
+            _write_struct(pkg_dir, pkg, f"{m.name()}Request", m.arguments(), prefix_id=True)
+            if not m.return_ref().is_ref() and not m.return_ref().is_void():
+                _write_struct(pkg_dir, pkg, f"{m.name()}Response",
+                              [_ValueField(m.return_ref().name())], prefix_id=False)
 
 
 class _ValueField:
     def __init__(self, type_name: str):
-        self.name = "value"
-        self.type = type_name
+        self.__name = "value"
+        self.__type = type_name
+
+    def name(self) -> str:
+        return self.__name
+
+    def type(self) -> str:
+        return self.__type
