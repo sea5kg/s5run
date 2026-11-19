@@ -188,7 +188,25 @@ auto result = cli->run(script, "main", {s5run_cli_example::value("test.txt")});
 $ ./build_simple.sh
 ```
 
-## Example run
+## Build image
+
+```sh
+
+# build env if need
+$ docker build --rm=true -t "sea5kg/s5run:build-environment-2026-11-20" -f Dockerfile.build-environment .
+$ docker build --rm=true -t "sea5kg/s5run:release-environment-2026-11-20" -f Dockerfile.release-environment .
+
+# build image
+$ docker build --rm=true -t "sea5kg/s5run:v0.1.0" .
+```
+
+Easy test run:
+
+```sh
+$ docker run --rm -p 7777:7777 sea5kg/s5run:v0.1.0
+```
+
+## Example run server
 
 ```sh
 $ ./s5run --listen "0.0.0.0:7777" --threads 8
