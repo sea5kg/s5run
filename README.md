@@ -230,3 +230,4 @@ However, the context of the execution objects (Database, Storage) is provided by
 - [Lua](https://www.lua.org/) — scripting engine (integration in progress)
 - [SQLITE](https://www.sqlite.org/download.html) (v3.53.1) - SQLite is in the Public Domain
 - [HowardHinnant/date](https://github.com/HowardHinnant/date) (v3.0.4) - Parser for datetime
+- [nlohmann/json](https://github.com/nlohmann/json) (v3.12.0) - Reader/Writer for json format
