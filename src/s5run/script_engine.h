@@ -87,6 +87,10 @@ public:
   virtual void register_global_object(const std::string &name, int64_t this_id,
                                       const std::vector<std::string> &methods) = 0;
 
+  // Build a JS array from opaque item handles. Takes ownership of the
+  // items and releases them after use.
+  virtual JsValue make_array(JsContext ctx, size_t count, const JsValue *items) = 0;
+
   virtual JsValue make_value(JsContext ctx, const s5run::Value &v) = 0;
 
   virtual ExecResult execute(const std::string &script, const std::string &entry,

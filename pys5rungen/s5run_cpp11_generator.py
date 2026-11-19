@@ -99,11 +99,19 @@ class _TypeUsage:
         if ref.is_ref():
             if not allow_ref:
                 raise ValueError(
-                    "object references are only supported as return values, got: " + type_str)
+                    "object references in arrays are not supported yet, got: " + type_str)
+            self.ref_reads = True
             return
         if ref.is_prim():
             self._mark(self.prim_reads, ref.name())
         elif ref.is_array():
+            inner = s5run_parse_type(ref.inner())
+            if inner.is_ref():
+                if not allow_ref:
+                    raise ValueError(
+                        "object references in nested arrays are not supported yet, got: " + type_str)
+                self.ref_reads = True
+                return
             self._mark(self.array_reads, type_str)
             self.need_read(ref.inner())
 
@@ -117,13 +125,16 @@ class _TypeUsage:
         if ref.is_prim():
             self._mark(self.prim_writes, ref.name())
         elif ref.is_array():
+            inner = s5run_parse_type(ref.inner())
+            if inner.is_ref():
+                return
             self._mark(self.array_writes, type_str)
             self.need_write(ref.inner())
 
     def add_all(self, fm):
         for a in fm.arguments():
             if not a.convert_from():
-                self.need_read(a.type())
+                self.need_read(a.type(), allow_ref=True)
         if not _is_void(fm):
             self.need_write(fm.return_type(), allow_ref=True)
 
@@ -187,15 +198,27 @@ class _Cpp11Generator:
     def _encode_result(self, fm, expr) -> list:
         """Statements writing the result of a call into Writer w."""
         if _is_void(fm):
-            return ["        w.put_u8(T_UNDEFINED);"]
+            return ["    w.put_u8(T_UNDEFINED);"]
         ref = fm.return_ref()
-        if ref.is_ref():
-            cls = ref.name()
+        if ref.is_array() and s5run_parse_type(ref.inner()).is_ref():
+            cls = s5run_parse_type(ref.inner()).name()
             return [
-                f"        int32_t obj_id = _register_instance_{cls}({expr});",
+                "    w.put_u8(T_ARRAY);",
+                f"    w.put_u32((uint32_t){expr}.size());",
+                f"    for (size_t i = 0; i < {expr}.size(); ++i) {{",
+                f"        int32_t obj_id = _register_instance_{cls}({expr}[i]);",
                 "        w.put_u8(T_REF);",
                 "        w.put_i32(obj_id);",
                 f'        w.put_string("{cls}");',
+                "    }",
+            ]
+        if ref.is_ref():
+            cls = ref.name()
+            return [
+                f"    int32_t obj_id = _register_instance_{cls}({expr});",
+                "    w.put_u8(T_REF);",
+                "    w.put_i32(obj_id);",
+                f'    w.put_string("{cls}");',
             ]
         return ["        " + self._write_stmt(ref, expr)]
 
@@ -205,15 +228,51 @@ class _Cpp11Generator:
             a = fm.arguments()[0]
             cpp_t = type_to_cpp(a.type_ref())
             L += [
-                f"        {cpp_t} {prefix}{a.name()};",
-                f"        {prefix}{a.name()}.reserve(n);",
-                "        for (uint32_t i = 0; i < n; ++i)",
-                f"            {prefix}{a.name()}.push_back(_value_to_string(decode_value(r)));",
+                f"    {cpp_t} {prefix}{a.name()};",
+                f"    {prefix}{a.name()}.reserve(n);",
+                "    for (uint32_t i = 0; i < n; ++i)",
+                f"        {prefix}{a.name()}.push_back(_value_to_string(decode_value(r)));",
             ]
             return L
         for a in fm.arguments():
-            cpp_t = type_to_cpp(a.type_ref())
-            L.append(f"        {cpp_t} {prefix}{a.name()} = {self._read_expr(a.type_ref())};")
+            ref = a.type_ref()
+            if ref.is_array() and s5run_parse_type(ref.inner()).is_ref():
+                cls = s5run_parse_type(ref.inner()).name()
+                L += [
+                    "    if (r.get_u8() != T_ARRAY)",
+                    '        throw std::runtime_error("wire: expected array");',
+                    "    uint32_t cnt_" + a.name() + " = r.get_u32();",
+                    f"    std::vector<std::shared_ptr<{cls}>> {prefix}{a.name()};",
+                    f"    {prefix}{a.name()}.reserve(cnt_{a.name()});",
+                    f"    for (uint32_t i = 0; i < cnt_{a.name()}; ++i) {{",
+                    f"        int32_t {prefix}ref_id_{a.name()} = read_ref(r);",
+                    f"        std::map<int32_t, std::shared_ptr<{cls}>>::const_iterator "
+                    f"{prefix}it_{a.name()} =",
+                    f"            m_instances_{cls}.find({prefix}ref_id_{a.name()});",
+                    f"        if ({prefix}it_{a.name()} == m_instances_{cls}.end()) {{",
+                    f"            throw std::runtime_error(\"{fm.name()}: unknown object reference: \""
+                    f" + std::to_string({prefix}ref_id_{a.name()}));",
+                    "        }",
+                    f"        {prefix}{a.name()}.push_back({prefix}it_{a.name()}->second);",
+                    "    }",
+                ]
+                continue
+            if ref.is_ref():
+                cls = ref.name()
+                L += [
+                    f"    int32_t {prefix}ref_id_{a.name()} = read_ref(r);",
+                    f"    std::map<int32_t, std::shared_ptr<{cls}>>::const_iterator "
+                    f"{prefix}it_{a.name()} =",
+                    f"        m_instances_{cls}.find({prefix}ref_id_{a.name()});",
+                    f"    if ({prefix}it_{a.name()} == m_instances_{cls}.end()) {{",
+                    f"        throw std::runtime_error(\"{fm.name()}: unknown object reference: \""
+                    f" + std::to_string({prefix}ref_id_{a.name()}));",
+                    "    }",
+                    f"    std::shared_ptr<{cls}> {prefix}{a.name()} = {prefix}it_{a.name()}->second;",
+                ]
+            else:
+                cpp_t = type_to_cpp(ref)
+                L.append(f"    {cpp_t} {prefix}{a.name()} = {self._read_expr(ref)};")
         return L
 
     # ------------------------------------------------------------------
@@ -421,6 +480,7 @@ public:
              "#include <cstdio>",
              "#include <cerrno>",
              "#include <cstdlib>",
+             "#include <ctime>",
              "#include <cstring>",
              "#include <functional>",
              "#include <stdexcept>",
@@ -431,6 +491,15 @@ public:
              "",
              self._codec_text(),
              ""]
+        if self.usage.ref_reads:
+            L.append(
+                "int32_t read_ref(Reader &r) {\n"
+                "    if (r.get_u8() != T_REF)\n"
+                "        throw std::runtime_error(\"wire: expected an object reference\");\n"
+                "    int32_t this_id = r.get_i32();\n"
+                "    r.get_string(); // skip the type name\n"
+                "    return this_id;\n"
+                "}\n\n")
         for name in self.usage.prim_reads:
             L.append(self._prim_read(name))
         for name in self.usage.prim_writes:

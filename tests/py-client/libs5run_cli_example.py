@@ -26,11 +26,21 @@ class IRunScriptGlobalFunctions(ABC):
     @abstractmethod
     def GetFile(self, filepath: str) -> "File": ...
     @abstractmethod
+    def GetFileSize(self, file: "File") -> int: ...
+    @abstractmethod
     def GetTimeNow(self) -> int: ...
     @abstractmethod
     def HasFile(self, filepath: str) -> bool: ...
     @abstractmethod
     def GetFileList(self, filepath: str) -> List[str]: ...
+    @abstractmethod
+    def GetOpenedFiles(self) -> List["File"]: ...
+    @abstractmethod
+    def CloseFiles(self, files: List["File"]) -> "void": ...
+    @abstractmethod
+    def GetPi(self) -> float: ...
+    @abstractmethod
+    def GetServerPort(self) -> int: ...
 
 # ---- wire codec ----
 
@@ -66,6 +76,34 @@ class GetFileRequest:
     def decode(data: bytes) -> 'GetFileRequest':
         r = _Reader(data)
         return GetFileRequest(filepath=r.str())
+
+@dataclass
+class GetFileSizeRequest:
+    file: "File"
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        _put_u64(b, self.file.this_id)
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetFileSizeRequest':
+        r = _Reader(data)
+        return GetFileSizeRequest(file=r.u64())
+
+@dataclass
+class GetFileSizeResponse:
+    value: int
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        _put_u64(b, self.value)
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetFileSizeResponse':
+        r = _Reader(data)
+        return GetFileSizeResponse(value=r.u64())
 
 @dataclass
 class GetTimeNowRequest:
@@ -151,6 +189,105 @@ class GetFileListResponse:
     def decode(data: bytes) -> 'GetFileListResponse':
         r = _Reader(data)
         return GetFileListResponse(value=[r.str() for _ in range(r.u32())])
+
+@dataclass
+class GetOpenedFilesRequest:
+    pass
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetOpenedFilesRequest':
+        r = _Reader(data)
+        return GetOpenedFilesRequest()
+
+@dataclass
+class GetOpenedFilesResponse:
+    value: List["File"]
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        _put_u32(b, len(self.value))
+        for _e in self.value:
+            _put_u64(b, _e.this_id)
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetOpenedFilesResponse':
+        r = _Reader(data)
+        return GetOpenedFilesResponse(value=[r.u64() for _ in range(r.u32())])
+
+@dataclass
+class CloseFilesRequest:
+    files: List["File"]
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        _put_u32(b, len(self.files))
+        for _e in self.files:
+            _put_u64(b, _e.this_id)
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'CloseFilesRequest':
+        r = _Reader(data)
+        return CloseFilesRequest(files=[r.u64() for _ in range(r.u32())])
+
+@dataclass
+class GetPiRequest:
+    pass
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetPiRequest':
+        r = _Reader(data)
+        return GetPiRequest()
+
+@dataclass
+class GetPiResponse:
+    value: float
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        _put_f64(b, self.value)
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetPiResponse':
+        r = _Reader(data)
+        return GetPiResponse(value=r.f64())
+
+@dataclass
+class GetServerPortRequest:
+    pass
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetServerPortRequest':
+        r = _Reader(data)
+        return GetServerPortRequest()
+
+@dataclass
+class GetServerPortResponse:
+    value: int
+
+    def encode(self) -> bytes:
+        b = bytearray()
+        _put_u64(b, self.value)
+        return bytes(b)
+
+    @staticmethod
+    def decode(data: bytes) -> 'GetServerPortResponse':
+        r = _Reader(data)
+        return GetServerPortResponse(value=r.u64())
 
 @dataclass
 class GetSizeRequest:

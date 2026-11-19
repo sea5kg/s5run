@@ -193,6 +193,30 @@ void client_handler::handle_register_function(engine::IScriptEngine *eng, const 
           throw std::runtime_error("unknown object type: " + resp.as_ref().type);
         return eng->make_object(ctx, resp.as_ref().this_id, it->second);
       }
+      if (resp.is_array()) {
+        bool has_refs = false;
+        for (const auto &e : resp.as_array()) {
+          if (e.is_ref()) {
+            has_refs = true;
+            break;
+          }
+        }
+        if (has_refs) {
+          std::vector<engine::JsValue> items;
+          items.reserve(resp.as_array().size());
+          for (const auto &e : resp.as_array()) {
+            if (e.is_ref()) {
+              auto it = m_object_types.find(e.as_ref().type);
+              if (it == m_object_types.end())
+                throw std::runtime_error("unknown object type: " + e.as_ref().type);
+              items.push_back(eng->make_object(ctx, e.as_ref().this_id, it->second));
+            } else {
+              items.push_back(eng->make_value(ctx, e));
+            }
+          }
+          return eng->make_array(ctx, items.size(), items.empty() ? nullptr : items.data());
+        }
+      }
       return eng->make_value(ctx, resp);
     }
   );

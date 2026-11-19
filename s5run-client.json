@@ -27,6 +27,16 @@
       ]
     },
     {
+      "name": "GetFileSize",
+      "return": "int",
+      "arguments": [
+        {
+          "type": "File",
+          "name": "file"
+        }
+      ]
+    },
+    {
       "name": "GetTimeNow",
       "return": "int",
       "arguments": []
@@ -50,6 +60,31 @@
           "name": "filepath"
         }
       ]
+    },
+    {
+      "name": "GetOpenedFiles",
+      "return": "array<File>",
+      "arguments": []
+    },
+    {
+      "name": "CloseFiles",
+      "return": "void",
+      "arguments": [
+        {
+          "type": "array<File>",
+          "name": "files"
+        }
+      ]
+    },
+    {
+      "name": "GetPi",
+      "return": "float",
+      "arguments": []
+    },
+    {
+      "name": "GetServerPort",
+      "return": "uint",
+      "arguments": []
     }
   ],
   "classes": [

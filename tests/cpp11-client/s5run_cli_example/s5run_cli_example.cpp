@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cerrno>
 #include <cstdlib>
+#include <ctime>
 #include <cstring>
 #include <functional>
 #include <stdexcept>
@@ -191,6 +192,15 @@ void write_int(Writer &w, int64_t v) {
 
 
 
+int32_t read_ref(Reader &r) {
+    if (r.get_u8() != T_REF)
+        throw std::runtime_error("wire: expected an object reference");
+    int32_t this_id = r.get_i32();
+    r.get_string(); // skip the type name
+    return this_id;
+}
+
+
 
 std::string read_string(Reader &r) {
     if (r.get_u8() != T_STRING)
@@ -216,6 +226,13 @@ void write_bool(Writer &w, bool v) {
     w.put_u8(T_BOOL);
     w.put_u8(v ? 1 : 0);
 }
+
+
+void write_double(Writer &w, double v) {
+    w.put_u8(T_FLOAT64);
+    w.put_f64(v);
+}
+
 
 
 inline void write_array__byte(Writer &w, const std::vector<uint8_t> &v) {
@@ -364,9 +381,14 @@ private:
     };
 
     void _cb_GetFile(int32_t cb_id, Reader &r);
+    void _cb_GetFileSize(int32_t cb_id, Reader &r);
     void _cb_GetTimeNow(int32_t cb_id, Reader &r);
     void _cb_HasFile(int32_t cb_id, Reader &r);
     void _cb_GetFileList(int32_t cb_id, Reader &r);
+    void _cb_GetOpenedFiles(int32_t cb_id, Reader &r);
+    void _cb_CloseFiles(int32_t cb_id, Reader &r);
+    void _cb_GetPi(int32_t cb_id, Reader &r);
+    void _cb_GetServerPort(int32_t cb_id, Reader &r);
     void _cbm_File_GetSize(int32_t cb_id, Reader &r);
     void _cbm_File_ReadBytes(int32_t cb_id, Reader &r);
     void _cbm_FileSystem_GetList(int32_t cb_id, Reader &r);
@@ -401,9 +423,14 @@ private:
     typedef std::function<void(const std::shared_ptr<s5run_function> &)> fn_registrar_t;
     std::map<std::string, fn_registrar_t> m_function_registrars;
     std::shared_ptr<GlobalFunction_GetFile> m_fn_GetFile;
+    std::shared_ptr<GlobalFunction_GetFileSize> m_fn_GetFileSize;
     std::shared_ptr<GlobalFunction_GetTimeNow> m_fn_GetTimeNow;
     std::shared_ptr<GlobalFunction_HasFile> m_fn_HasFile;
     std::shared_ptr<GlobalFunction_GetFileList> m_fn_GetFileList;
+    std::shared_ptr<GlobalFunction_GetOpenedFiles> m_fn_GetOpenedFiles;
+    std::shared_ptr<GlobalFunction_CloseFiles> m_fn_CloseFiles;
+    std::shared_ptr<GlobalFunction_GetPi> m_fn_GetPi;
+    std::shared_ptr<GlobalFunction_GetServerPort> m_fn_GetServerPort;
     std::map<int32_t, std::shared_ptr<File>> m_instances_File;
     std::map<int32_t, std::shared_ptr<FileSystem>> m_instances_FileSystem;
     std::map<int32_t, std::shared_ptr<console>> m_instances_console;
@@ -598,15 +625,35 @@ void client::impl::_cb_GetFile(int32_t cb_id, Reader &r) {
     if (n != 1) {
         throw std::runtime_error("GetFile: expected 1 argument(s)");
     }
-        std::string a_filepath = read_string(r);
+    std::string a_filepath = read_string(r);
     std::shared_ptr<File> res = m_fn_GetFile->execute(a_filepath);
     Writer w;
     w.put_i32(cb_id);
     w.put_u8(1);
-        int32_t obj_id = _register_instance_File(res);
-        w.put_u8(T_REF);
-        w.put_i32(obj_id);
-        w.put_string("File");
+    int32_t obj_id = _register_instance_File(res);
+    w.put_u8(T_REF);
+    w.put_i32(obj_id);
+    w.put_string("File");
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void client::impl::_cb_GetFileSize(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 1) {
+        throw std::runtime_error("GetFileSize: expected 1 argument(s)");
+    }
+    int32_t a_ref_id_file = read_ref(r);
+    std::map<int32_t, std::shared_ptr<File>>::const_iterator a_it_file =
+        m_instances_File.find(a_ref_id_file);
+    if (a_it_file == m_instances_File.end()) {
+        throw std::runtime_error("GetFileSize: unknown object reference: " + std::to_string(a_ref_id_file));
+    }
+    std::shared_ptr<File> a_file = a_it_file->second;
+    int64_t res = m_fn_GetFileSize->execute(a_file);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+        write_int(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
@@ -628,7 +675,7 @@ void client::impl::_cb_HasFile(int32_t cb_id, Reader &r) {
     if (n != 1) {
         throw std::runtime_error("HasFile: expected 1 argument(s)");
     }
-        std::string a_filepath = read_string(r);
+    std::string a_filepath = read_string(r);
     bool res = m_fn_HasFile->execute(a_filepath);
     Writer w;
     w.put_i32(cb_id);
@@ -642,12 +689,85 @@ void client::impl::_cb_GetFileList(int32_t cb_id, Reader &r) {
     if (n != 1) {
         throw std::runtime_error("GetFileList: expected 1 argument(s)");
     }
-        std::string a_filepath = read_string(r);
+    std::string a_filepath = read_string(r);
     std::vector<std::string> res = m_fn_GetFileList->execute(a_filepath);
     Writer w;
     w.put_i32(cb_id);
     w.put_u8(1);
         write_array__string(w, res);
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void client::impl::_cb_GetOpenedFiles(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 0) {
+        throw std::runtime_error("GetOpenedFiles: expected 0 argument(s)");
+    }
+    std::vector<std::shared_ptr<File>> res = m_fn_GetOpenedFiles->execute();
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_ARRAY);
+    w.put_u32((uint32_t)res.size());
+    for (size_t i = 0; i < res.size(); ++i) {
+        int32_t obj_id = _register_instance_File(res[i]);
+        w.put_u8(T_REF);
+        w.put_i32(obj_id);
+        w.put_string("File");
+    }
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void client::impl::_cb_CloseFiles(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 1) {
+        throw std::runtime_error("CloseFiles: expected 1 argument(s)");
+    }
+    if (r.get_u8() != T_ARRAY)
+        throw std::runtime_error("wire: expected array");
+    uint32_t cnt_files = r.get_u32();
+    std::vector<std::shared_ptr<File>> a_files;
+    a_files.reserve(cnt_files);
+    for (uint32_t i = 0; i < cnt_files; ++i) {
+        int32_t a_ref_id_files = read_ref(r);
+        std::map<int32_t, std::shared_ptr<File>>::const_iterator a_it_files =
+            m_instances_File.find(a_ref_id_files);
+        if (a_it_files == m_instances_File.end()) {
+            throw std::runtime_error("CloseFiles: unknown object reference: " + std::to_string(a_ref_id_files));
+        }
+        a_files.push_back(a_it_files->second);
+    }
+    m_fn_CloseFiles->execute(a_files);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_UNDEFINED);
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void client::impl::_cb_GetPi(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 0) {
+        throw std::runtime_error("GetPi: expected 0 argument(s)");
+    }
+    double res = m_fn_GetPi->execute();
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+        write_double(w, res);
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void client::impl::_cb_GetServerPort(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 0) {
+        throw std::runtime_error("GetServerPort: expected 0 argument(s)");
+    }
+    uint64_t res = m_fn_GetServerPort->execute();
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+        write_int(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
@@ -681,7 +801,7 @@ void client::impl::_cbm_File_ReadBytes(int32_t cb_id, Reader &r) {
     if (it == m_instances_File.end()) {
         throw std::runtime_error("File: unknown this_id");
     }
-        int64_t a_readBytes = read_int(r);
+    int64_t a_readBytes = read_int(r);
     std::vector<uint8_t> res = it->second->ReadBytes(a_readBytes);
     Writer w;
     w.put_i32(cb_id);
@@ -701,7 +821,7 @@ void client::impl::_cbm_FileSystem_GetList(int32_t cb_id, Reader &r) {
     if (it == m_instances_FileSystem.end()) {
         throw std::runtime_error("FileSystem: unknown this_id");
     }
-        std::string a_filepath = read_string(r);
+    std::string a_filepath = read_string(r);
     std::vector<std::string> res = it->second->GetList(a_filepath);
     Writer w;
     w.put_i32(cb_id);
@@ -722,10 +842,10 @@ void client::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
         throw std::runtime_error("console: unknown this_id");
     }
     n -= 1;
-        std::vector<std::string> a_args;
-        a_args.reserve(n);
-        for (uint32_t i = 0; i < n; ++i)
-            a_args.push_back(_value_to_string(decode_value(r)));
+    std::vector<std::string> a_args;
+    a_args.reserve(n);
+    for (uint32_t i = 0; i < n; ++i)
+        a_args.push_back(_value_to_string(decode_value(r)));
     it->second->log(a_args);
     Writer w;
     w.put_i32(cb_id);
@@ -746,10 +866,10 @@ void client::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
         throw std::runtime_error("console: unknown this_id");
     }
     n -= 1;
-        std::vector<std::string> a_args;
-        a_args.reserve(n);
-        for (uint32_t i = 0; i < n; ++i)
-            a_args.push_back(_value_to_string(decode_value(r)));
+    std::vector<std::string> a_args;
+    a_args.reserve(n);
+    for (uint32_t i = 0; i < n; ++i)
+        a_args.push_back(_value_to_string(decode_value(r)));
     it->second->warning(a_args);
     Writer w;
     w.put_i32(cb_id);
@@ -770,10 +890,10 @@ void client::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
         throw std::runtime_error("console: unknown this_id");
     }
     n -= 1;
-        std::vector<std::string> a_args;
-        a_args.reserve(n);
-        for (uint32_t i = 0; i < n; ++i)
-            a_args.push_back(_value_to_string(decode_value(r)));
+    std::vector<std::string> a_args;
+    a_args.reserve(n);
+    for (uint32_t i = 0; i < n; ++i)
+        a_args.push_back(_value_to_string(decode_value(r)));
     it->second->error(a_args);
     Writer w;
     w.put_i32(cb_id);
@@ -816,6 +936,12 @@ void client::impl::_register_method_handlers() {
             _cb_GetFile(cb_id, r);
         };
     };
+    m_function_registrars["GetFileSize"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetFileSize = std::static_pointer_cast<GlobalFunction_GetFileSize>(fn);
+        m_handlers["GetFileSize"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetFileSize(cb_id, r);
+        };
+    };
     m_function_registrars["GetTimeNow"] = [this](const std::shared_ptr<s5run_function> &fn) {
         m_fn_GetTimeNow = std::static_pointer_cast<GlobalFunction_GetTimeNow>(fn);
         m_handlers["GetTimeNow"] = [this](int32_t cb_id, Reader &r) {
@@ -832,6 +958,30 @@ void client::impl::_register_method_handlers() {
         m_fn_GetFileList = std::static_pointer_cast<GlobalFunction_GetFileList>(fn);
         m_handlers["GetFileList"] = [this](int32_t cb_id, Reader &r) {
             _cb_GetFileList(cb_id, r);
+        };
+    };
+    m_function_registrars["GetOpenedFiles"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetOpenedFiles = std::static_pointer_cast<GlobalFunction_GetOpenedFiles>(fn);
+        m_handlers["GetOpenedFiles"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetOpenedFiles(cb_id, r);
+        };
+    };
+    m_function_registrars["CloseFiles"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_CloseFiles = std::static_pointer_cast<GlobalFunction_CloseFiles>(fn);
+        m_handlers["CloseFiles"] = [this](int32_t cb_id, Reader &r) {
+            _cb_CloseFiles(cb_id, r);
+        };
+    };
+    m_function_registrars["GetPi"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetPi = std::static_pointer_cast<GlobalFunction_GetPi>(fn);
+        m_handlers["GetPi"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetPi(cb_id, r);
+        };
+    };
+    m_function_registrars["GetServerPort"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetServerPort = std::static_pointer_cast<GlobalFunction_GetServerPort>(fn);
+        m_handlers["GetServerPort"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetServerPort(cb_id, r);
         };
     };
     m_handlers["GetSize"] = [this](int32_t cb_id, Reader &r) {

@@ -140,6 +140,15 @@ s5run::Value js_to_value(JSContext *ctx, JSValueConst v) {
     return s5run::Value(out);
   }
   if (JS_IsObject(v)) {
+    JSValue marker = JS_GetPropertyStr(ctx, v, "__s5run_this_id");
+    if (JS_IsNumber(marker)) {
+      double d = 0;
+      JS_ToFloat64(ctx, &d, marker);
+      JS_FreeValue(ctx, marker);
+      return s5run::Value(s5run::ObjectRef((int)d, ""));
+    }
+    JS_FreeValue(ctx, marker);
+
     JSPropertyEnum *tab = nullptr;
     uint32_t len = 0;
     if (JS_GetOwnPropertyNames(ctx, &tab, &len, v, JS_GPN_STRING_MASK) < 0)
@@ -300,6 +309,11 @@ public:
     if (JS_IsException(obj))
       return nullptr;
 
+    // Hidden marker: lets js_to_value recognize proxy objects and pass
+    // them to callbacks as ObjectRef instead of a plain object.
+    JS_DefinePropertyValueStr(ctx, obj, "__s5run_this_id",
+                              JS_NewInt64(ctx, this_id), 0);
+
     for (const auto &name : methods) {
       auto *mctx = new MethodCtx{this_id, name};
       method_ctxs_.push_back(mctx);
@@ -310,6 +324,28 @@ public:
       JS_SetPropertyStr(ctx, obj, name.c_str(), fn);
     }
     return to_handle(obj);
+  }
+
+  JsValue make_array(JsContext ctx_handle, size_t count, const JsValue *items) override {
+    JSContext *ctx = to_ctx(ctx_handle);
+    JSValue arr = JS_NewArray(ctx);
+    if (JS_IsException(arr)) {
+      for (size_t i = 0; i < count; ++i)
+        free_handle(items[i]);
+      return nullptr;
+    }
+    for (size_t i = 0; i < count; ++i) {
+      JSValue v = from_handle(items[i]);
+      free_handle(items[i]);
+      if (JS_SetPropertyUint32(ctx, arr, (uint32_t)i, v) < 0) {
+        JS_FreeValue(ctx, v);
+        JS_FreeValue(ctx, arr);
+        for (size_t j = i + 1; j < count; ++j)
+          free_handle(items[j]);
+        return nullptr;
+      }
+    }
+    return to_handle(arr);
   }
 
   JsValue make_value(JsContext ctx_handle, const s5run::Value &v) override {

@@ -126,6 +126,13 @@ public:
     virtual std::shared_ptr<File> execute(const std::string & filepath) = 0;
 };
 
+class GlobalFunction_GetFileSize : public s5run_function {
+public:
+    std::string s5run_function_name() const override { return "GetFileSize"; }
+    virtual ~GlobalFunction_GetFileSize() {}
+    virtual int64_t execute(const std::shared_ptr<File> & file) = 0;
+};
+
 class GlobalFunction_GetTimeNow : public s5run_function {
 public:
     std::string s5run_function_name() const override { return "GetTimeNow"; }
@@ -145,6 +152,34 @@ public:
     std::string s5run_function_name() const override { return "GetFileList"; }
     virtual ~GlobalFunction_GetFileList() {}
     virtual std::vector<std::string> execute(const std::string & filepath) = 0;
+};
+
+class GlobalFunction_GetOpenedFiles : public s5run_function {
+public:
+    std::string s5run_function_name() const override { return "GetOpenedFiles"; }
+    virtual ~GlobalFunction_GetOpenedFiles() {}
+    virtual std::vector<std::shared_ptr<File>> execute() = 0;
+};
+
+class GlobalFunction_CloseFiles : public s5run_function {
+public:
+    std::string s5run_function_name() const override { return "CloseFiles"; }
+    virtual ~GlobalFunction_CloseFiles() {}
+    virtual void execute(const std::vector<std::shared_ptr<File>> & files) = 0;
+};
+
+class GlobalFunction_GetPi : public s5run_function {
+public:
+    std::string s5run_function_name() const override { return "GetPi"; }
+    virtual ~GlobalFunction_GetPi() {}
+    virtual double execute() = 0;
+};
+
+class GlobalFunction_GetServerPort : public s5run_function {
+public:
+    std::string s5run_function_name() const override { return "GetServerPort"; }
+    virtual ~GlobalFunction_GetServerPort() {}
+    virtual uint64_t execute() = 0;
 };
 
 class context {
