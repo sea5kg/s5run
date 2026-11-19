@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(s5run-server C CXX)
+project(s5run C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(EXECUTABLE_OUTPUT_PATH ${s5run-server_SOURCE_DIR})
+set(EXECUTABLE_OUTPUT_PATH ${s5run_SOURCE_DIR})
 
 find_package(Threads REQUIRED)
 
@@ -46,7 +46,7 @@ set_target_properties(quickjs_static PROPERTIES
 )
 
 # server
-add_executable(s5run-server
+add_executable(s5run
     src/main.cpp
     src/s5run/script_engines/quickjs_script_engine.cpp
     # src/s5run/script_engines/lua_script_engine.cpp
@@ -57,14 +57,14 @@ add_executable(s5run-server
 )
 
 target_include_directories(
-  s5run-server
+  s5run
   PRIVATE
   src/s5run
   src/s5run/include
 )
 
 target_link_libraries(
-  s5run-server
+  s5run
   PRIVATE
   # lua_static
   quickjs_static

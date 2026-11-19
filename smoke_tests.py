@@ -17,7 +17,7 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SERVER_BIN = os.path.join(ROOT, "s5run-server")
+SERVER_BIN = os.path.join(ROOT, "s5run")
 CPP_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp11-client")
 CPP_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp11-client")
 CPP_GEN_BIN = os.path.join(CPP_CLIENT_DIR, "bin", "cpp11-client")

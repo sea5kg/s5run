@@ -1,5 +1,5 @@
 /tmp
-/s5run-server
+/s5run
 /test-client
 __pycache__
 /tests/cpp11-client/bin

@@ -24,7 +24,7 @@ foreach(_TEST ${ALL_TESTS})
 
     add_test(
       NAME ${TEST_NAME}
-      COMMAND $<TARGET_FILE:${TEST_NAME}> $<TARGET_FILE:s5run-server>
+      COMMAND $<TARGET_FILE:${TEST_NAME}> $<TARGET_FILE:s5run>
     )
     message(${CMAKE_CURRENT_BINARY_DIR}/tests)
     set_target_properties (${TEST_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY tests)

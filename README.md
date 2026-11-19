@@ -181,7 +181,7 @@ $ ./build_simple.sh
 ## Example run
 
 ```sh
-$ ./s5run-server 7777 8
+$ ./s5run 7777 8
 script_service listening on :7777, threads=8
 client 127.0.0.1:53421 connected
 ```

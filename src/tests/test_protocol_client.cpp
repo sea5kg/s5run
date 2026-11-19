@@ -1,7 +1,7 @@
-// Raw binary protocol smoke test: spawns the s5run-server and runs
+// Raw binary protocol smoke test: spawns the s5run server and runs
 // client scenarios against it (registration, exec, callbacks, errors).
 //
-// Usage: test_protocol_client <path-to-s5run-server>
+// Usage: test_protocol_client <path-to-s5run>
 #include "internal/s5run_globals.h"
 #include "s5run_protocol.h"
 #include "value_wire.h"
@@ -252,7 +252,7 @@ void wait_server_up(uint16_t port) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: %s <path-to-s5run-server>\n", argv[0]);
+    std::fprintf(stderr, "usage: %s <path-to-s5run>\n", argv[0]);
     return 2;
   }
   std::string server_bin = argv[1];
