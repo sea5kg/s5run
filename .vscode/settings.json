@@ -1,9 +1,12 @@
 {
     "cSpell.words": [
         "Evgenii",
+        "lcrypto",
         "libgenclientrunscriptsserver",
+        "lssl",
         "quickjs",
         "runcligen",
-        "Sopov"
+        "Sopov",
+        "WSJCPP"
     ]
 }
