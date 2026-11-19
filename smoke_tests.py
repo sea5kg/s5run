@@ -86,11 +86,11 @@ def _generated_outputs():
 
 def ensure_generated():
     inputs = [os.path.join(ROOT, "s5run-client.json"),
-              os.path.join(ROOT, "generate_client_code.py")]
+              os.path.join(ROOT, "pys5rungen")]
     inputs += _iter_files(os.path.join(ROOT, "libs5run_client_code_generator"))
     outputs = _generated_outputs()
     if not outputs or _newest_mtime(inputs) > _newest_mtime(outputs):
-        _run([sys.executable, "generate_client_code.py"], "regenerate client code")
+        _run([sys.executable, "-m", "pys5rungen", "all"], "regenerate client code")
 
 
 def ensure_server():

@@ -32,48 +32,56 @@
 # Original repository: https://github.com/sea5kg/s5run
 #
 
-"""Orchestration: load schema, invoke all generators, write files."""
+"""
+Generator
+"""
 
 import os
 
-from .s5run_cli_schema import S5RunCliSchema
-from . import s5run_cpp11_generator, s5run_py_generator, s5run_java_generator
+from .s5run_schema import S5RunCliSchema
+from . import s5run_cpp11_generator, s5run_java_generator, s5run_py_generator
 
 
-class Generator:
+class S5RunCliGenerator:
     def __init__(self, schema: S5RunCliSchema):
         self.schema = schema
 
-    @classmethod
-    def from_file(cls, path: str) -> "Generator":
-        schema = S5RunCliSchema()
-        schema.load(path)
-        return cls(schema)
+    def generate_cpp11(self) -> None:
+        s = self.schema
+        if not s.cpp_output_dir:
+            return
+        os.makedirs(s.cpp_output_dir, exist_ok=True)
+        with open(os.path.join(s.cpp_output_dir, f"{s.namespace}.h"), "w", encoding="utf-8") as f:
+            f.write(s5run_cpp11_generator.generate_header(s))
+        with open(os.path.join(s.cpp_output_dir, f"{s.namespace}.cpp"), "w", encoding="utf-8") as f:
+            f.write(s5run_cpp11_generator.generate_impl(s))
+
+    def generate_py(self) -> None:
+        s = self.schema
+        if not s.py_output_dir:
+            return
+        os.makedirs(s.py_output_dir, exist_ok=True)
+        with open(os.path.join(s.py_output_dir, f"{s.py_module}.py"), "w", encoding="utf-8") as f:
+            f.write(s5run_py_generator.generate(s))
+
+    def generate_java(self) -> None:
+        s = self.schema
+        if not s.java_output_dir:
+            return
+        s5run_java_generator.generate(s, s.java_output_dir)
 
     def generate_all(self) -> None:
-        s = self.schema
-        ns = s.namespace
+        self.generate_cpp11()
+        self.generate_py()
+        self.generate_java()
 
-        if s.cpp_output_dir:
-            os.makedirs(s.cpp_output_dir, exist_ok=True)
-            with open(os.path.join(s.cpp_output_dir, f"{ns}.h"), "w", encoding="utf-8") as f:
-                f.write(s5run_cpp11_generator.generate_header(s))
-            with open(os.path.join(s.cpp_output_dir, f"{ns}.cpp"), "w", encoding="utf-8") as f:
-                f.write(s5run_cpp11_generator.generate_impl(s))
-        if s.py_output_dir:
-            os.makedirs(s.py_output_dir, exist_ok=True)
-            with open(os.path.join(s.py_output_dir, f"{s.py_module}.py"), "w", encoding="utf-8") as f:
-                f.write(s5run_py_generator.generate(s))
-        if s.java_output_dir:
-            s5run_java_generator.generate(s, s.java_output_dir)
-
-    def report(self) -> str:
+    def report(self, what: str = "all") -> str:
         s = self.schema
         lines = []
-        if s.cpp_output_dir:
+        if what in ("all", "cpp11") and s.cpp_output_dir:
             lines.append(f"cpp  -> {s.cpp_output_dir}{s.namespace}.h, {s.cpp_output_dir}{s.namespace}.cpp")
-        if s.py_output_dir:
+        if what in ("all", "py") and s.py_output_dir:
             lines.append(f"py   -> {s.py_output_dir}{s.py_module}.py")
-        if s.java_output_dir:
+        if what in ("all", "java") and s.java_output_dir:
             lines.append(f"java -> {s.java_output_dir}{s.java_package.replace('.', '/')}/")
         return "\n".join(lines)

@@ -36,7 +36,7 @@
 
 import os
 
-from .s5run_cli_typeref import S5RunCliTypeRef, s5run_parse_type
+from .s5run_typeref import S5RunCliTypeRef, s5run_parse_type
 
 # schema primitive name -> java type
 PRIMITIVES = {

@@ -54,9 +54,9 @@ cd $SCRIPT_DIR/..
 
 python3 -m pycodestyle \
     --config=misc/pycodestyle.config \
-    libs5runcligen generate_client_code.py
+    pys5rungen
 check_ret $? "pycodestyle"
 
 python3 -m pylint --max-line-length=120 \
-    libs5runcligen generate_client_code.py
+    pys5rungen
 check_ret $? "pylint"

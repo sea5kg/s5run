@@ -148,7 +148,12 @@ It's schema share classes, global functions and global objects.
 For regenerate client libraries:
 
 ```sh
-$ python3 -u generate_client_code.py
+$ python3 -m pys5rungen all     # all configured languages
+$ python3 -m pys5rungen cpp11   # only C++11
+$ python3 -m pys5rungen java    # only Java
+$ python3 -m pys5rungen py      # only Python
+$ python3 -m pys5rungen init    # create a default example s5run-client.json
+$ python3 -m pys5rungen help    # show help
 ```
 
 ### How add your implementation

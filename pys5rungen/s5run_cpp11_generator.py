@@ -40,7 +40,7 @@ client), the binary wire codec matching the s5run server protocol, and the
 transport client with typed callback dispatch.
 """
 
-from .s5run_cli_typeref import s5run_parse_type
+from .s5run_typeref import s5run_parse_type
 
 # schema primitive name -> C++ type
 PRIMITIVES = {

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # MIT License
 #
@@ -7,8 +6,8 @@
 # ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
 # ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
 #  ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
-# ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
-#  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
+# ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+#  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ▒▒▒▒ ▒▒░ ░▒▒   ▒▒░
 #
 # Copyright (c) 2026 Evgenii Sopov
 #
@@ -19,8 +18,8 @@
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
 #
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -33,15 +32,11 @@
 # Original repository: https://github.com/sea5kg/s5run
 #
 
-import os
+"""python3 -m pys5rungen entry point."""
 
-from libs5runcligen import S5RunCliSchema, Generator
+import sys
 
-ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
+from .s5run_cli import main
 
-schema = S5RunCliSchema()
-schema.load(os.path.join(ROOT_DIR, "s5run-client.json"))
-
-gen = Generator(schema)
-gen.generate_all()
-print(gen.report())
+if __name__ == "__main__":
+    sys.exit(main())
