@@ -124,6 +124,7 @@ class S5RunCliSchema:
     def __init__(self):
         self.__schema = {}
         self.version = 1
+        self.client_version = "0.0.0"
         self.namespace = ""
         self.java_package = ""
         self.py_module = ""
@@ -139,6 +140,7 @@ class S5RunCliSchema:
         with open(schema_filepath, "r", encoding="utf-8") as f:
             self.__schema = json.load(f)
         self.__parse_version()
+        self.__parse_client_version()
         self.__parse_cpp11_options()
         self.__parse_java_options()
         self.__parse_py_options()
@@ -150,6 +152,15 @@ class S5RunCliSchema:
     def __parse_version(self):
         if "version" in self.__schema:
             self.version = self.__schema["version"]
+
+    def __parse_client_version(self):
+        if "client-version" not in self.__schema:
+            return
+        value = self.__schema["client-version"]
+        parts = str(value).split(".")
+        if len(parts) != 3 or not all(p.isdigit() and p != "" for p in parts):
+            sys.exit("S5RunCliSchema: invalid 'client-version' (expected X.Y.Z): " + str(value))
+        self.client_version = str(value)
 
     def __parse_cpp11_options(self):
         section = self.__parse_options_section("cpp11", required=False)

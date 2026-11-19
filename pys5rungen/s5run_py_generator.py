@@ -127,6 +127,7 @@ def generate(schema) -> str:
          "import struct",
          "",
          f"# module: {schema.py_module}",
+         f"CLIENT_VERSION = \"{schema.client_version}\"",
          ""]
 
     for c in schema.classes:

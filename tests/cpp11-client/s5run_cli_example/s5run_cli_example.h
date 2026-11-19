@@ -9,6 +9,7 @@
 
 namespace s5run_cli_example {
 
+class context;
 class client;
 std::shared_ptr<client> make_client();
 
@@ -144,6 +145,13 @@ public:
     std::string s5run_function_name() const override { return "GetFileList"; }
     virtual ~GlobalFunction_GetFileList() {}
     virtual std::vector<std::string> execute(const std::string & filepath) = 0;
+};
+
+class context {
+public:
+
+    // Version of the generated client code.
+    static const char *client_version() { return "1.0.0"; }
 };
 
 class client {

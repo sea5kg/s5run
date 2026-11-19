@@ -105,6 +105,9 @@ int main(int argc, char **argv) {
 
   // == happy path
   std::printf("== cpp11-client: happy path\n");
+  if (std::string(s5run_cli_example::context::client_version()) != "1.0.0")
+    throw std::runtime_error("unexpected client version: "
+                             + std::string(s5run_cli_example::context::client_version()));
   {
     std::shared_ptr<MyConsole> con = std::make_shared<MyConsole>();
 

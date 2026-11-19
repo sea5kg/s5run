@@ -105,7 +105,7 @@ def _decode_lines(ref, target: str, indent: str) -> list[str]:
             f"{indent}}}",
         ]
     if ref.is_ref():
-        return [f"{indent}/* ref in array: unsupported */",
+        return [f"{indent}{target} = null; // ref in array: not supported yet",
                 f"{indent}Wire.getU64(b);"]
     raise ValueError(ref.name())
 
@@ -184,6 +184,19 @@ def _write_wire(pkg_dir: str, pkg: str) -> None:
         f.write("\n".join(L))
 
 
+def _write_client_version(pkg_dir: str, pkg: str, version: str) -> None:
+    L = ["// AUTO-GENERATED. DO NOT EDIT.", f"package {pkg};", "",
+         "public class ClientVersion {",
+         f'    public static final String VERSION = "{version}";',
+         "",
+         "    public static String get() {",
+         "        return VERSION;",
+         "    }",
+         "}"]
+    with open(os.path.join(pkg_dir, "ClientVersion.java"), "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+
+
 def generate(schema, java_output_dir: str) -> None:
     pkg = schema.java_package
     pkg_dir = os.path.join(java_output_dir, *pkg.split("."))
@@ -215,6 +228,8 @@ def generate(schema, java_output_dir: str) -> None:
     with open(os.path.join(pkg_dir, "IRunScriptGlobalFunctions.java"),
               "w", encoding="utf-8") as f:
         f.write("\n".join(L))
+
+    _write_client_version(pkg_dir, pkg, schema.client_version)
 
     _write_wire(pkg_dir, pkg)
 

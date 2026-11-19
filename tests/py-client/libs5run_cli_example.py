@@ -5,6 +5,7 @@ from typing import List, Optional, Protocol
 import struct
 
 # module: libs5run_cli_example
+CLIENT_VERSION = "1.0.0"
 
 class IFile(Protocol):
     this_id: int

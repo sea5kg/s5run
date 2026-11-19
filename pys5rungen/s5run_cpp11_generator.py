@@ -88,6 +88,7 @@ class _TypeUsage:
         self.prim_writes = []   # primitive names needing a write_X
         self.array_reads = []   # array type strings needing a read_X
         self.array_writes = []  # array type strings needing a write_X
+        self.ref_reads = False  # object references used as arguments
 
     def _mark(self, lst, item):
         if item not in lst:
@@ -232,6 +233,7 @@ class _Cpp11Generator:
              "",
              f"namespace {self.ns} {{",
              "",
+             "class context;",
              "class client;",
              "std::shared_ptr<client> make_client();",
              "",
@@ -352,7 +354,14 @@ public:
 
     def _client_class(self) -> str:
         s = self.schema
-        L = ["class client {",
+        L = ["class context {",
+             "public:",
+             "",
+             "    // Version of the generated client code.",
+             "    static const char *client_version() { return \"" + self.schema.client_version + "\"; }",
+             "};",
+             "",
+	     "class client {",
              "public:",
              "    client();",
              "    ~client();",

@@ -22,8 +22,11 @@ rm -rf bin
 javac -d bin $(find ./src -name "*.java")
 check_ret $? "Compile"
 
-jar -cmf manifest.mf s5run-client.jar  -C bin .
-check_ret $? "Build s5run-client.jar"
+CLIENT_VERSION=$(grep -o 'VERSION = "[^"]*"' $(find ./src -name "ClientVersion.java") | grep -o '[0-9][^"]*')
+check_ret $? "Detect client version"
 
-java -jar s5run-client.jar
-check_ret $? "Run s5run-client.jar"
+jar -cmf manifest.mf s5run-client-$CLIENT_VERSION.jar -C bin .
+check_ret $? "Build s5run-client-$CLIENT_VERSION.jar"
+
+java -jar s5run-client-$CLIENT_VERSION.jar
+check_ret $? "Run s5run-client-$CLIENT_VERSION.jar"
