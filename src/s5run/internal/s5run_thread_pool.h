@@ -35,7 +35,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -55,6 +57,11 @@ public:
 
   void submit(std::shared_ptr<thread_pool_task> task);
 
+  // -- load statistics --
+  size_t threads_count() const { return workers_.size(); }
+  size_t busy_count() const { return m_busy.load(); }
+  size_t queued_count() const { return m_queued.load(); }
+
 private:
   void worker_loop();
 
@@ -63,6 +70,8 @@ private:
   std::mutex m_;
   std::condition_variable cv_;
   bool stop_ = false;
+  std::atomic<size_t> m_busy{0};
+  std::atomic<size_t> m_queued{0};
 };
 
 } // namespace s5run

@@ -10,6 +10,8 @@ M_REGISTER_FUNC = 0x05
 M_REGISTER_OBJ = 0x06
 M_REGISTER_TYPE = 0x07
 M_REGISTER_RESP = 0x08
+M_STATS_REQ = 0x09
+M_STATS_RESP = 0x0A
 
 T_UNDEF = 0x00
 T_BOOL = 0x01
@@ -227,6 +229,15 @@ def recv_msg(sock):
             raise WireError("eof while reading frame body")
         data += c
     return data[0], Reader(data[1:])
+
+
+def request_stats(sock):
+    """Ask the server for load stats: (threads, busy, queued, clients)."""
+    send_msg(sock, M_STATS_REQ, [])
+    t, r = recv_msg(sock)
+    if t != M_STATS_RESP:
+        raise WireError("expected stats response, got msg type %d" % t)
+    return r.u32(), r.u32(), r.u32(), r.u32()
 
 
 def _expect_register_resp(sock, what):

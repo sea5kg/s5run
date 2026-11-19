@@ -10,8 +10,9 @@
 namespace s5run_cli_example {
 
 class context;
-class client;
-std::shared_ptr<client> make_client();
+class remote_server_info;
+class run_result;
+std::shared_ptr<context> make_context();
 
 // Generic value: used for run() arguments and results.
 class value {
@@ -58,6 +59,30 @@ private:
     std::string m_s;
     std::vector<value> m_a;
     std::map<std::string, value> m_o;
+};
+
+// Settings of a remote s5run server.
+class remote_server_info {
+public:
+    remote_server_info() : m_port(0), m_have_address(false) {}
+
+    // Address format: s5run://host:port
+    void set_address(const std::string &address);
+    const std::string &get_address() const { return m_address; }
+
+    void set_api_key(const std::string &api_key) { m_api_key = api_key; }
+    const std::string &get_api_key() const { return m_api_key; }
+
+    // Valid after a successful set_address().
+    const std::string &get_host() const { return m_host; }
+    uint16_t get_port() const { return m_port; }
+
+private:
+    std::string m_address;
+    std::string m_api_key;
+    std::string m_host;
+    uint16_t m_port;
+    bool m_have_address;
 };
 
 // Common root of all generated classes: lets the client work with
@@ -184,18 +209,17 @@ public:
 
 class context {
 public:
+    context();
+    ~context();
 
     // Version of the generated client code.
     static const char *client_version() { return "1.0.0"; }
-};
-
-class client {
-public:
-    client();
-    ~client();
 
     // Address format: s5run://host:port
-    void set_server_address(const std::string &address);
+    // Adds a server the context talks to. The first added server
+    // is used for script execution; the api_key is reserved for
+    // future authentication.
+    void add_server(const std::shared_ptr<remote_server_info> &server);
 
     // Registers a remote context provider: the listed context
     // names (global objects / classes) will be supplied by the
@@ -217,18 +241,47 @@ public:
     // Registers a global function implementation.
     void add_function(const std::shared_ptr<s5run_function> &fn);
 
-    // Runs the script; serves callbacks while it executes.
-    // Throws std::runtime_error on failure.
-    value run(const std::string &script, const std::string &entry,
-              const std::vector<value> &args = std::vector<value>());
+    // Sets the script executed by run_script().
+    void set_script(const std::string &script);
+
+    class impl; // public forward declaration: run_result befriends it
 
 private:
-    client(const client &);
-    client &operator=(const client &);
-
-
-    class impl;
+    context(const context &);
+    context &operator=(const context &);
+    std::shared_ptr<run_result> _run(const std::string &entry, const std::vector<value> &args);
+    friend std::shared_ptr<run_result> run_script(const std::shared_ptr<context> &,
+                                                const std::string &, const std::vector<value> &);
     impl *m_impl;
 };
+
+// Result of a script run: either a value or an error with details.
+class run_result {
+public:
+    bool has_error() const { return m_has_error; }
+    const std::string &error() const { return m_error; }
+    int error_line() const { return m_error_line; }
+    int64_t duration() const { return m_duration_ms; } // milliseconds
+    const value &get_value() const { return m_value; }
+
+private:
+    friend class context::impl;
+    run_result() : m_has_error(false), m_error_line(0), m_duration_ms(0) {}
+
+    bool m_has_error;
+    std::string m_error;
+    int m_error_line;
+    int64_t m_duration_ms;
+    value m_value;
+};
+
+// Runs the context script; serves callbacks while it executes.
+// Never throws: all errors are reported via run_result.
+inline std::shared_ptr<run_result> run_script(
+    const std::shared_ptr<context> &ctx,
+    const std::string &entry,
+    const std::vector<value> &args = std::vector<value>()) {
+    return ctx->_run(entry, args);
+}
 
 } // namespace s5run_cli_example

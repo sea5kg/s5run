@@ -170,16 +170,20 @@ Looks by example in `tests/cpp11-client/`
 How to run:
 
 ```
-auto cli = s5run_cli_example::make_client();
-cli->add_context_provider("s5run://localhost:7775", "some_api_key", {"Storage", "Cache"});
-cli->add_class(std::make_shared<MyFile>());
-cli->add_function(std::make_shared<MyGetFile>());
-cli->add_function(std::make_shared<MyHasFile>());
-cli->add_function(std::make_shared<MyGetTimeNow>());
-cli->add_object(std::make_shared<MyConsole>());
-cli->add_object(std::make_shared<MyFileSystem>());
-cli->set_server_address("s5run://localhost:7777");
-auto result = cli->run(script, "main", {s5run_cli_example::value("test.txt")});
+auto ctx = s5run_cli_example::make_context();
+ctx->add_context_provider("s5run://localhost:7775", "some_api_key", {"Storage", "Cache"});
+ctx->add_class(std::make_shared<MyFile>());
+ctx->add_function(std::make_shared<MyGetFile>());
+ctx->add_function(std::make_shared<MyHasFile>());
+ctx->add_function(std::make_shared<MyGetTimeNow>());
+ctx->add_object(std::make_shared<MyConsole>());
+ctx->add_object(std::make_shared<MyFileSystem>());
+std::shared_ptr<s5run_cli_example::remote_server_info> server0 = std::make_shared<s5run_cli_example::remote_server_info>();
+server0->set_address("s5run://localhost:7777");
+server0->set_api_key("some api key runner");
+ctx->add_server(server0);
+ctx->set_script(script);
+auto result = s5run_cli_example::run_script(ctx, "main", {s5run_cli_example::value("test.txt")});
 
 ```
 

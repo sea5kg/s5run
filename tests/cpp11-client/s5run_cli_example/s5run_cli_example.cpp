@@ -35,7 +35,8 @@ enum {
 enum {
     M_EXEC_REQ = 0x01, M_EXEC_RESP = 0x02, M_CALLBACK_REQ = 0x03,
     M_CALLBACK_RESP = 0x04, M_REGISTER_FUNC = 0x05, M_REGISTER_OBJ = 0x06,
-    M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08
+    M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08,
+    M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A
 };
 
 class Writer {
@@ -342,14 +343,14 @@ std::string _value_to_string(const value &v) {
 } // namespace
 
 // ---------------------------------------------------------------------------
-// client::impl
+// context::impl
 // ---------------------------------------------------------------------------
 
-class client::impl {
+class context::impl {
 public:
     typedef std::function<void(int32_t, Reader &)> handler_t;
 
-    impl() : m_have_address(false), m_fd(-1), m_next_this_id(0) {
+    impl() : m_fd(-1), m_next_this_id(0) {
         _register_method_handlers();
     }
 
@@ -357,13 +358,14 @@ public:
         _disconnect();
     }
 
-    void set_server_address(const std::string &address);
+    void add_server(const std::shared_ptr<remote_server_info> &server);
+    void set_script(const std::string &script);
     void register_type(const std::string &name,
                        const std::vector<std::string> &methods);
     void add_object(const std::shared_ptr<s5run_object> &obj);
     void add_function(const std::shared_ptr<s5run_function> &fn);
-    value run(const std::string &script, const std::string &entry,
-              const std::vector<value> &args);
+    std::shared_ptr<run_result> run(const std::string &entry,
+                                 const std::vector<value> &args);
 
 private:
     struct PendingType {
@@ -402,16 +404,19 @@ private:
     void _connect();
     void _disconnect();
     void _flush_pending();
+    static bool _send_message_fd(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);
+    static bool _read_message_fd(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);
+    static bool _read_exact_fd(int fd, void *buf, size_t n);
+    static bool _write_all_fd(int fd, const void *buf, size_t n);
     bool _send_message(uint8_t msg_type, const std::vector<uint8_t> &body);
     bool _read_message(uint8_t &msg_type, std::vector<uint8_t> &body);
-    bool _read_exact(void *buf, size_t n);
-    bool _write_all(const void *buf, size_t n);
     void _expect_register_resp(const std::string &what);
     void _dispatch_callback(std::vector<uint8_t> &body);
+    static long _probe_server_load(const std::shared_ptr<remote_server_info> &server);
+    static int _parse_error_line(const std::string &error);
 
-    std::string m_host;
-    uint16_t m_port;
-    bool m_have_address;
+    std::string m_script;
+    std::vector<std::shared_ptr<remote_server_info>> m_servers;
     int m_fd;
     int32_t m_next_this_id;
     std::vector<PendingType> m_pending_types;
@@ -437,27 +442,42 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// client::impl - address / connection
+// context::impl - address / connection
 // ---------------------------------------------------------------------------
 
-void client::impl::set_server_address(const std::string &address) {
-    const std::string prefix = "s5run://";
-    if (address.compare(0, prefix.size(), prefix) != 0)
-        throw std::runtime_error("set_server_address: expected format s5run://host:port");
-    std::string rest = address.substr(prefix.size());
-    size_t colon = rest.rfind(':');
-    if (colon == std::string::npos || colon == 0 || colon + 1 >= rest.size())
-        throw std::runtime_error("set_server_address: expected format s5run://host:port");
-    m_host = rest.substr(0, colon);
-    m_port = (uint16_t)atoi(rest.substr(colon + 1).c_str());
-    m_have_address = true;
+void context::impl::set_script(const std::string &script) {
+    m_script = script;
 }
 
-void client::impl::_connect() {
+void context::impl::add_server(const std::shared_ptr<remote_server_info> &server) {
+    if (!server)
+        throw std::runtime_error("add_server: server is null");
+    m_servers.push_back(server);
+}
+
+void context::impl::_connect() {
     if (m_fd >= 0)
         return;
-    if (!m_have_address)
-        throw std::runtime_error("s5run: server address is not set");
+    if (m_servers.empty())
+        throw std::runtime_error("s5run: no server added (add_server)");
+    size_t best = 0;
+    if (m_servers.size() > 1) {
+        // Ask every server for its load and pick the least loaded one.
+        long best_load = -1;
+        for (size_t i = 0; i < m_servers.size(); ++i) {
+            long load = _probe_server_load(m_servers[i]);
+            if (load < 0)
+                continue; // unreachable
+            if (best_load < 0 || load < best_load) {
+                best_load = load;
+                best = i;
+            }
+        }
+        if (best_load < 0)
+            throw std::runtime_error("s5run: all servers are unreachable");
+    }
+    const std::string m_host = m_servers[best]->get_host();
+    const uint16_t m_port = m_servers[best]->get_port();
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         throw std::runtime_error("s5run: socket failed");
@@ -480,17 +500,17 @@ void client::impl::_connect() {
     m_fd = fd;
 }
 
-void client::impl::_disconnect() {
+void context::impl::_disconnect() {
     if (m_fd >= 0) {
         ::close(m_fd);
         m_fd = -1;
     }
 }
 
-bool client::impl::_read_exact(void *buf, size_t n) {
+bool context::impl::_read_exact_fd(int fd, void *buf, size_t n) {
     char *p = (char *)buf;
     while (n > 0) {
-        ssize_t got = ::recv(m_fd, p, n, 0);
+        ssize_t got = ::recv(fd, p, n, 0);
         if (got == 0)
             return false;
         if (got < 0) {
@@ -504,10 +524,10 @@ bool client::impl::_read_exact(void *buf, size_t n) {
     return true;
 }
 
-bool client::impl::_write_all(const void *buf, size_t n) {
+bool context::impl::_write_all_fd(int fd, const void *buf, size_t n) {
     const char *p = (const char *)buf;
     while (n > 0) {
-        ssize_t sent = ::send(m_fd, p, n, MSG_NOSIGNAL);
+        ssize_t sent = ::send(fd, p, n, MSG_NOSIGNAL);
         if (sent <= 0) {
             if (sent < 0 && errno == EINTR)
                 continue;
@@ -519,32 +539,40 @@ bool client::impl::_write_all(const void *buf, size_t n) {
     return true;
 }
 
-bool client::impl::_send_message(uint8_t msg_type, const std::vector<uint8_t> &body) {
+bool context::impl::_send_message_fd(int fd, uint8_t msg_type, const std::vector<uint8_t> &body) {
     uint32_t len = (uint32_t)(1 + body.size());
     uint32_t net_len = htonl(len);
-    if (!_write_all(&net_len, sizeof(net_len)))
+    if (!_write_all_fd(fd, &net_len, sizeof(net_len)))
         return false;
-    if (!_write_all(&msg_type, 1))
+    if (!_write_all_fd(fd, &msg_type, 1))
         return false;
-    return body.empty() ? true : _write_all(&body[0], body.size());
+    return body.empty() ? true : _write_all_fd(fd, &body[0], body.size());
 }
 
-bool client::impl::_read_message(uint8_t &msg_type, std::vector<uint8_t> &body) {
+bool context::impl::_send_message(uint8_t msg_type, const std::vector<uint8_t> &body) {
+    return _send_message_fd(m_fd, msg_type, body);
+}
+
+bool context::impl::_read_message_fd(int fd, uint8_t &msg_type, std::vector<uint8_t> &body) {
     uint32_t net_len = 0;
-    if (!_read_exact(&net_len, sizeof(net_len)))
+    if (!_read_exact_fd(fd, &net_len, sizeof(net_len)))
         return false;
     uint32_t len = ntohl(net_len);
     if (len == 0 || len > 64 * 1024 * 1024)
         return false;
     std::vector<uint8_t> frame(len);
-    if (!_read_exact(&frame[0], len))
+    if (!_read_exact_fd(fd, &frame[0], len))
         return false;
     msg_type = frame[0];
     body.assign(frame.begin() + 1, frame.end());
     return true;
 }
 
-void client::impl::_expect_register_resp(const std::string &what) {
+bool context::impl::_read_message(uint8_t &msg_type, std::vector<uint8_t> &body) {
+    return _read_message_fd(m_fd, msg_type, body);
+}
+
+void context::impl::_expect_register_resp(const std::string &what) {
     uint8_t msg_type = 0;
     std::vector<uint8_t> body;
     if (!_read_message(msg_type, body) || msg_type != M_REGISTER_RESP)
@@ -554,7 +582,7 @@ void client::impl::_expect_register_resp(const std::string &what) {
         throw std::runtime_error("s5run: " + what + " error: " + r.get_string());
 }
 
-void client::impl::register_type(const std::string &name,
+void context::impl::register_type(const std::string &name,
                                  const std::vector<std::string> &methods) {
     if (m_fd >= 0) {
         Writer w;
@@ -572,7 +600,7 @@ void client::impl::register_type(const std::string &name,
     m_pending_types.push_back(t);
 }
 
-void client::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
+void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     const std::string class_name = obj->s5run_class_name();
     std::map<std::string, registrar_t>::const_iterator rit =
         m_instance_registrars.find(class_name);
@@ -601,7 +629,7 @@ void client::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     m_pending_objects.push_back(o);
 }
 
-void client::impl::add_function(const std::shared_ptr<s5run_function> &fn) {
+void context::impl::add_function(const std::shared_ptr<s5run_function> &fn) {
     const std::string name = fn->s5run_function_name();
     std::map<std::string, fn_registrar_t>::const_iterator rit =
         m_function_registrars.find(name);
@@ -620,7 +648,7 @@ void client::impl::add_function(const std::shared_ptr<s5run_function> &fn) {
     m_pending_functions.push_back(pf);
 }
 
-void client::impl::_cb_GetFile(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetFile(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
         throw std::runtime_error("GetFile: expected 1 argument(s)");
@@ -637,7 +665,7 @@ void client::impl::_cb_GetFile(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_GetFileSize(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetFileSize(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
         throw std::runtime_error("GetFileSize: expected 1 argument(s)");
@@ -657,7 +685,7 @@ void client::impl::_cb_GetFileSize(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_GetTimeNow(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetTimeNow(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
         throw std::runtime_error("GetTimeNow: expected 0 argument(s)");
@@ -670,7 +698,7 @@ void client::impl::_cb_GetTimeNow(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_HasFile(int32_t cb_id, Reader &r) {
+void context::impl::_cb_HasFile(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
         throw std::runtime_error("HasFile: expected 1 argument(s)");
@@ -684,7 +712,7 @@ void client::impl::_cb_HasFile(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_GetFileList(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetFileList(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
         throw std::runtime_error("GetFileList: expected 1 argument(s)");
@@ -698,7 +726,7 @@ void client::impl::_cb_GetFileList(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_GetOpenedFiles(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetOpenedFiles(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
         throw std::runtime_error("GetOpenedFiles: expected 0 argument(s)");
@@ -718,7 +746,7 @@ void client::impl::_cb_GetOpenedFiles(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_CloseFiles(int32_t cb_id, Reader &r) {
+void context::impl::_cb_CloseFiles(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
         throw std::runtime_error("CloseFiles: expected 1 argument(s)");
@@ -745,7 +773,7 @@ void client::impl::_cb_CloseFiles(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_GetPi(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetPi(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
         throw std::runtime_error("GetPi: expected 0 argument(s)");
@@ -758,7 +786,7 @@ void client::impl::_cb_GetPi(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cb_GetServerPort(int32_t cb_id, Reader &r) {
+void context::impl::_cb_GetServerPort(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
         throw std::runtime_error("GetServerPort: expected 0 argument(s)");
@@ -771,7 +799,7 @@ void client::impl::_cb_GetServerPort(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cbm_File_GetSize(int32_t cb_id, Reader &r) {
+void context::impl::_cbm_File_GetSize(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
         throw std::runtime_error("File.GetSize: expected 1 argument(s)");
@@ -790,7 +818,7 @@ void client::impl::_cbm_File_GetSize(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cbm_File_ReadBytes(int32_t cb_id, Reader &r) {
+void context::impl::_cbm_File_ReadBytes(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 2) {
         throw std::runtime_error("File.ReadBytes: expected 2 argument(s)");
@@ -810,7 +838,7 @@ void client::impl::_cbm_File_ReadBytes(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cbm_FileSystem_GetList(int32_t cb_id, Reader &r) {
+void context::impl::_cbm_FileSystem_GetList(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 2) {
         throw std::runtime_error("FileSystem.GetList: expected 2 argument(s)");
@@ -830,7 +858,7 @@ void client::impl::_cbm_FileSystem_GetList(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
+void context::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n < 1) {
         throw std::runtime_error("console.log: expected this_id");
@@ -854,7 +882,7 @@ void client::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
+void context::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n < 1) {
         throw std::runtime_error("console.warning: expected this_id");
@@ -878,7 +906,7 @@ void client::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-void client::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
+void context::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n < 1) {
         throw std::runtime_error("console.error: expected this_id");
@@ -902,25 +930,25 @@ void client::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
-int32_t client::impl::_register_instance_File(const std::shared_ptr<File> &obj) {
+int32_t context::impl::_register_instance_File(const std::shared_ptr<File> &obj) {
     int32_t id = ++m_next_this_id;
     m_instances_File[id] = obj;
     return id;
 }
 
-int32_t client::impl::_register_instance_FileSystem(const std::shared_ptr<FileSystem> &obj) {
+int32_t context::impl::_register_instance_FileSystem(const std::shared_ptr<FileSystem> &obj) {
     int32_t id = ++m_next_this_id;
     m_instances_FileSystem[id] = obj;
     return id;
 }
 
-int32_t client::impl::_register_instance_console(const std::shared_ptr<console> &obj) {
+int32_t context::impl::_register_instance_console(const std::shared_ptr<console> &obj) {
     int32_t id = ++m_next_this_id;
     m_instances_console[id] = obj;
     return id;
 }
 
-void client::impl::_register_method_handlers() {
+void context::impl::_register_method_handlers() {
     m_instance_registrars["File"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_File[id] = std::static_pointer_cast<File>(obj);
     };
@@ -1004,7 +1032,7 @@ void client::impl::_register_method_handlers() {
     };
 }
 
-void client::impl::_flush_pending() {
+void context::impl::_flush_pending() {
     for (size_t i = 0; i < m_pending_types.size(); ++i) {
         const PendingType &t = m_pending_types[i];
         Writer w;
@@ -1039,7 +1067,7 @@ void client::impl::_flush_pending() {
     m_pending_functions.clear();
 }
 
-void client::impl::_dispatch_callback(std::vector<uint8_t> &body) {
+void context::impl::_dispatch_callback(std::vector<uint8_t> &body) {
     Reader r(&body[0], body.size());
     int32_t cb_id = r.get_i32();
     std::string method = r.get_string();
@@ -1063,53 +1091,136 @@ void client::impl::_dispatch_callback(std::vector<uint8_t> &body) {
     }
 }
 
-value client::impl::run(const std::string &script, const std::string &entry,
-                            const std::vector<value> &args) {
-    _connect();
-    _flush_pending();
-    Writer w;
-    w.put_string(script);
-    w.put_string(entry);
-    w.put_u32((uint32_t)args.size());
-    for (size_t i = 0; i < args.size(); ++i)
-        encode_value(w, args[i]);
-    if (!_send_message(M_EXEC_REQ, w.data()))
-        throw std::runtime_error("s5run: send failed");
-    while (true) {
-        uint8_t msg_type = 0;
-        std::vector<uint8_t> body;
-        if (!_read_message(msg_type, body))
-            throw std::runtime_error("s5run: connection closed");
-        if (msg_type == M_CALLBACK_REQ) {
-            _dispatch_callback(body);
-            continue;
-        }
-        if (msg_type == M_EXEC_RESP) {
-            Reader r(&body[0], body.size());
-            if (r.get_u8() == 0)
-                throw std::runtime_error(r.get_string());
-            return decode_value(r);
-        }
-        throw std::runtime_error("s5run: unexpected message type");
+long context::impl::_probe_server_load(const std::shared_ptr<remote_server_info> &server) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(server->get_port());
+    if (::inet_pton(AF_INET, server->get_host().c_str(), &addr.sin_addr) != 1) {
+        ::close(fd);
+        return -1;
     }
+    if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0) {
+        ::close(fd);
+        return -1;
+    }
+    timeval tv;
+    tv.tv_sec = 2;
+    tv.tv_usec = 0;
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    std::vector<uint8_t> empty_body;
+    if (!_send_message_fd(fd, M_STATS_REQ, empty_body)) {
+        ::close(fd);
+        return -1;
+    }
+    uint8_t msg_type = 0;
+    std::vector<uint8_t> body;
+    if (!_read_message_fd(fd, msg_type, body) || msg_type != M_STATS_RESP || body.size() < 16) {
+        ::close(fd);
+        return -1;
+    }
+    ::close(fd);
+    Reader r(&body[0], body.size());
+    r.get_u32(); // threads
+    uint32_t busy = r.get_u32();
+    uint32_t queued = r.get_u32();
+    r.get_u32(); // clients
+    return (long)busy + (long)queued;
+}
+
+int context::impl::_parse_error_line(const std::string &error) {
+    // Engine errors carry positions as ":LINE:COLUMN" (e.g. "at main (<script>:5:15)").
+    for (size_t pos = 0; pos < error.size(); ++pos) {
+        if (error[pos] != ':')
+            continue;
+        size_t p1 = pos + 1;
+        if (p1 >= error.size() || error[p1] < '0' || error[p1] > '9')
+            continue;
+        size_t p2 = p1;
+        while (p2 < error.size() && error[p2] >= '0' && error[p2] <= '9')
+            ++p2;
+        if (p2 + 1 < error.size() && error[p2] == ':' && error[p2 + 1] >= '0' && error[p2 + 1] <= '9')
+            return atoi(error.substr(p1, p2 - p1).c_str());
+        pos = p2;
+    }
+    return 0;
+}
+
+std::shared_ptr<run_result> context::impl::run(const std::string &entry,
+                                 const std::vector<value> &args) {
+    std::shared_ptr<run_result> out(new run_result());
+    clock_t started = clock();
+    try {
+        _connect();
+        _flush_pending();
+        Writer w;
+        w.put_string(m_script);
+        w.put_string(entry);
+        w.put_u32((uint32_t)args.size());
+        for (size_t i = 0; i < args.size(); ++i)
+            encode_value(w, args[i]);
+        if (!_send_message(M_EXEC_REQ, w.data()))
+            throw std::runtime_error("s5run: send failed");
+        while (true) {
+            uint8_t msg_type = 0;
+            std::vector<uint8_t> body;
+            if (!_read_message(msg_type, body))
+                throw std::runtime_error("s5run: connection closed");
+            if (msg_type == M_CALLBACK_REQ) {
+                _dispatch_callback(body);
+                continue;
+            }
+            if (msg_type == M_EXEC_RESP) {
+                Reader r(&body[0], body.size());
+                if (r.get_u8() == 0)
+                    throw std::runtime_error(r.get_string());
+                out->m_value = decode_value(r);
+                break;
+            }
+            throw std::runtime_error("s5run: unexpected message type");
+        }
+    } catch (const std::exception &e) {
+        out->m_has_error = true;
+        out->m_error = e.what();
+        out->m_error_line = _parse_error_line(out->m_error);
+    }
+    out->m_duration_ms = (int64_t)((double)(clock() - started) * 1000.0 / CLOCKS_PER_SEC);
+    return out;
 }
 
 // ---------------------------------------------------------------------------
-// client
+// context
 // ---------------------------------------------------------------------------
 
-client::client() : m_impl(new client::impl()) {
+context::context() : m_impl(new context::impl()) {
 }
 
-client::~client() {
+context::~context() {
     delete m_impl;
 }
 
-void client::set_server_address(const std::string &address) {
-    m_impl->set_server_address(address);
+void remote_server_info::set_address(const std::string &address) {
+    const std::string prefix = "s5run://";
+    if (address.compare(0, prefix.size(), prefix) != 0)
+        throw std::runtime_error("set_address: expected format s5run://host:port");
+    std::string rest = address.substr(prefix.size());
+    size_t colon = rest.rfind(':');
+    if (colon == std::string::npos || colon == 0 || colon + 1 >= rest.size())
+        throw std::runtime_error("set_address: expected format s5run://host:port");
+    m_address = address;
+    m_host = rest.substr(0, colon);
+    m_port = (uint16_t)atoi(rest.substr(colon + 1).c_str());
+    m_have_address = true;
 }
 
-void client::add_context_provider(const std::string &address,
+void context::add_server(const std::shared_ptr<remote_server_info> &server) {
+    m_impl->add_server(server);
+}
+
+void context::add_context_provider(const std::string &address,
                                   const std::string &api_key,
                                   const std::vector<std::string> &contexts) {
     (void)api_key;
@@ -1121,30 +1232,34 @@ void client::add_context_provider(const std::string &address,
     throw std::runtime_error("add_context_provider: not implemented yet");
 }
 
-void client::add_object(s5run_object *obj) {
+void context::add_object(s5run_object *obj) {
     m_impl->add_object(std::shared_ptr<s5run_object>(obj));
 }
 
-void client::add_object(const std::shared_ptr<s5run_object> &obj) {
+void context::add_object(const std::shared_ptr<s5run_object> &obj) {
     m_impl->add_object(obj);
 }
 
-void client::add_class(const std::shared_ptr<s5run_object> &sample) {
+void context::add_class(const std::shared_ptr<s5run_object> &sample) {
     m_impl->register_type(sample->s5run_class_name(),
                           sample->s5run_method_names());
 }
 
-void client::add_function(const std::shared_ptr<s5run_function> &fn) {
+void context::add_function(const std::shared_ptr<s5run_function> &fn) {
     m_impl->add_function(fn);
 }
 
-value client::run(const std::string &script, const std::string &entry,
-                          const std::vector<value> &args) {
-    return m_impl->run(script, entry, args);
+void context::set_script(const std::string &script) {
+    m_impl->set_script(script);
 }
 
-std::shared_ptr<client> make_client() {
-    return std::shared_ptr<client>(new client());
+std::shared_ptr<run_result> context::_run(const std::string &entry,
+                                      const std::vector<value> &args) {
+    return m_impl->run(entry, args);
+}
+
+std::shared_ptr<context> make_context() {
+    return std::shared_ptr<context>(new context());
 }
 
 } // namespace s5run_cli_example

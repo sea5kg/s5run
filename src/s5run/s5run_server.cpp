@@ -58,6 +58,7 @@
 namespace s5run {
 
 std::atomic<bool> g_stop{false};
+std::atomic<int> g_connected_clients{0};
 
 static int g_listen_fd = -1;
 
@@ -107,28 +108,31 @@ private:
 
 class client_handler : public thread_pool_task {
 public:
-  client_handler(int fd);
+  client_handler(int fd, thread_pool *pool);
   virtual void handle() override;
 
 private:
   int m_fd;
+  thread_pool *m_pool;
   std::map<std::string, std::vector<std::string>> m_object_types;
   void handle_register_function(engine::IScriptEngine *, const std::vector<uint8_t> &body);
   void handle_register_object(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
   void handle_register_object_type(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
   void handle_exec(engine::IScriptEngine *, const std::vector<uint8_t> &body, int fd);
   void send_exec_error(int fd, std::string);
+  void send_stats(int fd);
   void send_register_resp(int fd, bool, std::string);
   void register_method_callbacks(engine::IScriptEngine *, ClientChannel &,
                                 const std::vector<std::string> &methods);
 };
 
-client_handler::client_handler(int fd)
-    : m_fd(fd) {
+client_handler::client_handler(int fd, thread_pool *pool)
+    : m_fd(fd), m_pool(pool) {
 
       };
 
 void client_handler::handle() {
+  g_connected_clients.fetch_add(1);
   s5run::set_recv_timeout(m_fd, 10'000);
 
   std::shared_ptr<engine::IScriptEngine> eng;
@@ -162,6 +166,9 @@ void client_handler::handle() {
         handle_register_object_type(eng.get(), channel, body);
         send_register_resp(m_fd, true, "");
         break;
+      case protocol_msg_type::M_STATS_REQ:
+        send_stats(m_fd);
+        break;
       case protocol_msg_type::M_EXEC_REQ:
         handle_exec(eng.get(), body, m_fd);
         break;
@@ -176,7 +183,17 @@ void client_handler::handle() {
       }
     }
   }
+  g_connected_clients.fetch_sub(1);
   ::close(m_fd);
+}
+
+void client_handler::send_stats(int fd) {
+  wire::Writer w;
+  w.put_u32((uint32_t)(m_pool ? m_pool->threads_count() : 0));
+  w.put_u32((uint32_t)(m_pool ? m_pool->busy_count() : 0));
+  w.put_u32((uint32_t)(m_pool ? m_pool->queued_count() : 0));
+  w.put_u32((uint32_t)g_connected_clients.load());
+  s5run::write_message(fd, protocol_msg_type::M_STATS_RESP, w.data());
 }
 
 void client_handler::handle_register_function(engine::IScriptEngine *eng, const std::vector<uint8_t> &body) {
@@ -377,7 +394,7 @@ int server::run(const std::string &listen_address, int threads) {
     inet_ntop(AF_INET, &caddr.sin_addr, ip, sizeof(ip));
     std::printf("client %s:%u connected\n", ip, ntohs(caddr.sin_port));
 
-    pool.submit(std::make_shared<client_handler>(cfd));
+    pool.submit(std::make_shared<client_handler>(cfd, &pool));
   }
 
   if (g_listen_fd >= 0)

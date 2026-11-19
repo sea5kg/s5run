@@ -48,6 +48,8 @@ enum protocol_msg_type : uint8_t {
   M_REGISTER_OBJ = 0x06,  // client -> server: name, this_id, type, methods
   M_REGISTER_TYPE = 0x07, // client -> server: name, methods
   M_REGISTER_RESP = 0x08, // server -> client: ok, error
+  M_STATS_REQ = 0x09,     // client -> server: empty
+  M_STATS_RESP = 0x0A,    // server -> client: threads, busy, queued, clients (u32 x4)
 };
 
 } // namespace s5run

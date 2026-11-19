@@ -59,6 +59,7 @@ void thread_pool::submit(std::shared_ptr<thread_pool_task> task) {
     std::lock_guard lk(m_);
     tasks_.push(std::move(task));
   }
+  m_queued.fetch_add(1);
   cv_.notify_one();
 }
 
@@ -74,11 +75,14 @@ void thread_pool::worker_loop() {
         return;
       task = std::move(tasks_.front());
       tasks_.pop();
+      m_queued.fetch_sub(1);
     }
+    m_busy.fetch_add(1);
     try {
       task->handle();
     } catch (...) { /* log */
     }
+    m_busy.fetch_sub(1);
   }
 }
 

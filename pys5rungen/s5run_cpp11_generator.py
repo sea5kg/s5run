@@ -293,10 +293,13 @@ class _Cpp11Generator:
              f"namespace {self.ns} {{",
              "",
              "class context;",
-             "class client;",
-             "std::shared_ptr<client> make_client();",
+             "class remote_server_info;",
+             "class run_result;",
+             "std::shared_ptr<context> make_context();",
              "",
              self._value_class(),
+             "",
+             self._remote_server_info_class(),
              "",
              self._root_class(),
              ""]
@@ -309,6 +312,18 @@ class _Cpp11Generator:
             L.append(self._global_function_class(f))
             L.append("")
         L.append(self._client_class())
+        L.append("")
+        L.append(self._run_result_class())
+        L.append("")
+        L.append(
+            "// Runs the context script; serves callbacks while it executes.\n"
+            "// Never throws: all errors are reported via run_result.\n"
+            "inline std::shared_ptr<run_result> run_script(\n"
+            "    const std::shared_ptr<context> &ctx,\n"
+            "    const std::string &entry,\n"
+            "    const std::vector<value> &args = std::vector<value>()) {\n"
+            "    return ctx->_run(entry, args);\n"
+            "}")
         L.append("")
         L.append(f"}} // namespace {self.ns}")
         return "\n".join(L) + "\n"
@@ -370,6 +385,31 @@ public:
     virtual std::string s5run_function_name() const = 0;
 };"""
 
+    def _remote_server_info_class(self) -> str:
+        return """// Settings of a remote s5run server.
+class remote_server_info {
+public:
+    remote_server_info() : m_port(0), m_have_address(false) {}
+
+    // Address format: s5run://host:port
+    void set_address(const std::string &address);
+    const std::string &get_address() const { return m_address; }
+
+    void set_api_key(const std::string &api_key) { m_api_key = api_key; }
+    const std::string &get_api_key() const { return m_api_key; }
+
+    // Valid after a successful set_address().
+    const std::string &get_host() const { return m_host; }
+    uint16_t get_port() const { return m_port; }
+
+private:
+    std::string m_address;
+    std::string m_api_key;
+    std::string m_host;
+    uint16_t m_port;
+    bool m_have_address;
+};"""
+
     def _root_class(self) -> str:
         return """// Common root of all generated classes: lets the client work with
 // objects without knowing their concrete types.
@@ -411,22 +451,42 @@ public:
             "};",
         ])
 
+    def _run_result_class(self) -> str:
+        return """// Result of a script run: either a value or an error with details.
+class run_result {
+public:
+    bool has_error() const { return m_has_error; }
+    const std::string &error() const { return m_error; }
+    int error_line() const { return m_error_line; }
+    int64_t duration() const { return m_duration_ms; } // milliseconds
+    const value &get_value() const { return m_value; }
+
+private:
+    friend class context::impl;
+    run_result() : m_has_error(false), m_error_line(0), m_duration_ms(0) {}
+
+    bool m_has_error;
+    std::string m_error;
+    int m_error_line;
+    int64_t m_duration_ms;
+    value m_value;
+};"""
+
     def _client_class(self) -> str:
         s = self.schema
         L = ["class context {",
              "public:",
+             "    context();",
+             "    ~context();",
              "",
              "    // Version of the generated client code.",
              "    static const char *client_version() { return \"" + self.schema.client_version + "\"; }",
-             "};",
-             "",
-	     "class client {",
-             "public:",
-             "    client();",
-             "    ~client();",
              "",
              "    // Address format: s5run://host:port",
-             "    void set_server_address(const std::string &address);",
+             "    // Adds a server the context talks to. The first added server",
+             "    // is used for script execution; the api_key is reserved for",
+             "    // future authentication.",
+             "    void add_server(const std::shared_ptr<remote_server_info> &server);",
              "",
              "    // Registers a remote context provider: the listed context",
              "    // names (global objects / classes) will be supplied by the",
@@ -448,19 +508,19 @@ public:
              "    // Registers a global function implementation.",
              "    void add_function(const std::shared_ptr<s5run_function> &fn);",
              "",
-             "    // Runs the script; serves callbacks while it executes.",
-             "    // Throws std::runtime_error on failure.",
-             "    value run(const std::string &script, const std::string &entry,",
-             "              const std::vector<value> &args = std::vector<value>());",
+             "    // Sets the script executed by run_script().",
+             "    void set_script(const std::string &script);",
+             "",
+             "    class impl; // public forward declaration: run_result befriends it",
              "",
              "private:",
-             "    client(const client &);",
-             "    client &operator=(const client &);",
-             ""]
-        L += ["",
-              "    class impl;",
-              "    impl *m_impl;",
-              "};"]
+             "    context(const context &);",
+             "    context &operator=(const context &);",
+             "    std::shared_ptr<run_result> _run(const std::string &entry, const std::vector<value> &args);",
+             "    friend std::shared_ptr<run_result> run_script(const std::shared_ptr<context> &,",
+             "                                                const std::string &, const std::vector<value> &);",
+             "    impl *m_impl;",
+             "};"]
         return "\n".join(L)
 
     # ------------------------------------------------------------------
@@ -531,21 +591,35 @@ public:
               self._impl_class(),
               "",
               "// ---------------------------------------------------------------------------",
-              "// client",
+              "// context",
               "// ---------------------------------------------------------------------------",
               "",
-              "client::client() : m_impl(new client::impl()) {",
+              "context::context() : m_impl(new context::impl()) {",
               "}",
               "",
-              "client::~client() {",
+              "context::~context() {",
               "    delete m_impl;",
               "}",
               "",
-              "void client::set_server_address(const std::string &address) {",
-              "    m_impl->set_server_address(address);",
+              "void remote_server_info::set_address(const std::string &address) {",
+              '    const std::string prefix = "s5run://";',
+              "    if (address.compare(0, prefix.size(), prefix) != 0)",
+              '        throw std::runtime_error("set_address: expected format s5run://host:port");',
+              "    std::string rest = address.substr(prefix.size());",
+              "    size_t colon = rest.rfind(':');",
+              "    if (colon == std::string::npos || colon == 0 || colon + 1 >= rest.size())",
+              '        throw std::runtime_error("set_address: expected format s5run://host:port");',
+              "    m_address = address;",
+              "    m_host = rest.substr(0, colon);",
+              "    m_port = (uint16_t)atoi(rest.substr(colon + 1).c_str());",
+              "    m_have_address = true;",
               "}",
               "",
-              "void client::add_context_provider(const std::string &address,",
+              "void context::add_server(const std::shared_ptr<remote_server_info> &server) {",
+              "    m_impl->add_server(server);",
+              "}",
+              "",
+              "void context::add_context_provider(const std::string &address,",
               "                                  const std::string &api_key,",
               "                                  const std::vector<std::string> &contexts) {",
               "    (void)api_key;",
@@ -557,30 +631,34 @@ public:
               '    throw std::runtime_error("add_context_provider: not implemented yet");',
               "}",
               ""]
-        L += ["void client::add_object(s5run_object *obj) {",
+        L += ["void context::add_object(s5run_object *obj) {",
               "    m_impl->add_object(std::shared_ptr<s5run_object>(obj));",
               "}",
               "",
-              "void client::add_object(const std::shared_ptr<s5run_object> &obj) {",
+              "void context::add_object(const std::shared_ptr<s5run_object> &obj) {",
               "    m_impl->add_object(obj);",
               "}",
               "",
-              "void client::add_class(const std::shared_ptr<s5run_object> &sample) {",
+              "void context::add_class(const std::shared_ptr<s5run_object> &sample) {",
               "    m_impl->register_type(sample->s5run_class_name(),",
               "                          sample->s5run_method_names());",
               "}",
               ""]
-        L += ["void client::add_function(const std::shared_ptr<s5run_function> &fn) {",
+        L += ["void context::add_function(const std::shared_ptr<s5run_function> &fn) {",
               "    m_impl->add_function(fn);",
               "}",
               ""]
-        L += ["value client::run(const std::string &script, const std::string &entry,",
-              "                          const std::vector<value> &args) {",
-              "    return m_impl->run(script, entry, args);",
+        L += ["void context::set_script(const std::string &script) {",
+              "    m_impl->set_script(script);",
               "}",
               "",
-              "std::shared_ptr<client> make_client() {",
-              "    return std::shared_ptr<client>(new client());",
+              "std::shared_ptr<run_result> context::_run(const std::string &entry,",
+              "                                      const std::vector<value> &args) {",
+              "    return m_impl->run(entry, args);",
+              "}",
+              "",
+              "std::shared_ptr<context> make_context() {",
+              "    return std::shared_ptr<context>(new context());",
               "}",
               "",
               f"}} // namespace {self.ns}",
@@ -772,7 +850,8 @@ enum {
 enum {
     M_EXEC_REQ = 0x01, M_EXEC_RESP = 0x02, M_CALLBACK_REQ = 0x03,
     M_CALLBACK_RESP = 0x04, M_REGISTER_FUNC = 0x05, M_REGISTER_OBJ = 0x06,
-    M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08
+    M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08,
+    M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A
 };
 
 class Writer {
@@ -930,20 +1009,20 @@ void write_int(Writer &w, int64_t v) {
 """
 
     # ------------------------------------------------------------------
-    # client::impl
+    # context::impl
     # ------------------------------------------------------------------
 
     def _impl_class(self) -> str:
         s = self.schema
         L = ["// ---------------------------------------------------------------------------",
-             "// client::impl",
+             "// context::impl",
              "// ---------------------------------------------------------------------------",
              "",
-             "class client::impl {",
+             "class context::impl {",
              "public:",
              "    typedef std::function<void(int32_t, Reader &)> handler_t;",
              "",
-             "    impl() : m_have_address(false), m_fd(-1), m_next_this_id(0) {",
+             "    impl() : m_fd(-1), m_next_this_id(0) {",
              "        _register_method_handlers();",
              "    }",
              "",
@@ -951,13 +1030,14 @@ void write_int(Writer &w, int64_t v) {
              "        _disconnect();",
              "    }",
              "",
-             "    void set_server_address(const std::string &address);",
+             "    void add_server(const std::shared_ptr<remote_server_info> &server);",
+             "    void set_script(const std::string &script);",
              "    void register_type(const std::string &name,",
              "                       const std::vector<std::string> &methods);"]
         L.append("    void add_object(const std::shared_ptr<s5run_object> &obj);")
         L.append("    void add_function(const std::shared_ptr<s5run_function> &fn);")
-        L += ["    value run(const std::string &script, const std::string &entry,",
-              "              const std::vector<value> &args);",
+        L += ["    std::shared_ptr<run_result> run(const std::string &entry,",
+              "                                 const std::vector<value> &args);",
               "",
               "private:",
               "    struct PendingType {",
@@ -985,16 +1065,19 @@ void write_int(Writer &w, int64_t v) {
               "    void _connect();",
               "    void _disconnect();",
               "    void _flush_pending();",
+              "    static bool _send_message_fd(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);",
+              "    static bool _read_message_fd(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);",
+              "    static bool _read_exact_fd(int fd, void *buf, size_t n);",
+              "    static bool _write_all_fd(int fd, const void *buf, size_t n);",
               "    bool _send_message(uint8_t msg_type, const std::vector<uint8_t> &body);",
               "    bool _read_message(uint8_t &msg_type, std::vector<uint8_t> &body);",
-              "    bool _read_exact(void *buf, size_t n);",
-              "    bool _write_all(const void *buf, size_t n);",
               "    void _expect_register_resp(const std::string &what);",
               "    void _dispatch_callback(std::vector<uint8_t> &body);",
+              "    static long _probe_server_load(const std::shared_ptr<remote_server_info> &server);",
+              "    static int _parse_error_line(const std::string &error);",
               "",
-              "    std::string m_host;",
-              "    uint16_t m_port;",
-              "    bool m_have_address;",
+              "    std::string m_script;",
+              "    std::vector<std::shared_ptr<remote_server_info>> m_servers;",
               "    int m_fd;",
               "    int32_t m_next_this_id;",
               "    std::vector<PendingType> m_pending_types;",
@@ -1012,27 +1095,42 @@ void write_int(Writer &w, int64_t v) {
         L += ["};",
               "",
               "// ---------------------------------------------------------------------------",
-              "// client::impl - address / connection",
+              "// context::impl - address / connection",
               "// ---------------------------------------------------------------------------",
               "",
-              "void client::impl::set_server_address(const std::string &address) {",
-              '    const std::string prefix = "s5run://";',
-              "    if (address.compare(0, prefix.size(), prefix) != 0)",
-              '        throw std::runtime_error("set_server_address: expected format s5run://host:port");',
-              "    std::string rest = address.substr(prefix.size());",
-              "    size_t colon = rest.rfind(':');",
-              "    if (colon == std::string::npos || colon == 0 || colon + 1 >= rest.size())",
-              '        throw std::runtime_error("set_server_address: expected format s5run://host:port");',
-              "    m_host = rest.substr(0, colon);",
-              "    m_port = (uint16_t)atoi(rest.substr(colon + 1).c_str());",
-              "    m_have_address = true;",
+              "void context::impl::set_script(const std::string &script) {",
+              "    m_script = script;",
               "}",
               "",
-              "void client::impl::_connect() {",
+              "void context::impl::add_server(const std::shared_ptr<remote_server_info> &server) {",
+              "    if (!server)",
+              '        throw std::runtime_error("add_server: server is null");',
+              "    m_servers.push_back(server);",
+              "}",
+              "",
+              "void context::impl::_connect() {",
               "    if (m_fd >= 0)",
               "        return;",
-              "    if (!m_have_address)",
-              '        throw std::runtime_error("s5run: server address is not set");',
+              "    if (m_servers.empty())",
+              '        throw std::runtime_error("s5run: no server added (add_server)");',
+              "    size_t best = 0;",
+              "    if (m_servers.size() > 1) {",
+              "        // Ask every server for its load and pick the least loaded one.",
+              "        long best_load = -1;",
+              "        for (size_t i = 0; i < m_servers.size(); ++i) {",
+              "            long load = _probe_server_load(m_servers[i]);",
+              "            if (load < 0)",
+              "                continue; // unreachable",
+              "            if (best_load < 0 || load < best_load) {",
+              "                best_load = load;",
+              "                best = i;",
+              "            }",
+              "        }",
+              "        if (best_load < 0)",
+              '            throw std::runtime_error("s5run: all servers are unreachable");',
+              "    }",
+              "    const std::string m_host = m_servers[best]->get_host();",
+              "    const uint16_t m_port = m_servers[best]->get_port();",
               "    int fd = ::socket(AF_INET, SOCK_STREAM, 0);",
               "    if (fd < 0)",
               '        throw std::runtime_error("s5run: socket failed");',
@@ -1055,17 +1153,17 @@ void write_int(Writer &w, int64_t v) {
               "    m_fd = fd;",
               "}",
               "",
-              "void client::impl::_disconnect() {",
+              "void context::impl::_disconnect() {",
               "    if (m_fd >= 0) {",
               "        ::close(m_fd);",
               "        m_fd = -1;",
               "    }",
               "}",
               "",
-              "bool client::impl::_read_exact(void *buf, size_t n) {",
+              "bool context::impl::_read_exact_fd(int fd, void *buf, size_t n) {",
               "    char *p = (char *)buf;",
               "    while (n > 0) {",
-              "        ssize_t got = ::recv(m_fd, p, n, 0);",
+              "        ssize_t got = ::recv(fd, p, n, 0);",
               "        if (got == 0)",
               "            return false;",
               "        if (got < 0) {",
@@ -1079,10 +1177,10 @@ void write_int(Writer &w, int64_t v) {
               "    return true;",
               "}",
               "",
-              "bool client::impl::_write_all(const void *buf, size_t n) {",
+              "bool context::impl::_write_all_fd(int fd, const void *buf, size_t n) {",
               "    const char *p = (const char *)buf;",
               "    while (n > 0) {",
-              "        ssize_t sent = ::send(m_fd, p, n, MSG_NOSIGNAL);",
+              "        ssize_t sent = ::send(fd, p, n, MSG_NOSIGNAL);",
               "        if (sent <= 0) {",
               "            if (sent < 0 && errno == EINTR)",
               "                continue;",
@@ -1094,32 +1192,40 @@ void write_int(Writer &w, int64_t v) {
               "    return true;",
               "}",
               "",
-              "bool client::impl::_send_message(uint8_t msg_type, const std::vector<uint8_t> &body) {",
+              "bool context::impl::_send_message_fd(int fd, uint8_t msg_type, const std::vector<uint8_t> &body) {",
               "    uint32_t len = (uint32_t)(1 + body.size());",
               "    uint32_t net_len = htonl(len);",
-              "    if (!_write_all(&net_len, sizeof(net_len)))",
+              "    if (!_write_all_fd(fd, &net_len, sizeof(net_len)))",
               "        return false;",
-              "    if (!_write_all(&msg_type, 1))",
+              "    if (!_write_all_fd(fd, &msg_type, 1))",
               "        return false;",
-              "    return body.empty() ? true : _write_all(&body[0], body.size());",
+              "    return body.empty() ? true : _write_all_fd(fd, &body[0], body.size());",
               "}",
               "",
-              "bool client::impl::_read_message(uint8_t &msg_type, std::vector<uint8_t> &body) {",
+              "bool context::impl::_send_message(uint8_t msg_type, const std::vector<uint8_t> &body) {",
+              "    return _send_message_fd(m_fd, msg_type, body);",
+              "}",
+              "",
+              "bool context::impl::_read_message_fd(int fd, uint8_t &msg_type, std::vector<uint8_t> &body) {",
               "    uint32_t net_len = 0;",
-              "    if (!_read_exact(&net_len, sizeof(net_len)))",
+              "    if (!_read_exact_fd(fd, &net_len, sizeof(net_len)))",
               "        return false;",
               "    uint32_t len = ntohl(net_len);",
               "    if (len == 0 || len > 64 * 1024 * 1024)",
               "        return false;",
               "    std::vector<uint8_t> frame(len);",
-              "    if (!_read_exact(&frame[0], len))",
+              "    if (!_read_exact_fd(fd, &frame[0], len))",
               "        return false;",
               "    msg_type = frame[0];",
               "    body.assign(frame.begin() + 1, frame.end());",
               "    return true;",
               "}",
               "",
-              "void client::impl::_expect_register_resp(const std::string &what) {",
+              "bool context::impl::_read_message(uint8_t &msg_type, std::vector<uint8_t> &body) {",
+              "    return _read_message_fd(m_fd, msg_type, body);",
+              "}",
+              "",
+              "void context::impl::_expect_register_resp(const std::string &what) {",
               "    uint8_t msg_type = 0;",
               "    std::vector<uint8_t> body;",
               "    if (!_read_message(msg_type, body) || msg_type != M_REGISTER_RESP)",
@@ -1129,7 +1235,7 @@ void write_int(Writer &w, int64_t v) {
               "        throw std::runtime_error(\"s5run: \" + what + \" error: \" + r.get_string());",
               "}",
               "",
-              "void client::impl::register_type(const std::string &name,",
+              "void context::impl::register_type(const std::string &name,",
               "                                 const std::vector<std::string> &methods) {",
               "    if (m_fd >= 0) {",
               "        Writer w;",
@@ -1148,7 +1254,7 @@ void write_int(Writer &w, int64_t v) {
               "}",
               ""]
         # add_object (generic, via instance registrars)
-        L += ["void client::impl::add_object(const std::shared_ptr<s5run_object> &obj) {",
+        L += ["void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {",
               "    const std::string class_name = obj->s5run_class_name();",
               "    std::map<std::string, registrar_t>::const_iterator rit =",
               "        m_instance_registrars.find(class_name);",
@@ -1178,7 +1284,7 @@ void write_int(Writer &w, int64_t v) {
               "}",
               ""]
         # add_function (generic, via function registrars)
-        L += ["void client::impl::add_function(const std::shared_ptr<s5run_function> &fn) {",
+        L += ["void context::impl::add_function(const std::shared_ptr<s5run_function> &fn) {",
               "    const std::string name = fn->s5run_function_name();",
               "    std::map<std::string, fn_registrar_t>::const_iterator rit =",
               "        m_function_registrars.find(name);",
@@ -1200,7 +1306,7 @@ void write_int(Writer &w, int64_t v) {
         # _cb_<Function> handlers
         for f in s.functions:
             nargs = len(f.arguments())
-            L += [f"void client::impl::_cb_{f.name()}(int32_t cb_id, Reader &r) {{",
+            L += [f"void context::impl::_cb_{f.name()}(int32_t cb_id, Reader &r) {{",
                   "    uint32_t n = r.get_u32();"]
             if not _has_convert(f):
                 L += [
@@ -1242,7 +1348,7 @@ void write_int(Writer &w, int64_t v) {
                          + ": expected %d argument(s)\");") % m_nargs,
                         "    }",
                     ]
-                L += [f"void client::impl::_cbm_{c.name()}_{m.name()}(int32_t cb_id, Reader &r) {{",
+                L += [f"void context::impl::_cbm_{c.name()}_{m.name()}(int32_t cb_id, Reader &r) {{",
                       "    uint32_t n = r.get_u32();"]
                 L += check
                 L += [
@@ -1272,14 +1378,14 @@ void write_int(Writer &w, int64_t v) {
                       ""]
         # _register_instance_<Class>
         for c in s.classes:
-            L += [f"int32_t client::impl::_register_instance_{c.name()}(const std::shared_ptr<{c.name()}> &obj) {{",
+            L += [f"int32_t context::impl::_register_instance_{c.name()}(const std::shared_ptr<{c.name()}> &obj) {{",
                   "    int32_t id = ++m_next_this_id;",
                   f"    m_instances_{c.name()}[id] = obj;",
                   "    return id;",
                   "}",
                   ""]
         # _register_method_handlers
-        L += ["void client::impl::_register_method_handlers() {"]
+        L += ["void context::impl::_register_method_handlers() {"]
         for c in s.classes:
             L += [
                 '    m_instance_registrars["' + c.name() + '"] = '
@@ -1305,7 +1411,7 @@ void write_int(Writer &w, int64_t v) {
         L += ["}",
               ""]
         # _flush_pending
-        L += ["void client::impl::_flush_pending() {",
+        L += ["void context::impl::_flush_pending() {",
               "    for (size_t i = 0; i < m_pending_types.size(); ++i) {",
               "        const PendingType &t = m_pending_types[i];",
               "        Writer w;",
@@ -1341,7 +1447,7 @@ void write_int(Writer &w, int64_t v) {
               "}",
               ""]
         # _dispatch_callback
-        L += ["void client::impl::_dispatch_callback(std::vector<uint8_t> &body) {",
+        L += ["void context::impl::_dispatch_callback(std::vector<uint8_t> &body) {",
               "    Reader r(&body[0], body.size());",
               "    int32_t cb_id = r.get_i32();",
               "    std::string method = r.get_string();",
@@ -1365,36 +1471,107 @@ void write_int(Writer &w, int64_t v) {
               "    }",
               "}",
               ""]
+        # _probe_server_load
+        L += ["""long context::impl::_probe_server_load(const std::shared_ptr<remote_server_info> &server) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(server->get_port());
+    if (::inet_pton(AF_INET, server->get_host().c_str(), &addr.sin_addr) != 1) {
+        ::close(fd);
+        return -1;
+    }
+    if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0) {
+        ::close(fd);
+        return -1;
+    }
+    timeval tv;
+    tv.tv_sec = 2;
+    tv.tv_usec = 0;
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    std::vector<uint8_t> empty_body;
+    if (!_send_message_fd(fd, M_STATS_REQ, empty_body)) {
+        ::close(fd);
+        return -1;
+    }
+    uint8_t msg_type = 0;
+    std::vector<uint8_t> body;
+    if (!_read_message_fd(fd, msg_type, body) || msg_type != M_STATS_RESP || body.size() < 16) {
+        ::close(fd);
+        return -1;
+    }
+    ::close(fd);
+    Reader r(&body[0], body.size());
+    r.get_u32(); // threads
+    uint32_t busy = r.get_u32();
+    uint32_t queued = r.get_u32();
+    r.get_u32(); // clients
+    return (long)busy + (long)queued;
+}
+"""]
+        # _parse_error_line
+        L += ["""int context::impl::_parse_error_line(const std::string &error) {
+    // Engine errors carry positions as ":LINE:COLUMN" (e.g. "at main (<script>:5:15)").
+    for (size_t pos = 0; pos < error.size(); ++pos) {
+        if (error[pos] != ':')
+            continue;
+        size_t p1 = pos + 1;
+        if (p1 >= error.size() || error[p1] < '0' || error[p1] > '9')
+            continue;
+        size_t p2 = p1;
+        while (p2 < error.size() && error[p2] >= '0' && error[p2] <= '9')
+            ++p2;
+        if (p2 + 1 < error.size() && error[p2] == ':' && error[p2 + 1] >= '0' && error[p2 + 1] <= '9')
+            return atoi(error.substr(p1, p2 - p1).c_str());
+        pos = p2;
+    }
+    return 0;
+}
+"""]
         # run
-        L += ["value client::impl::run(const std::string &script, const std::string &entry,",
-              "                            const std::vector<value> &args) {",
-              "    _connect();",
-              "    _flush_pending();",
-              "    Writer w;",
-              "    w.put_string(script);",
-              "    w.put_string(entry);",
-              "    w.put_u32((uint32_t)args.size());",
-              "    for (size_t i = 0; i < args.size(); ++i)",
-              "        encode_value(w, args[i]);",
-              "    if (!_send_message(M_EXEC_REQ, w.data()))",
-              '        throw std::runtime_error("s5run: send failed");',
-              "    while (true) {",
-              "        uint8_t msg_type = 0;",
-              "        std::vector<uint8_t> body;",
-              "        if (!_read_message(msg_type, body))",
-              '            throw std::runtime_error("s5run: connection closed");',
-              "        if (msg_type == M_CALLBACK_REQ) {",
-              "            _dispatch_callback(body);",
-              "            continue;",
+        L += ["std::shared_ptr<run_result> context::impl::run(const std::string &entry,",
+              "                                 const std::vector<value> &args) {",
+              "    std::shared_ptr<run_result> out(new run_result());",
+              "    clock_t started = clock();",
+              "    try {",
+              "        _connect();",
+              "        _flush_pending();",
+              "        Writer w;",
+              "        w.put_string(m_script);",
+              "        w.put_string(entry);",
+              "        w.put_u32((uint32_t)args.size());",
+              "        for (size_t i = 0; i < args.size(); ++i)",
+              "            encode_value(w, args[i]);",
+              "        if (!_send_message(M_EXEC_REQ, w.data()))",
+              '            throw std::runtime_error("s5run: send failed");',
+              "        while (true) {",
+              "            uint8_t msg_type = 0;",
+              "            std::vector<uint8_t> body;",
+              "            if (!_read_message(msg_type, body))",
+              '                throw std::runtime_error("s5run: connection closed");',
+              "            if (msg_type == M_CALLBACK_REQ) {",
+              "                _dispatch_callback(body);",
+              "                continue;",
+              "            }",
+              "            if (msg_type == M_EXEC_RESP) {",
+              "                Reader r(&body[0], body.size());",
+              "                if (r.get_u8() == 0)",
+              "                    throw std::runtime_error(r.get_string());",
+              "                out->m_value = decode_value(r);",
+              "                break;",
+              "            }",
+              '            throw std::runtime_error("s5run: unexpected message type");',
               "        }",
-              "        if (msg_type == M_EXEC_RESP) {",
-              "            Reader r(&body[0], body.size());",
-              "            if (r.get_u8() == 0)",
-              "                throw std::runtime_error(r.get_string());",
-              "            return decode_value(r);",
-              "        }",
-              '        throw std::runtime_error("s5run: unexpected message type");',
+              "    } catch (const std::exception &e) {",
+              "        out->m_has_error = true;",
+              "        out->m_error = e.what();",
+              "        out->m_error_line = _parse_error_line(out->m_error);",
               "    }",
+              "    out->m_duration_ms = (int64_t)((double)(clock() - started) * 1000.0 / CLOCKS_PER_SEC);",
+              "    return out;",
               "}"]
         return "\n".join(L)
 

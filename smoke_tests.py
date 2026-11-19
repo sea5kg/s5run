@@ -220,6 +220,17 @@ function main(path) {
     print("  PASS")
 
 
+def test_server_stats(host, port):
+    print("== py-client: server stats")
+    sock = w.connect(host, port)
+    threads, busy, queued, clients = w.request_stats(sock)
+    print("  threads=%d busy=%d queued=%d clients=%d" % (threads, busy, queued, clients))
+    assert threads >= 1, "threads must be positive"
+    assert clients >= 1, "our own connection must be counted"
+    sock.close()
+    print("  PASS")
+
+
 def test_callback_error(host, port):
     print("== py-client: callback error path")
     sock = w.connect(host, port)
@@ -272,6 +283,7 @@ def main():
     proc = start_server(port)
     try:
         test_happy_path("127.0.0.1", port)
+        test_server_stats("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
         test_cpp_gen_client(port)
     finally:
