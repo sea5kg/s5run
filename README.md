@@ -1,12 +1,19 @@
 # s5run
 
-Concept:
+Look's like: *Reversible RPC (bidirectional streaming/callback bridge) over a single connection.*
 
-Remote script execution on another server (JavaScript/Lua) in an isolated environment. Using a special context sharing protocol.
 
-For now, it's implemented via sockets, but I think it could also be done via websocket for the web version of the protocol.
+Remote script execution on another server (JavaScript). Using a special context sharing protocol.
 
-Regarding context, I'm thinking of using something like add_remote_context('Storage', "ip:port") for the server.
+Supports protocols:
+
+- s5run (socket, binary stream)
+- Maybe in future: websockets
+- Maybe in future: http (rest)
+
+Not implemented yet:
+
+- `add_context_provider`
 
 
 ## s5run-client.json
@@ -184,4 +191,27 @@ $ ./build_simple.sh
 $ ./s5run 7777 8
 script_service listening on :7777, threads=8
 client 127.0.0.1:53421 connected
+```
+
+## Possible integration models
+
+**`BackendModel`**
+
+As one of the services behind the backend without an exposed port
+
+```
+[ ............ ]
+[ s5run-server ] <--> [ s5run-cli, backend ] <--> [ client ]
+[ ............ ]
+```
+
+**`FrontendModel`**
+
+s5run publishes its port, and the client connects to it to execute its script.
+However, the context of the execution objects (Database, Storage) is provided by your Backends.
+
+```
+[ ............ ] <--> [ s5run-cli, client ]
+[ s5run-server ]
+[ ............ ] <--> [ s5run-provider, backend ]
 ```
