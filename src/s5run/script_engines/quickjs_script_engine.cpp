@@ -106,51 +106,130 @@ inline void free_handle(JsValue h) {
 // JSON <-> JSValue helpers
 // ---------------------------------------------------------------
 
-json::Value js_to_json(JSContext *ctx, JSValueConst v) {
+s5run::Value js_to_value(JSContext *ctx, JSValueConst v) {
   if (JS_IsNull(v) || JS_IsUndefined(v))
-    return json::Value();
+    return s5run::Value();
   if (JS_IsBool(v))
-    return json::Value((bool)JS_ToBool(ctx, v));
+    return s5run::Value((bool)JS_ToBool(ctx, v));
   if (JS_IsNumber(v)) {
     double d = 0;
     JS_ToFloat64(ctx, &d, v);
-    return json::Value(d);
+    if (d == (double)(int64_t)d)
+      return s5run::Value((int64_t)d);
+    return s5run::Value(d);
   }
   if (JS_IsString(v)) {
     const char *s = JS_ToCString(ctx, v);
     std::string out = s ? s : "";
     if (s)
       JS_FreeCString(ctx, s);
-    return json::Value(out);
+    return s5run::Value(out);
   }
-  // Objects/arrays: round-trip through JSON.stringify.
-  JSValue json_str = JS_JSONStringify(ctx, v, JS_UNDEFINED, JS_UNDEFINED);
-  if (JS_IsException(json_str)) {
-    JS_FreeValue(ctx, json_str);
-    return json::Value();
-  }
-  const char *cstr = JS_ToCString(ctx, json_str);
-  json::Value out;
-  if (cstr) {
-    try {
-      out = json::parse(cstr);
-    } catch (...) {
-      out = json::Value();
+  if (JS_IsArray(v)) {
+    JSValue len_val = JS_GetPropertyStr(ctx, v, "length");
+    uint32_t len = 0;
+    JS_ToUint32(ctx, &len, len_val);
+    JS_FreeValue(ctx, len_val);
+    s5run::ValueArray out;
+    out.reserve(len);
+    for (uint32_t i = 0; i < len; ++i) {
+      JSValue elem = JS_GetPropertyUint32(ctx, v, i);
+      out.push_back(js_to_value(ctx, elem));
+      JS_FreeValue(ctx, elem);
     }
-    JS_FreeCString(ctx, cstr);
+    return s5run::Value(out);
   }
-  JS_FreeValue(ctx, json_str);
-  return out;
+  if (JS_IsObject(v)) {
+    JSPropertyEnum *tab = nullptr;
+    uint32_t len = 0;
+    if (JS_GetOwnPropertyNames(ctx, &tab, &len, v, JS_GPN_STRING_MASK) < 0)
+      return s5run::Value();
+    if (len == 1) {
+      const char *name = JS_AtomToCString(ctx, tab[0].atom);
+      bool is_this_id = name && strcmp(name, "this_id") == 0;
+      JS_FreeCString(ctx, name);
+      if (is_this_id) {
+        JSValue id_val = JS_GetProperty(ctx, v, tab[0].atom);
+        if (JS_IsNumber(id_val)) {
+          double d = 0;
+          JS_ToFloat64(ctx, &d, id_val);
+          JS_FreeValue(ctx, id_val);
+          JS_FreePropertyEnum(ctx, tab, len);
+          return s5run::Value(s5run::ObjectRef((int)d, ""));
+        }
+        JS_FreeValue(ctx, id_val);
+      }
+    }
+    s5run::ValueObject out;
+    for (uint32_t i = 0; i < len; ++i) {
+      const char *name = JS_AtomToCString(ctx, tab[i].atom);
+      if (!name)
+        continue;
+      std::string key = name;
+      JS_FreeCString(ctx, name);
+      JSValue prop = JS_GetProperty(ctx, v, tab[i].atom);
+      if (!JS_IsFunction(ctx, prop))
+        out[key] = js_to_value(ctx, prop);
+      JS_FreeValue(ctx, prop);
+    }
+    JS_FreePropertyEnum(ctx, tab, len);
+    return s5run::Value(out);
+  }
+  return s5run::Value();
 }
 
-JSValue json_to_js(JSContext *ctx, const json::Value &v) {
-  std::string s = json::dump(v);
-  // JSON is a valid JS expression; wrap in parentheses so a leading
-  // '{' is not parsed as a block statement. Do not use JSON.parse:
-  // its argument would be a JS value, not a string (arrays/objects
-  // would break through ToString).
-  std::string code = "(" + s + ")";
-  return JS_Eval(ctx, code.data(), code.size(), "<json>", JS_EVAL_TYPE_GLOBAL);
+JSValue value_to_js(JSContext *ctx, const s5run::Value &v) {
+  switch (v.kind()) {
+  case s5run::Value::K_NULL:
+    return JS_NULL;
+  case s5run::Value::K_BOOL:
+    return JS_NewBool(ctx, v.as_bool());
+  case s5run::Value::K_INT:
+    return JS_NewInt64(ctx, v.as_int());
+  case s5run::Value::K_DOUBLE:
+    return JS_NewFloat64(ctx, v.as_double());
+  case s5run::Value::K_STRING:
+    return JS_NewStringLen(ctx, v.as_string().data(), v.as_string().size());
+  case s5run::Value::K_ARRAY: {
+    const s5run::ValueArray &a = v.as_array();
+    JSValue arr = JS_NewArray(ctx);
+    if (JS_IsException(arr))
+      return arr;
+    for (uint32_t i = 0; i < a.size(); ++i) {
+      JSValue elem = value_to_js(ctx, a[i]);
+      if (JS_IsException(elem)) {
+        JS_FreeValue(ctx, arr);
+        return elem;
+      }
+      JS_SetPropertyUint32(ctx, arr, i, elem); // consumes elem
+    }
+    return arr;
+  }
+  case s5run::Value::K_OBJECT: {
+    const s5run::ValueObject &o = v.as_object();
+    JSValue obj = JS_NewObject(ctx);
+    if (JS_IsException(obj))
+      return obj;
+    for (const auto &kv : o) {
+      JSValue elem = value_to_js(ctx, kv.second);
+      if (JS_IsException(elem)) {
+        JS_FreeValue(ctx, obj);
+        return elem;
+      }
+      JS_SetPropertyStr(ctx, obj, kv.first.c_str(), elem); // consumes elem
+    }
+    return obj;
+  }
+  case s5run::Value::K_REF: {
+    // Represent an ObjectRef as {"this_id": N} in JS.
+    JSValue obj = JS_NewObject(ctx);
+    if (JS_IsException(obj))
+      return obj;
+    JS_SetPropertyStr(ctx, obj, "this_id", JS_NewInt32(ctx, v.as_ref().this_id));
+    return obj;
+  }
+  }
+  return JS_UNDEFINED;
 }
 
 // ---------------------------------------------------------------
@@ -214,18 +293,14 @@ public:
     JS_FreeValue(ctx_.get(), global);
   }
 
-  JsValue make_object(JsContext ctx_handle, int64_t this_id, const json::Array &methods) override {
+  JsValue make_object(JsContext ctx_handle, int64_t this_id, const std::vector<std::string> &methods) override {
     JSContext *ctx = to_ctx(ctx_handle);
 
     JSValue obj = JS_NewObject(ctx);
     if (JS_IsException(obj))
       return nullptr;
 
-    for (const auto &m : methods) {
-      if (!m.is_str())
-        continue;
-      std::string name = m.as_str();
-
+    for (const auto &name : methods) {
       auto *mctx = new MethodCtx{this_id, name};
       method_ctxs_.push_back(mctx);
 
@@ -237,12 +312,13 @@ public:
     return to_handle(obj);
   }
 
-  JsValue make_value(JsContext ctx_handle, const json::Value &v) override {
+  JsValue make_value(JsContext ctx_handle, const s5run::Value &v) override {
     JSContext *ctx = to_ctx(ctx_handle);
-    return to_handle(json_to_js(ctx, v));
+    return to_handle(value_to_js(ctx, v));
   }
 
-  void register_global_object(const std::string &name, int64_t this_id, const json::Array &methods) override {
+  void register_global_object(const std::string &name, int64_t this_id,
+                              const std::vector<std::string> &methods) override {
     JsValue handle = make_object(ctx_.get(), this_id, methods);
     JSValue obj = from_handle(handle);
     free_handle(handle);
@@ -251,7 +327,8 @@ public:
     JS_FreeValue(ctx_.get(), global);
   }
 
-  ExecResult execute(const std::string &script, const std::string &entry, const json::Array &args) override {
+  ExecResult execute(const std::string &script, const std::string &entry,
+                     const std::vector<s5run::Value> &args) override {
     ExecResult res;
 
     JSValue eval_res = JS_Eval(ctx_.get(), script.data(), script.size(), "<script>", JS_EVAL_TYPE_GLOBAL);
@@ -271,23 +348,23 @@ public:
       return res;
     }
 
-    JSValue js_args = json_array_to_js(args);
-    if (JS_IsException(js_args)) {
-      JS_FreeValue(ctx_.get(), fn);
-      res.error = "args: " + take_exception();
-      return res;
-    }
-
     int argc = static_cast<int>(args.size());
     std::vector<JSValue> argv(argc);
-    for (int i = 0; i < argc; ++i)
-      argv[i] = JS_GetPropertyUint32(ctx_.get(), js_args, i);
+    for (int i = 0; i < argc; ++i) {
+      argv[i] = value_to_js(ctx_.get(), args[i]);
+      if (JS_IsException(argv[i])) {
+        for (int j = 0; j < i; ++j)
+          JS_FreeValue(ctx_.get(), argv[j]);
+        JS_FreeValue(ctx_.get(), fn);
+        res.error = "args: conversion failed";
+        return res;
+      }
+    }
 
     JSValue call_res = JS_Call(ctx_.get(), fn, JS_UNDEFINED, argc, argv.data());
 
     for (auto &v : argv)
       JS_FreeValue(ctx_.get(), v);
-    JS_FreeValue(ctx_.get(), js_args);
     JS_FreeValue(ctx_.get(), fn);
 
     if (JS_IsException(call_res)) {
@@ -295,37 +372,18 @@ public:
       return res;
     }
 
-    JSValue json_str = JS_JSONStringify(ctx_.get(), call_res, JS_UNDEFINED, JS_UNDEFINED);
-    JS_FreeValue(ctx_.get(), call_res);
-
-    if (JS_IsException(json_str)) {
-      res.error = "stringify: " + take_exception();
-      return res;
-    }
-    if (JS_IsUndefined(json_str)) {
-      res.ok = true;
-      res.value = json::Value();
-      return res;
-    }
-    const char *cstr = JS_ToCString(ctx_.get(), json_str);
-    if (!cstr) {
-      JS_FreeValue(ctx_.get(), json_str);
-      res.error = "stringify: cannot get string";
-      return res;
-    }
     try {
-      res.value = json::parse(cstr);
+      res.value = js_to_value(ctx_.get(), call_res);
       res.ok = true;
     } catch (const std::exception &e) {
-      res.error = std::string("json parse: ") + e.what();
+      res.error = std::string("result conversion: ") + e.what();
     }
-    JS_FreeCString(ctx_.get(), cstr);
-    JS_FreeValue(ctx_.get(), json_str);
+    JS_FreeValue(ctx_.get(), call_res);
     return res;
   }
 
   // Used by the trampolines.
-  json::Value dispatch_simple(const std::string &method, const json::Array &args) {
+  s5run::Value dispatch_simple(const std::string &method, const std::vector<s5run::Value> &args) {
     auto it = simple_callbacks_.find(method);
     if (it == simple_callbacks_.end())
       throw std::runtime_error("callback not registered: " + method);
@@ -398,14 +456,14 @@ private:
     if (!cctx)
       return JS_ThrowTypeError(ctx, "invalid callback context");
 
-    json::Array args;
+    std::vector<s5run::Value> args;
     args.reserve(argc);
     for (int i = 0; i < argc; ++i)
-      args.push_back(js_to_json(ctx, argv[i]));
+      args.push_back(js_to_value(ctx, argv[i]));
 
     try {
-      json::Value r = eng->dispatch_simple(cctx->method, args);
-      return json_to_js(ctx, r);
+      s5run::Value r = eng->dispatch_simple(cctx->method, args);
+      return value_to_js(ctx, r);
     } catch (const std::exception &e) {
       return JS_ThrowInternalError(ctx, "%s", e.what());
     }
@@ -422,10 +480,10 @@ private:
     if (!cctx)
       return JS_ThrowTypeError(ctx, "invalid callback context");
 
-    json::Array args;
+    std::vector<s5run::Value> args;
     args.reserve(argc);
     for (int i = 0; i < argc; ++i)
-      args.push_back(js_to_json(ctx, argv[i]));
+      args.push_back(js_to_value(ctx, argv[i]));
 
     auto *handler = eng->find_js_callback(cctx->method);
     if (!handler)
@@ -453,15 +511,15 @@ private:
     if (!mctx)
       return JS_ThrowTypeError(ctx, "invalid method context");
 
-    json::Array args;
+    std::vector<s5run::Value> args;
     args.reserve(1 + argc);
-    args.push_back(json::Value((double)mctx->this_id));
+    args.push_back(s5run::Value((int64_t)mctx->this_id));
     for (int i = 0; i < argc; ++i)
-      args.push_back(js_to_json(ctx, argv[i]));
+      args.push_back(js_to_value(ctx, argv[i]));
 
     try {
-      json::Value r = eng->dispatch_simple(mctx->method, args);
-      return json_to_js(ctx, r);
+      s5run::Value r = eng->dispatch_simple(mctx->method, args);
+      return value_to_js(ctx, r);
     } catch (const std::exception &e) {
       return JS_ThrowInternalError(ctx, "%s", e.what());
     }
@@ -470,20 +528,6 @@ private:
   // -----------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------
-  JSValue json_array_to_js(const json::Array &args) {
-    std::string arr = json::dump(json::Value(args));
-    JSValue global = JS_GetGlobalObject(ctx_.get());
-    JSValue json_obj = JS_GetPropertyStr(ctx_.get(), global, "JSON");
-    JSValue parse_fn = JS_GetPropertyStr(ctx_.get(), json_obj, "parse");
-    JSValue arg = JS_NewStringLen(ctx_.get(), arr.data(), arr.size());
-    JSValue res = JS_Call(ctx_.get(), parse_fn, json_obj, 1, &arg);
-    JS_FreeValue(ctx_.get(), arg);
-    JS_FreeValue(ctx_.get(), parse_fn);
-    JS_FreeValue(ctx_.get(), json_obj);
-    JS_FreeValue(ctx_.get(), global);
-    return res;
-  }
-
   std::string take_exception() {
     JSValue exc = JS_GetException(ctx_.get());
     const char *s = JS_ToCString(ctx_.get(), exc);

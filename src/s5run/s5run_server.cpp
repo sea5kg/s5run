@@ -36,7 +36,6 @@
 #include "internal/s5run_globals.h"
 
 #include "internal/s5run_thread_pool.h"
-#include "json_mini.h"
 #include "s5run_protocol.h"
 #include "s5run_server.h"
 #include "script_engine.h"
@@ -103,76 +102,6 @@ private:
   int32_t last_id_ = 0;
 };
 
-Value json_to_value(const json::Value &v) {
-  if (v.is_null())
-    return Value();
-  if (v.is_bool())
-    return Value(v.as_bool());
-  if (v.is_num()) {
-    double d = v.as_num();
-    if (d == (double)(int64_t)d)
-      return Value((int64_t)d);
-    return Value(d);
-  }
-  if (v.is_str())
-    return Value(v.as_str());
-  if (v.is_arr()) {
-    ValueArray out;
-    out.reserve(v.as_arr().size());
-    for (const auto &e : v.as_arr())
-      out.push_back(json_to_value(e));
-    return Value(out);
-  }
-  const auto &o = v.as_obj();
-  if (o.size() == 1 && o.count("this_id") && o.at("this_id").is_num())
-    return Value(ObjectRef((int)o.at("this_id").as_num(), ""));
-  ValueObject out;
-  for (const auto &kv : o)
-    out[kv.first] = json_to_value(kv.second);
-  return Value(out);
-}
-
-json::Value value_to_json(const Value &v) {
-  switch (v.kind()) {
-  case Value::K_NULL:
-    return json::Value();
-  case Value::K_BOOL:
-    return json::Value(v.as_bool());
-  case Value::K_INT:
-    return json::Value((double)v.as_int());
-  case Value::K_DOUBLE:
-    return json::Value(v.as_double());
-  case Value::K_STRING:
-    return json::Value(v.as_string());
-  case Value::K_ARRAY: {
-    json::Array out;
-    out.reserve(v.as_array().size());
-    for (const auto &e : v.as_array())
-      out.push_back(value_to_json(e));
-    return json::Value(std::move(out));
-  }
-  case Value::K_OBJECT: {
-    json::Object out;
-    for (const auto &kv : v.as_object())
-      out[kv.first] = value_to_json(kv.second);
-    return json::Value(std::move(out));
-  }
-  case Value::K_REF: {
-    json::Object out;
-    out["this_id"] = json::Value((double)v.as_ref().this_id);
-    return json::Value(std::move(out));
-  }
-  }
-  return json::Value();
-}
-
-std::vector<Value> json_args_to_values(const json::Array &args) {
-  std::vector<Value> out;
-  out.reserve(args.size());
-  for (const auto &a : args)
-    out.push_back(json_to_value(a));
-  return out;
-}
 
 } // namespace
 
@@ -183,14 +112,15 @@ public:
 
 private:
   int m_fd;
-  std::map<std::string, json::Array> m_object_types;
+  std::map<std::string, std::vector<std::string>> m_object_types;
   void handle_register_function(engine::IScriptEngine *, const std::vector<uint8_t> &body);
   void handle_register_object(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
   void handle_register_object_type(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
   void handle_exec(engine::IScriptEngine *, const std::vector<uint8_t> &body, int fd);
   void send_exec_error(int fd, std::string);
   void send_register_resp(int fd, bool, std::string);
-  void register_method_callbacks(engine::IScriptEngine *, ClientChannel &, const json::Array &methods);
+  void register_method_callbacks(engine::IScriptEngine *, ClientChannel &,
+                                const std::vector<std::string> &methods);
 };
 
 client_handler::client_handler(int fd)
@@ -254,16 +184,16 @@ void client_handler::handle_register_function(engine::IScriptEngine *eng, const 
   std::string name = r.get_string();
 
   eng->register_js_callback(
-    name, [this, eng, name](engine::JsContext ctx, const json::Array &jargs) -> engine::JsValue {
+    name, [this, eng, name](engine::JsContext ctx, const std::vector<Value> &jargs) -> engine::JsValue {
       ClientChannel channel(m_fd);
-      Value resp = channel.call(name, json_args_to_values(jargs));
+      Value resp = channel.call(name, jargs);
       if (resp.is_ref()) {
         auto it = m_object_types.find(resp.as_ref().type);
         if (it == m_object_types.end())
           throw std::runtime_error("unknown object type: " + resp.as_ref().type);
         return eng->make_object(ctx, resp.as_ref().this_id, it->second);
       }
-      return eng->make_value(ctx, value_to_json(resp));
+      return eng->make_value(ctx, resp);
     }
   );
 }
@@ -276,10 +206,10 @@ void client_handler::handle_register_object(
   int32_t this_id = r.get_i32();
   std::string type_name = r.get_string();
   uint32_t count = r.get_u32();
-  json::Array methods;
+  std::vector<std::string> methods;
   methods.reserve(count);
   for (uint32_t i = 0; i < count; ++i)
-    methods.push_back(json::Value(r.get_string()));
+    methods.push_back(r.get_string());
 
   register_method_callbacks(eng, channel, methods);
 
@@ -295,24 +225,21 @@ void client_handler::handle_register_object_type(
   wire::Reader r(body.data(), body.size());
   std::string name = r.get_string();
   uint32_t count = r.get_u32();
-  json::Array methods;
+  std::vector<std::string> methods;
   methods.reserve(count);
   for (uint32_t i = 0; i < count; ++i)
-    methods.push_back(json::Value(r.get_string()));
+    methods.push_back(r.get_string());
 
   m_object_types[name] = methods;
   register_method_callbacks(eng, channel, methods);
 }
 
 void client_handler::register_method_callbacks(
-  engine::IScriptEngine *eng, ClientChannel &channel, const json::Array &methods
+  engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<std::string> &methods
 ) {
-  for (const auto &m : methods) {
-    if (!m.is_str())
-      continue;
-    std::string method = m.as_str();
-    eng->register_callback(method, [&channel](const std::string &cb_method, const json::Array &args) {
-      return value_to_json(channel.call(cb_method, json_args_to_values(args)));
+  for (const auto &method : methods) {
+    eng->register_callback(method, [&channel](const std::string &cb_method, const std::vector<Value> &args) {
+      return channel.call(cb_method, args);
     });
   }
 }
@@ -322,12 +249,12 @@ void client_handler::handle_exec(engine::IScriptEngine *eng, const std::vector<u
   std::string script = r.get_string();
   std::string entry = r.get_string();
   uint32_t count = r.get_u32();
-  json::Array jargs;
-  jargs.reserve(count);
+  std::vector<Value> args;
+  args.reserve(count);
   for (uint32_t i = 0; i < count; ++i)
-    jargs.push_back(value_to_json(value_from_wire(r)));
+    args.push_back(value_from_wire(r));
 
-  engine::ExecResult result = eng->execute(script, entry, jargs);
+  engine::ExecResult result = eng->execute(script, entry, args);
   if (!result.ok) {
     send_exec_error(fd, result.error);
     return;
@@ -335,7 +262,7 @@ void client_handler::handle_exec(engine::IScriptEngine *eng, const std::vector<u
 
   wire::Writer w;
   w.put_u8(1);
-  value_to_wire(json_to_value(result.value), w);
+  value_to_wire(result.value, w);
   s5run::write_message(fd, protocol_msg_type::M_EXEC_RESP, w.data());
 }
 

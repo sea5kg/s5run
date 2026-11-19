@@ -39,8 +39,9 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
-#include "json_mini.h"
+#include "s5run_value.h"
 
 namespace engine {
 
@@ -52,23 +53,25 @@ using JsValue = void *;
 struct ExecResult {
   bool ok = false;
   std::string error;
-  json::Value value;
+  s5run::Value value;
 };
 
-// Simple callback: the engine converts JS args to JSON, calls the handler,
-// then converts the JSON result back to a JS value.
-using CallbackHandler = std::function<json::Value(const std::string &method, const json::Array &args)>;
+// Simple callback: the engine converts JS args to values, calls the
+// handler, then converts the result back to a JS value.
+using CallbackHandler = std::function<s5run::Value(
+    const std::string &method, const std::vector<s5run::Value> &args)>;
 
 // JS callback: the handler receives an opaque context and must return
 // an opaque value, typically produced by make_object(). The engine
 // takes ownership of the returned handle and releases it after use.
-using JsCallbackHandler = std::function<JsValue(JsContext ctx, const json::Array &args)>;
+using JsCallbackHandler = std::function<JsValue(
+    JsContext ctx, const std::vector<s5run::Value> &args)>;
 
 class IScriptEngine {
 public:
   virtual ~IScriptEngine() = default;
 
-  // Plain host function returning JSON-convertible data.
+  // Plain host function returning a value.
   virtual void register_callback(const std::string &method, CallbackHandler handler) = 0;
 
   // Host function that builds a JS object manually.
@@ -77,16 +80,17 @@ public:
   // Build a JS object with method stubs. Each method, when called from
   // JS, is dispatched as a simple callback with signature
   //   method(this_id, ...js_args)
-  // and must return a JSON-convertible value.
-  virtual JsValue make_object(JsContext ctx, int64_t this_id, const json::Array &methods) = 0;
+  virtual JsValue make_object(JsContext ctx, int64_t this_id, const std::vector<std::string> &methods) = 0;
 
   // Install a JS object with method stubs as a global property, so
   // scripts call it as `name.method(...)`.
-  virtual void register_global_object(const std::string &name, int64_t this_id, const json::Array &methods) = 0;
+  virtual void register_global_object(const std::string &name, int64_t this_id,
+                                      const std::vector<std::string> &methods) = 0;
 
-  virtual JsValue make_value(JsContext ctx, const json::Value &v) = 0;
+  virtual JsValue make_value(JsContext ctx, const s5run::Value &v) = 0;
 
-  virtual ExecResult execute(const std::string &script, const std::string &entry, const json::Array &args) = 0;
+  virtual ExecResult execute(const std::string &script, const std::string &entry,
+                             const std::vector<s5run::Value> &args) = 0;
 };
 
 std::shared_ptr<IScriptEngine> make_quickjs_engine();
