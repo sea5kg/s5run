@@ -137,7 +137,8 @@ def _free_port():
 def start_server(port):
     print("-- start server on :%d" % port)
     log = open(os.path.join(ROOT, "tmp", "smoke-server.log"), "w")
-    proc = subprocess.Popen([SERVER_BIN, str(port), "2"], cwd=ROOT,
+    proc = subprocess.Popen([SERVER_BIN, "--listen", "127.0.0.1:" + str(port),
+                             "--threads", "2"], cwd=ROOT,
                             stdout=log, stderr=subprocess.STDOUT)
     deadline = time.time() + 10
     while time.time() < deadline:

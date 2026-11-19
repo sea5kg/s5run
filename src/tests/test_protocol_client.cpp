@@ -224,8 +224,9 @@ pid_t spawn_server(const std::string &server_bin, uint16_t port) {
       ::dup2(devnull, STDOUT_FILENO);
       ::dup2(devnull, STDERR_FILENO);
     }
-    std::string port_str = std::to_string(port);
-    ::execl(server_bin.c_str(), server_bin.c_str(), port_str.c_str(), "2", (char *)NULL);
+    std::string listen_addr = "127.0.0.1:" + std::to_string(port);
+    ::execl(server_bin.c_str(), server_bin.c_str(),
+            "--listen", listen_addr.c_str(), "--threads", "2", (char *)NULL);
     ::_exit(127);
   }
   return pid;

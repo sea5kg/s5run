@@ -327,7 +327,20 @@ void server::on_signal(int) {
     ::shutdown(g_listen_fd, SHUT_RDWR);
 }
 
-int server::run(uint16_t listen_port, int threads) {
+int server::run(const std::string &listen_address, int threads) {
+
+  std::string host = "0.0.0.0";
+  std::string port_str = listen_address;
+  size_t colon = listen_address.rfind(':');
+  if (colon != std::string::npos) {
+    host = listen_address.substr(0, colon);
+    port_str = listen_address.substr(colon + 1);
+  }
+  uint16_t listen_port = (uint16_t)atoi(port_str.c_str());
+  if (listen_port == 0) {
+    std::fprintf(stderr, "invalid listen address: %s\n", listen_address.c_str());
+    return 1;
+  }
 
   std::signal(SIGPIPE, SIG_IGN);
   std::signal(SIGINT, &server::on_signal);
@@ -344,8 +357,11 @@ int server::run(uint16_t listen_port, int threads) {
 
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(listen_port);
+  if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+    std::fprintf(stderr, "invalid listen host: %s\n", host.c_str());
+    return 1;
+  }
 
   if (::bind(g_listen_fd, (sockaddr *)&addr, sizeof(addr)) < 0) {
     perror("bind");
@@ -356,7 +372,7 @@ int server::run(uint16_t listen_port, int threads) {
     return 1;
   }
 
-  std::printf("s5run-server listening on :%u, threads=%zu\n", listen_port, threads);
+  std::printf("s5run listening on %s:%u, threads=%d\n", host.c_str(), listen_port, threads);
 
   thread_pool pool(threads);
 
