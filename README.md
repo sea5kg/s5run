@@ -213,3 +213,13 @@ However, the context of the execution objects (Database, Storage) is provided by
 [ s5run-server ]
 [ ............ ] <--> [ s5run-provider, backend ]
 ```
+
+## Authors and credits
+
+- **Evgenii Sopov (sea5kg)** — author, maintainer — [github.com/sea5kg](https://github.com/sea5kg)
+- **zai (AI assistant, GLM)** — pair programming: binary protocol implementation, client code generator, smoke tests
+
+### Third-party
+
+- [QuickJS (quickjs-ng)](https://github.com/quickjs-ng/quickjs) — JavaScript engine
+- [Lua](https://www.lua.org/) — scripting engine (integration in progress)

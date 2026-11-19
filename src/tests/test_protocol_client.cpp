@@ -149,8 +149,9 @@ function main(path) {
   const s5run::ValueObject &obj = value.as_object();
   if (obj.at("size").as_int() != 1024 || obj.at("time").as_int() != 1737000000)
     throw std::runtime_error("unexpected result");
-  std::printf("  exec result: {size: %lld, time: %lld}\n",
-              (long long)obj.at("size").as_int(), (long long)obj.at("time").as_int());
+  std::printf(
+    "  exec result: {size: %lld, time: %lld}\n", (long long)obj.at("size").as_int(), (long long)obj.at("time").as_int()
+  );
   ::close(fd);
   std::printf("  PASS\n");
 }
@@ -225,8 +226,7 @@ pid_t spawn_server(const std::string &server_bin, uint16_t port) {
       ::dup2(devnull, STDERR_FILENO);
     }
     std::string listen_addr = "127.0.0.1:" + std::to_string(port);
-    ::execl(server_bin.c_str(), server_bin.c_str(),
-            "--listen", listen_addr.c_str(), "--threads", "2", (char *)NULL);
+    ::execl(server_bin.c_str(), server_bin.c_str(), "--listen", listen_addr.c_str(), "--threads", "2", (char *)NULL);
     ::_exit(127);
   }
   return pid;

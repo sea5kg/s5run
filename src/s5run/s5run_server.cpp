@@ -1,11 +1,46 @@
+/*
+ * MIT License
+ *
+ *           ░░░░░░░
+ *          ░██▓▓▓▓▒
+ * ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
+ * ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
+ *  ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+ * ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
+ *  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
+ *
+ * Copyright (c) 2026 Evgenii Sopov
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * Original repository: https://github.com/sea5kg/s5run
+ *
+ */
+
 #include "internal/s5run_globals.h"
 
+#include "internal/s5run_thread_pool.h"
 #include "json_mini.h"
 #include "s5run_protocol.h"
+#include "s5run_server.h"
 #include "script_engine.h"
 #include "value_wire.h"
-#include "internal/s5run_thread_pool.h"
-#include "s5run_server.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -26,7 +61,6 @@ namespace s5run {
 std::atomic<bool> g_stop{false};
 
 static int g_listen_fd = -1;
-
 
 namespace {
 
@@ -142,11 +176,11 @@ std::vector<Value> json_args_to_values(const json::Array &args) {
 
 } // namespace
 
-
 class client_handler : public thread_pool_task {
 public:
   client_handler(int fd);
   virtual void handle() override;
+
 private:
   int m_fd;
   std::map<std::string, json::Array> m_object_types;
@@ -159,9 +193,10 @@ private:
   void register_method_callbacks(engine::IScriptEngine *, ClientChannel &, const json::Array &methods);
 };
 
-client_handler::client_handler(int fd) : m_fd(fd) {
+client_handler::client_handler(int fd)
+    : m_fd(fd) {
 
-};
+      };
 
 void client_handler::handle() {
   s5run::set_recv_timeout(m_fd, 10'000);
@@ -219,20 +254,23 @@ void client_handler::handle_register_function(engine::IScriptEngine *eng, const 
   std::string name = r.get_string();
 
   eng->register_js_callback(
-      name, [this, eng, name](engine::JsContext ctx, const json::Array &jargs) -> engine::JsValue {
-        ClientChannel channel(m_fd);
-        Value resp = channel.call(name, json_args_to_values(jargs));
-        if (resp.is_ref()) {
-          auto it = m_object_types.find(resp.as_ref().type);
-          if (it == m_object_types.end())
-            throw std::runtime_error("unknown object type: " + resp.as_ref().type);
-          return eng->make_object(ctx, resp.as_ref().this_id, it->second);
-        }
-        return eng->make_value(ctx, value_to_json(resp));
-      });
+    name, [this, eng, name](engine::JsContext ctx, const json::Array &jargs) -> engine::JsValue {
+      ClientChannel channel(m_fd);
+      Value resp = channel.call(name, json_args_to_values(jargs));
+      if (resp.is_ref()) {
+        auto it = m_object_types.find(resp.as_ref().type);
+        if (it == m_object_types.end())
+          throw std::runtime_error("unknown object type: " + resp.as_ref().type);
+        return eng->make_object(ctx, resp.as_ref().this_id, it->second);
+      }
+      return eng->make_value(ctx, value_to_json(resp));
+    }
+  );
 }
 
-void client_handler::handle_register_object(engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body) {
+void client_handler::handle_register_object(
+  engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body
+) {
   wire::Reader r(body.data(), body.size());
   std::string name = r.get_string();
   int32_t this_id = r.get_i32();
@@ -251,7 +289,9 @@ void client_handler::handle_register_object(engine::IScriptEngine *eng, ClientCh
   eng->register_global_object(name, this_id, methods);
 }
 
-void client_handler::handle_register_object_type(engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body) {
+void client_handler::handle_register_object_type(
+  engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body
+) {
   wire::Reader r(body.data(), body.size());
   std::string name = r.get_string();
   uint32_t count = r.get_u32();
@@ -264,15 +304,16 @@ void client_handler::handle_register_object_type(engine::IScriptEngine *eng, Cli
   register_method_callbacks(eng, channel, methods);
 }
 
-void client_handler::register_method_callbacks(engine::IScriptEngine *eng, ClientChannel &channel, const json::Array &methods) {
+void client_handler::register_method_callbacks(
+  engine::IScriptEngine *eng, ClientChannel &channel, const json::Array &methods
+) {
   for (const auto &m : methods) {
     if (!m.is_str())
       continue;
     std::string method = m.as_str();
-    eng->register_callback(
-        method, [&channel](const std::string &cb_method, const json::Array &args) {
-          return value_to_json(channel.call(cb_method, json_args_to_values(args)));
-        });
+    eng->register_callback(method, [&channel](const std::string &cb_method, const json::Array &args) {
+      return value_to_json(channel.call(cb_method, json_args_to_values(args)));
+    });
   }
 }
 
@@ -312,9 +353,7 @@ void client_handler::send_register_resp(int fd, bool ok, std::string error) {
   s5run::write_message(fd, protocol_msg_type::M_REGISTER_RESP, w.data());
 }
 
-
 server::server() {
-
 }
 
 // static
