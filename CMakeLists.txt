@@ -42,6 +42,11 @@ set(EXECUTABLE_OUTPUT_PATH ${s5run_SOURCE_DIR})
 
 find_package(Threads REQUIRED)
 
+# include header dirs
+list (APPEND WSJCPP_INCLUDE_DIRS "src")
+list (APPEND WSJCPP_INCLUDE_DIRS "src/s5run")
+list (APPEND WSJCPP_INCLUDE_DIRS "src/s5run/include")
+
 # # Lua-engine
 # file(GLOB LUA_SRC CONFIGURE_DEPENDS src/third_party/lua/*.c)
 # if(NOT LUA_SRC)
@@ -79,6 +84,16 @@ set_target_properties(quickjs_static PROPERTIES
   C_STANDARD 11
 )
 
+add_subdirectory(src/third_party/sqlite3)
+# https://www.sqlite.org/threadsafe.html
+# target_compile_definitions(sqlite3-static
+#   PRIVATE
+#     SQLITE_THREADSAFE=0
+# )
+list (APPEND WSJCPP_LIBRARIES sqlite3-static)
+list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/src/third_party/sqlite3/src")
+
+
 # server
 add_executable(s5run
     src/main.cpp
@@ -93,8 +108,7 @@ add_executable(s5run
 target_include_directories(
   s5run
   PRIVATE
-  src/s5run
-  src/s5run/include
+  ${WSJCPP_INCLUDE_DIRS}
 )
 
 target_link_libraries(
@@ -103,6 +117,8 @@ target_link_libraries(
   # lua_static
   quickjs_static
   Threads::Threads
+  -lssl -lcrypto
+  ${WSJCPP_LIBRARIES}
 )
 
 # enable testing functionality

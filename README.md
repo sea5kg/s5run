@@ -223,3 +223,4 @@ However, the context of the execution objects (Database, Storage) is provided by
 
 - [QuickJS (quickjs-ng)](https://github.com/quickjs-ng/quickjs) — JavaScript engine
 - [Lua](https://www.lua.org/) — scripting engine (integration in progress)
+- [SQLITE](https://www.sqlite.org/download.html) (v3.53.1) - SQLite is in the Public Domain
