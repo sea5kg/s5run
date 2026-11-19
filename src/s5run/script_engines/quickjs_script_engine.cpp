@@ -206,6 +206,16 @@ public:
     return to_handle(json_to_js(ctx, v));
   }
 
+  void register_global_object(const std::string &name, int64_t this_id,
+                              const json::Array &methods) override {
+    JsValue handle = make_object(ctx_.get(), this_id, methods);
+    JSValue obj = from_handle(handle);
+    free_handle(handle);
+    JSValue global = JS_GetGlobalObject(ctx_.get());
+    JS_SetPropertyStr(ctx_.get(), global, name.c_str(), obj);
+    JS_FreeValue(ctx_.get(), global);
+  }
+
   ExecResult execute(const std::string &script, const std::string &entry, const json::Array &args) override {
     ExecResult res;
 

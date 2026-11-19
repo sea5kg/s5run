@@ -41,6 +41,11 @@ def _is_void(fm) -> bool:
     return fm.return_type() == "void"
 
 
+def _has_convert(fm) -> bool:
+    args = fm.arguments()
+    return len(args) == 1 and bool(args[0].convert_from())
+
+
 class _TypeUsage:
     """Tracks which codec helpers are used by signatures."""
 
@@ -82,7 +87,8 @@ class _TypeUsage:
 
     def add_all(self, fm):
         for a in fm.arguments():
-            self.need_read(a.type())
+            if not a.convert_from():
+                self.need_read(a.type())
         if not _is_void(fm):
             self.need_write(fm.return_type(), allow_ref=True)
 
@@ -160,6 +166,16 @@ class _Cpp11Generator:
 
     def _decode_args(self, fm, prefix="a_") -> list:
         L = []
+        if _has_convert(fm):
+            a = fm.arguments()[0]
+            cpp_t = type_to_cpp(a.type_ref())
+            L += [
+                f"        {cpp_t} {prefix}{a.name()};",
+                f"        {prefix}{a.name()}.reserve(n);",
+                "        for (uint32_t i = 0; i < n; ++i)",
+                f"            {prefix}{a.name()}.push_back(_value_to_string(decode_value(r)));",
+            ]
+            return L
         for a in fm.arguments():
             cpp_t = type_to_cpp(a.type_ref())
             L.append(f"        {cpp_t} {prefix}{a.name()} = {self._read_expr(a.type_ref())};")
@@ -186,10 +202,14 @@ class _Cpp11Generator:
              "std::shared_ptr<client> make_client();",
              "",
              self._value_class(),
+             "",
+             self._root_class(),
              ""]
         for c in s.classes:
             L.append(self._base_class(c))
             L.append("")
+        L.append(self._function_root_class())
+        L.append("")
         for f in s.functions:
             L.append(self._global_function_class(f))
             L.append("")
@@ -246,9 +266,36 @@ private:
     std::map<std::string, value> m_o;
 };"""
 
+    def _function_root_class(self) -> str:
+        return """// Common root of all generated global functions: lets the client
+// register implementations without knowing their concrete types.
+class s5run_function {
+public:
+    virtual ~s5run_function() {}
+    virtual std::string s5run_function_name() const = 0;
+};"""
+
+    def _root_class(self) -> str:
+        return """// Common root of all generated classes: lets the client work with
+// objects without knowing their concrete types.
+class s5run_object {
+public:
+    virtual ~s5run_object() {}
+    virtual std::string s5run_class_name() const = 0;
+    virtual std::vector<std::string> s5run_method_names() const = 0;
+};"""
+
     def _base_class(self, c) -> str:
-        L = [f"class {c.name()} {{",
+        L = [f"class {c.name()} : public s5run_object {{",
              "public:",
+             '    std::string s5run_class_name() const override { return "' + c.name() + '"; }',
+             "    std::vector<std::string> s5run_method_names() const override {",
+             "        std::vector<std::string> out;"]
+        for m in c.methods():
+            L.append('        out.push_back("' + m.name() + '");')
+        L += [
+             "        return out;",
+             "    }",
              f"    virtual ~{c.name()}() {{}}"]
         for m in c.methods():
             ret = "void" if _is_void(m) else type_to_cpp(m.return_ref())
@@ -261,8 +308,9 @@ private:
         ret = "void" if _is_void(f) else type_to_cpp(f.return_ref())
         args = ", ".join(f"{_param_type(a.type_ref())} {a.name()}" for a in f.arguments())
         return "\n".join([
-            f"class GlobalFunction_{f.name()} {{",
+            f"class GlobalFunction_{f.name()} : public s5run_function {{",
             "public:",
+            '    std::string s5run_function_name() const override { return "' + f.name() + '"; }',
             f"    virtual ~GlobalFunction_{f.name()}() {{}}",
             f"    virtual {ret} execute({args}) = 0;",
             "};",
@@ -278,41 +326,35 @@ private:
              "    // Address format: s5run://host:port",
              "    void set_server_address(const std::string &address);",
              "",
+             "    // Registers a remote context provider: the listed context",
+             "    // names (global objects / classes) will be supplied by the",
+             "    // s5run server at the given address. Stub, not implemented yet.",
+             "    void add_context_provider(const std::string &address,",
+             "                              const std::string &api_key,",
+             "                              const std::vector<std::string> &contexts);",
+             "",
              "    // Registers the object type on the server (class name + methods).",
-             "    // T must inherit from one of the generated base classes.",
-             "    template <typename T>",
-             "    void registry_class() {",
-             "        _registry_class_impl(static_cast<T *>(0));",
-             "    }",
+             "    // Pass any instance of a generated base class; only its type",
+             "    // information is used, the instance itself is not stored.",
+             "    void add_class(const std::shared_ptr<s5run_object> &sample);",
+             "",
+             "    // Registers a singleton object, visible in scripts as",
+             "    // `name.method(...)`. The raw pointer overload takes ownership.",
+             "    void add_object(s5run_object *obj);",
+             "    void add_object(const std::shared_ptr<s5run_object> &obj);",
              "",
              "    // Registers a global function implementation.",
-             "    template <typename T>",
-             "    void registry_global_function() {",
-             "        _registry_global_function_impl(new T());",
-             "    }",
+             "    void add_function(const std::shared_ptr<s5run_function> &fn);",
              "",
-             "    // Registers a singleton object, visible in scripts as `name()`.",
-             "    // The raw pointer overload takes ownership."]
-        for c in s.classes:
-            L.append(f"    void registry_global_object({c.name()} *obj);")
-        L.append("")
-        for c in s.classes:
-            L.append(f"    void registry_global_object(std::shared_ptr<{c.name()}> obj);")
-        L += ["",
-              "    // Runs the script; serves callbacks while it executes.",
-              "    // Throws std::runtime_error on failure.",
-              "    value run(const std::string &script, const std::string &entry,",
-              "              const std::vector<value> &args = std::vector<value>());",
-              "",
-              "private:",
-              "    client(const client &);",
-              "    client &operator=(const client &);",
-              ""]
-        for c in s.classes:
-            L.append(f"    void _registry_class_impl({c.name()} *);")
-        L.append("")
-        for f in s.functions:
-            L.append(f"    void _registry_global_function_impl(GlobalFunction_{f.name()} *);")
+             "    // Runs the script; serves callbacks while it executes.",
+             "    // Throws std::runtime_error on failure.",
+             "    value run(const std::string &script, const std::string &entry,",
+             "              const std::vector<value> &args = std::vector<value>());",
+             "",
+             "private:",
+             "    client(const client &);",
+             "    client &operator=(const client &);",
+             ""]
         L += ["",
               "    class impl;",
               "    impl *m_impl;",
@@ -355,8 +397,24 @@ private:
         for type_str in self.usage.array_writes:
             L.append(self._array_write(type_str))
         L += [self._value_codec_text(),
-              "",
-              "} // namespace",
+              ""]
+        if any(_has_convert(f) for f in self.schema.functions) or \
+           any(_has_convert(m) for c in self.schema.classes for m in c.methods()):
+            L += [
+                "std::string _value_to_string(const value &v) {",
+                "    switch (v.get_kind()) {",
+                "    case value::K_NULL: return \"null\";",
+                "    case value::K_BOOL: return v.as_bool() ? \"true\" : \"false\";",
+                "    case value::K_INT: return std::to_string(v.as_int());",
+                "    case value::K_DOUBLE: return std::to_string(v.as_double());",
+                "    case value::K_STRING: return v.as_string();",
+                "    default:",
+                "        throw std::runtime_error(\"wire: expected a scalar argument\");",
+                "    }",
+                "}",
+                "",
+            ]
+        L += ["} // namespace",
               "",
               self._impl_class(),
               "",
@@ -374,28 +432,36 @@ private:
               "void client::set_server_address(const std::string &address) {",
               "    m_impl->set_server_address(address);",
               "}",
+              "",
+              "void client::add_context_provider(const std::string &address,",
+              "                                  const std::string &api_key,",
+              "                                  const std::vector<std::string> &contexts) {",
+              "    (void)api_key;",
+              '    const std::string prefix = "s5run://";',
+              "    if (address.compare(0, prefix.size(), prefix) != 0)",
+              '        throw std::runtime_error("add_context_provider: expected format s5run://host:port");',
+              "    if (contexts.empty())",
+              '        throw std::runtime_error("add_context_provider: contexts list is empty");',
+              '    throw std::runtime_error("add_context_provider: not implemented yet");',
+              "}",
               ""]
-        for c in self.schema.classes:
-            L += [f"void client::registry_global_object({c.name()} *obj) {{",
-                  f"    m_impl->registry_global_object_{c.name()}(std::shared_ptr<{c.name()}>(obj));",
-                  "}",
-                  "",
-                  f"void client::registry_global_object(std::shared_ptr<{c.name()}> obj) {{",
-                  f"    m_impl->registry_global_object_{c.name()}(obj);",
-                  "}",
-                  ""]
-        for c in self.schema.classes:
-            methods = ", ".join(f'"{m.name()}"' for m in c.methods())
-            L += [f"void client::_registry_class_impl({c.name()} *) {{",
-                  f'    m_impl->register_type("{c.name()}", {{{methods}}});',
-                  "}",
-                  ""]
-        for f in self.schema.functions:
-            L += [f"void client::_registry_global_function_impl(GlobalFunction_{f.name()} *fn) {{",
-                  f"    m_impl->register_global_function_{f.name()}(",
-                  f"        std::shared_ptr<GlobalFunction_{f.name()}>(fn));",
-                  "}",
-                  ""]
+        L += ["void client::add_object(s5run_object *obj) {",
+              "    m_impl->add_object(std::shared_ptr<s5run_object>(obj));",
+              "}",
+              "",
+              "void client::add_object(const std::shared_ptr<s5run_object> &obj) {",
+              "    m_impl->add_object(obj);",
+              "}",
+              "",
+              "void client::add_class(const std::shared_ptr<s5run_object> &sample) {",
+              "    m_impl->register_type(sample->s5run_class_name(),",
+              "                          sample->s5run_method_names());",
+              "}",
+              ""]
+        L += ["void client::add_function(const std::shared_ptr<s5run_function> &fn) {",
+              "    m_impl->add_function(fn);",
+              "}",
+              ""]
         L += ["value client::run(const std::string &script, const std::string &entry,",
               "                          const std::vector<value> &args) {",
               "    return m_impl->run(script, entry, args);",
@@ -776,11 +842,8 @@ void write_int(Writer &w, int64_t v) {
              "    void set_server_address(const std::string &address);",
              "    void register_type(const std::string &name,",
              "                       const std::vector<std::string> &methods);"]
-        for c in s.classes:
-            L.append(f"    void registry_global_object_{c.name()}(std::shared_ptr<{c.name()}> obj);")
-        for f in s.functions:
-            L.append(f"    void register_global_function_{f.name()}("
-                     f"std::shared_ptr<GlobalFunction_{f.name()}> fn);")
+        L.append("    void add_object(const std::shared_ptr<s5run_object> &obj);")
+        L.append("    void add_function(const std::shared_ptr<s5run_function> &fn);")
         L += ["    value run(const std::string &script, const std::string &entry,",
               "              const std::vector<value> &args);",
               "",
@@ -825,7 +888,11 @@ void write_int(Writer &w, int64_t v) {
               "    std::vector<PendingType> m_pending_types;",
               "    std::vector<PendingObject> m_pending_objects;",
               "    std::vector<PendingFunction> m_pending_functions;",
-              "    std::map<std::string, handler_t> m_handlers;"]
+              "    std::map<std::string, handler_t> m_handlers;",
+              "    typedef std::function<void(int32_t, const std::shared_ptr<s5run_object> &)> registrar_t;",
+              "    std::map<std::string, registrar_t> m_instance_registrars;",
+              "    typedef std::function<void(const std::shared_ptr<s5run_function> &)> fn_registrar_t;",
+              "    std::map<std::string, fn_registrar_t> m_function_registrars;"]
         for f in s.functions:
             L.append(f"    std::shared_ptr<GlobalFunction_{f.name()}> m_fn_{f.name()};")
         for c in s.classes:
@@ -968,67 +1035,67 @@ void write_int(Writer &w, int64_t v) {
               "    m_pending_types.push_back(t);",
               "}",
               ""]
-        # registry_global_object_<Class>
-        for c in s.classes:
-            methods_list = [f'"{m.name()}"' for m in c.methods()]
-            if methods_list:
-                methods_arr = ", ".join(methods_list)
-            else:
-                methods_arr = "0"
-            count = len(c.methods())
-            L += [f"void client::impl::registry_global_object_{c.name()}(std::shared_ptr<{c.name()}> obj) {{",
-                  "    static const char *k_methods[] = {%s};" % methods_arr,
-                  "    static const size_t k_methods_count = %d;" % count,
-                  "    int32_t id = ++m_next_this_id;",
-                  f"    m_instances_{c.name()}[id] = obj;",
-                  "    if (m_fd >= 0) {",
-                  "        Writer w;",
-                  f'        w.put_string("{c.name()}");',
-                  "        w.put_i32(id);",
-                  f'        w.put_string("{c.name()}");',
-                  "        w.put_u32((uint32_t)k_methods_count);",
-                  "        for (size_t i = 0; i < k_methods_count; ++i)",
-                  "            w.put_string(k_methods[i]);",
-                  "        _send_message(M_REGISTER_OBJ, w.data());",
-                  f'        _expect_register_resp("register_object({c.name()})");',
-                  "        return;",
-                  "    }",
-                  "    PendingObject o;",
-                  f'    o.name = "{c.name()}";',
-                  "    o.this_id = id;",
-                  f'    o.type = "{c.name()}";',
-                  "    o.methods.assign(k_methods, k_methods + k_methods_count);",
-                  "    m_pending_objects.push_back(o);",
-                  "}",
-                  ""]
-        # register_global_function_<Name>
-        for f in s.functions:
-            L += [f"void client::impl::register_global_function_{f.name()}(",
-                  f"    std::shared_ptr<GlobalFunction_{f.name()}> fn) {{",
-                  f"    m_fn_{f.name()} = fn;",
-                  "    m_handlers[\"" + f.name() + "\"] = [this](int32_t cb_id, Reader &r) {",
-                  f"        _cb_{f.name()}(cb_id, r);",
-                  "    };",
-                  "    if (m_fd >= 0) {",
-                  "        Writer w;",
-                  f'        w.put_string("{f.name()}");',
-                  "        _send_message(M_REGISTER_FUNC, w.data());",
-                  f'        _expect_register_resp("register_function({f.name()})");',
-                  "        return;",
-                  "    }",
-                  "    PendingFunction pf;",
-                  f'    pf.name = "{f.name()}";',
-                  "    m_pending_functions.push_back(pf);",
-                  "}",
-                  ""]
+        # add_object (generic, via instance registrars)
+        L += ["void client::impl::add_object(const std::shared_ptr<s5run_object> &obj) {",
+              "    const std::string class_name = obj->s5run_class_name();",
+              "    std::map<std::string, registrar_t>::const_iterator rit =",
+              "        m_instance_registrars.find(class_name);",
+              "    if (rit == m_instance_registrars.end())",
+              '        throw std::runtime_error("add_object: unknown class: " + class_name);',
+              "    int32_t id = ++m_next_this_id;",
+              "    rit->second(id, obj);",
+              "    const std::vector<std::string> methods = obj->s5run_method_names();",
+              "    if (m_fd >= 0) {",
+              "        Writer w;",
+              "        w.put_string(class_name);",
+              "        w.put_i32(id);",
+              "        w.put_string(class_name);",
+              "        w.put_u32((uint32_t)methods.size());",
+              "        for (size_t i = 0; i < methods.size(); ++i)",
+              "            w.put_string(methods[i]);",
+              "        _send_message(M_REGISTER_OBJ, w.data());",
+              '        _expect_register_resp("register_object(" + class_name + ")");',
+              "        return;",
+              "    }",
+              "    PendingObject o;",
+              "    o.name = class_name;",
+              "    o.this_id = id;",
+              "    o.type = class_name;",
+              "    o.methods = methods;",
+              "    m_pending_objects.push_back(o);",
+              "}",
+              ""]
+        # add_function (generic, via function registrars)
+        L += ["void client::impl::add_function(const std::shared_ptr<s5run_function> &fn) {",
+              "    const std::string name = fn->s5run_function_name();",
+              "    std::map<std::string, fn_registrar_t>::const_iterator rit =",
+              "        m_function_registrars.find(name);",
+              "    if (rit == m_function_registrars.end())",
+              '        throw std::runtime_error("add_function: unknown function: " + name);',
+              "    rit->second(fn);",
+              "    if (m_fd >= 0) {",
+              "        Writer w;",
+              "        w.put_string(name);",
+              "        _send_message(M_REGISTER_FUNC, w.data());",
+              '        _expect_register_resp("register_function(" + name + ")");',
+              "        return;",
+              "    }",
+              "    PendingFunction pf;",
+              "    pf.name = name;",
+              "    m_pending_functions.push_back(pf);",
+              "}",
+              ""]
         # _cb_<Function> handlers
         for f in s.functions:
             nargs = len(f.arguments())
             L += [f"void client::impl::_cb_{f.name()}(int32_t cb_id, Reader &r) {{",
-                  "    uint32_t n = r.get_u32();",
-                  "    if (n != %d) {" % nargs,
-                  f"        throw std::runtime_error(\"{f.name()}: expected %d argument(s)\");" % nargs,
-                  "    }"]
+                  "    uint32_t n = r.get_u32();"]
+            if not _has_convert(f):
+                L += [
+                    "    if (n != %d) {" % nargs,
+                    f"        throw std::runtime_error(\"{f.name()}: expected %d argument(s)\");" % nargs,
+                    "    }",
+                ]
             L += self._decode_args(f)
             call_args = ", ".join(f"a_{a.name()}" for a in f.arguments())
             if _is_void(f):
@@ -1048,18 +1115,33 @@ void write_int(Writer &w, int64_t v) {
         # _cbm_<Class>_<Method> handlers
         for c in s.classes:
             for m in c.methods():
-                nargs = 1 + len(m.arguments())
+                conv = _has_convert(m)
+                if conv:
+                    check = [
+                        "    if (n < 1) {",
+                        f"        throw std::runtime_error(\"{c.name()}.{m.name()}: expected this_id\");",
+                        "    }",
+                    ]
+                else:
+                    m_nargs = 1 + len(m.arguments())
+                    check = [
+                        "    if (n != %d) {" % m_nargs,
+                        ("        throw std::runtime_error(\"" + c.name() + "." + m.name()
+                         + ": expected %d argument(s)\");") % m_nargs,
+                        "    }",
+                    ]
                 L += [f"void client::impl::_cbm_{c.name()}_{m.name()}(int32_t cb_id, Reader &r) {{",
-                      "    uint32_t n = r.get_u32();",
-                      "    if (n != %d) {" % nargs,
-                      f"        throw std::runtime_error(\"{c.name()}.{m.name()}: expected %d argument(s)\");" % nargs,
-                      "    }",
+                      "    uint32_t n = r.get_u32();"]
+                L += check
+                L += [
                       "    int32_t this_id = (int32_t)read_int(r);",
                       f"    std::map<int32_t, std::shared_ptr<{c.name()}>>::const_iterator it =",
                       f"        m_instances_{c.name()}.find(this_id);",
                       f"    if (it == m_instances_{c.name()}.end()) {{",
                       f"        throw std::runtime_error(\"{c.name()}: unknown this_id\");",
                       "    }"]
+                if conv:
+                    L.append("    n -= 1;")
                 L += self._decode_args(m)
                 call_args = ", ".join(f"a_{a.name()}" for a in m.arguments())
                 if _is_void(m):
@@ -1086,6 +1168,23 @@ void write_int(Writer &w, int64_t v) {
                   ""]
         # _register_method_handlers
         L += ["void client::impl::_register_method_handlers() {"]
+        for c in s.classes:
+            L += [
+                '    m_instance_registrars["' + c.name() + '"] = '
+                "[this](int32_t id, const std::shared_ptr<s5run_object> &obj) {",
+                f"        m_instances_{c.name()}[id] = std::static_pointer_cast<{c.name()}>(obj);",
+                "    };",
+            ]
+        for f in s.functions:
+            L += [
+                '    m_function_registrars["' + f.name() + '"] = '
+                "[this](const std::shared_ptr<s5run_function> &fn) {",
+                f"        m_fn_{f.name()} = std::static_pointer_cast<GlobalFunction_{f.name()}>(fn);",
+                '        m_handlers["' + f.name() + '"] = [this](int32_t cb_id, Reader &r) {',
+                f"            _cb_{f.name()}(cb_id, r);",
+                "        };",
+                "    };",
+            ]
         for c in s.classes:
             for m in c.methods():
                 L += ["    m_handlers[\"" + m.name() + "\"] = [this](int32_t cb_id, Reader &r) {",

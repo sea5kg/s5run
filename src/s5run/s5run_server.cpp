@@ -248,10 +248,7 @@ void client_handler::handle_register_object(engine::IScriptEngine *eng, ClientCh
   if (!type_name.empty())
     m_object_types[type_name] = methods;
 
-  eng->register_js_callback(
-      name, [eng, this_id, methods](engine::JsContext ctx, const json::Array &) -> engine::JsValue {
-        return eng->make_object(ctx, this_id, methods);
-      });
+  eng->register_global_object(name, this_id, methods);
 }
 
 void client_handler::handle_register_object_type(engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body) {

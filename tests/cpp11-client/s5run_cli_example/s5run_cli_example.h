@@ -59,47 +59,89 @@ private:
     std::map<std::string, value> m_o;
 };
 
-class File {
+// Common root of all generated classes: lets the client work with
+// objects without knowing their concrete types.
+class s5run_object {
 public:
+    virtual ~s5run_object() {}
+    virtual std::string s5run_class_name() const = 0;
+    virtual std::vector<std::string> s5run_method_names() const = 0;
+};
+
+class File : public s5run_object {
+public:
+    std::string s5run_class_name() const override { return "File"; }
+    std::vector<std::string> s5run_method_names() const override {
+        std::vector<std::string> out;
+        out.push_back("GetSize");
+        out.push_back("ReadBytes");
+        return out;
+    }
     virtual ~File() {}
     virtual int64_t GetSize() = 0;
     virtual std::vector<uint8_t> ReadBytes(int64_t readBytes) = 0;
 };
 
-class FileSystem {
+class FileSystem : public s5run_object {
 public:
+    std::string s5run_class_name() const override { return "FileSystem"; }
+    std::vector<std::string> s5run_method_names() const override {
+        std::vector<std::string> out;
+        out.push_back("GetList");
+        return out;
+    }
     virtual ~FileSystem() {}
     virtual std::vector<std::string> GetList(const std::string & filepath) = 0;
 };
 
-class console {
+class console : public s5run_object {
 public:
+    std::string s5run_class_name() const override { return "console"; }
+    std::vector<std::string> s5run_method_names() const override {
+        std::vector<std::string> out;
+        out.push_back("log");
+        out.push_back("warning");
+        out.push_back("error");
+        return out;
+    }
     virtual ~console() {}
     virtual void log(const std::vector<std::string> & args) = 0;
     virtual void warning(const std::vector<std::string> & args) = 0;
     virtual void error(const std::vector<std::string> & args) = 0;
 };
 
-class GlobalFunction_GetFile {
+// Common root of all generated global functions: lets the client
+// register implementations without knowing their concrete types.
+class s5run_function {
 public:
+    virtual ~s5run_function() {}
+    virtual std::string s5run_function_name() const = 0;
+};
+
+class GlobalFunction_GetFile : public s5run_function {
+public:
+    std::string s5run_function_name() const override { return "GetFile"; }
     virtual ~GlobalFunction_GetFile() {}
     virtual std::shared_ptr<File> execute(const std::string & filepath) = 0;
 };
 
-class GlobalFunction_GetTimeNow {
+class GlobalFunction_GetTimeNow : public s5run_function {
 public:
+    std::string s5run_function_name() const override { return "GetTimeNow"; }
     virtual ~GlobalFunction_GetTimeNow() {}
     virtual int64_t execute() = 0;
 };
 
-class GlobalFunction_HasFile {
+class GlobalFunction_HasFile : public s5run_function {
 public:
+    std::string s5run_function_name() const override { return "HasFile"; }
     virtual ~GlobalFunction_HasFile() {}
     virtual bool execute(const std::string & filepath) = 0;
 };
 
-class GlobalFunction_GetFileList {
+class GlobalFunction_GetFileList : public s5run_function {
 public:
+    std::string s5run_function_name() const override { return "GetFileList"; }
     virtual ~GlobalFunction_GetFileList() {}
     virtual std::vector<std::string> execute(const std::string & filepath) = 0;
 };
@@ -112,28 +154,25 @@ public:
     // Address format: s5run://host:port
     void set_server_address(const std::string &address);
 
+    // Registers a remote context provider: the listed context
+    // names (global objects / classes) will be supplied by the
+    // s5run server at the given address. Stub, not implemented yet.
+    void add_context_provider(const std::string &address,
+                              const std::string &api_key,
+                              const std::vector<std::string> &contexts);
+
     // Registers the object type on the server (class name + methods).
-    // T must inherit from one of the generated base classes.
-    template <typename T>
-    void registry_class() {
-        _registry_class_impl(static_cast<T *>(0));
-    }
+    // Pass any instance of a generated base class; only its type
+    // information is used, the instance itself is not stored.
+    void add_class(const std::shared_ptr<s5run_object> &sample);
+
+    // Registers a singleton object, visible in scripts as
+    // `name.method(...)`. The raw pointer overload takes ownership.
+    void add_object(s5run_object *obj);
+    void add_object(const std::shared_ptr<s5run_object> &obj);
 
     // Registers a global function implementation.
-    template <typename T>
-    void registry_global_function() {
-        _registry_global_function_impl(new T());
-    }
-
-    // Registers a singleton object, visible in scripts as `name()`.
-    // The raw pointer overload takes ownership.
-    void registry_global_object(File *obj);
-    void registry_global_object(FileSystem *obj);
-    void registry_global_object(console *obj);
-
-    void registry_global_object(std::shared_ptr<File> obj);
-    void registry_global_object(std::shared_ptr<FileSystem> obj);
-    void registry_global_object(std::shared_ptr<console> obj);
+    void add_function(const std::shared_ptr<s5run_function> &fn);
 
     // Runs the script; serves callbacks while it executes.
     // Throws std::runtime_error on failure.
@@ -144,14 +183,6 @@ private:
     client(const client &);
     client &operator=(const client &);
 
-    void _registry_class_impl(File *);
-    void _registry_class_impl(FileSystem *);
-    void _registry_class_impl(console *);
-
-    void _registry_global_function_impl(GlobalFunction_GetFile *);
-    void _registry_global_function_impl(GlobalFunction_GetTimeNow *);
-    void _registry_global_function_impl(GlobalFunction_HasFile *);
-    void _registry_global_function_impl(GlobalFunction_GetFileList *);
 
     class impl;
     impl *m_impl;

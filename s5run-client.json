@@ -92,30 +92,27 @@
       "methods": [
         {
           "name": "log",
-          "arguments": [
-            {
-              "type": "array<string>",
-              "name": "args"
-            }
-          ]
+          "arguments": {
+            "convert-from": "...",
+            "type": "array<string>",
+            "name": "args"
+          }
         },
         {
           "name": "warning",
-          "arguments": [
-            {
-              "type": "array<string>",
-              "name": "args"
-            }
-          ]
+          "arguments": {
+            "convert-from": "...",
+            "type": "array<string>",
+            "name": "args"
+          }
         },
         {
           "name": "error",
-          "arguments": [
-            {
-              "type": "array<string>",
-              "name": "args"
-            }
-          ]
+          "arguments": {
+            "convert-from": "...",
+            "type": "array<string>",
+            "name": "args"
+          }
         }
       ]
     }

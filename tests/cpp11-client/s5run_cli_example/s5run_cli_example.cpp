@@ -218,17 +218,6 @@ void write_bool(Writer &w, bool v) {
 }
 
 
-inline std::vector<std::string> read_array__string(Reader &r) {
-    if (r.get_u8() != T_ARRAY)
-        throw std::runtime_error("wire: expected array");
-    uint32_t n = r.get_u32();
-    std::vector<std::string> out;
-    out.reserve(n);
-    for (uint32_t i = 0; i < n; ++i)
-        out.push_back(read_string(r));
-    return out;
-}
-
 inline void write_array__byte(Writer &w, const std::vector<uint8_t> &v) {
     w.put_u8(T_ARRAY);
     w.put_u32((uint32_t)v.size());
@@ -321,6 +310,18 @@ value decode_value(Reader &r) {
     }
 }
 
+std::string _value_to_string(const value &v) {
+    switch (v.get_kind()) {
+    case value::K_NULL: return "null";
+    case value::K_BOOL: return v.as_bool() ? "true" : "false";
+    case value::K_INT: return std::to_string(v.as_int());
+    case value::K_DOUBLE: return std::to_string(v.as_double());
+    case value::K_STRING: return v.as_string();
+    default:
+        throw std::runtime_error("wire: expected a scalar argument");
+    }
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -342,13 +343,8 @@ public:
     void set_server_address(const std::string &address);
     void register_type(const std::string &name,
                        const std::vector<std::string> &methods);
-    void registry_global_object_File(std::shared_ptr<File> obj);
-    void registry_global_object_FileSystem(std::shared_ptr<FileSystem> obj);
-    void registry_global_object_console(std::shared_ptr<console> obj);
-    void register_global_function_GetFile(std::shared_ptr<GlobalFunction_GetFile> fn);
-    void register_global_function_GetTimeNow(std::shared_ptr<GlobalFunction_GetTimeNow> fn);
-    void register_global_function_HasFile(std::shared_ptr<GlobalFunction_HasFile> fn);
-    void register_global_function_GetFileList(std::shared_ptr<GlobalFunction_GetFileList> fn);
+    void add_object(const std::shared_ptr<s5run_object> &obj);
+    void add_function(const std::shared_ptr<s5run_function> &fn);
     value run(const std::string &script, const std::string &entry,
               const std::vector<value> &args);
 
@@ -400,6 +396,10 @@ private:
     std::vector<PendingObject> m_pending_objects;
     std::vector<PendingFunction> m_pending_functions;
     std::map<std::string, handler_t> m_handlers;
+    typedef std::function<void(int32_t, const std::shared_ptr<s5run_object> &)> registrar_t;
+    std::map<std::string, registrar_t> m_instance_registrars;
+    typedef std::function<void(const std::shared_ptr<s5run_function> &)> fn_registrar_t;
+    std::map<std::string, fn_registrar_t> m_function_registrars;
     std::shared_ptr<GlobalFunction_GetFile> m_fn_GetFile;
     std::shared_ptr<GlobalFunction_GetTimeNow> m_fn_GetTimeNow;
     std::shared_ptr<GlobalFunction_HasFile> m_fn_HasFile;
@@ -545,150 +545,51 @@ void client::impl::register_type(const std::string &name,
     m_pending_types.push_back(t);
 }
 
-void client::impl::registry_global_object_File(std::shared_ptr<File> obj) {
-    static const char *k_methods[] = {"GetSize", "ReadBytes"};
-    static const size_t k_methods_count = 2;
+void client::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
+    const std::string class_name = obj->s5run_class_name();
+    std::map<std::string, registrar_t>::const_iterator rit =
+        m_instance_registrars.find(class_name);
+    if (rit == m_instance_registrars.end())
+        throw std::runtime_error("add_object: unknown class: " + class_name);
     int32_t id = ++m_next_this_id;
-    m_instances_File[id] = obj;
+    rit->second(id, obj);
+    const std::vector<std::string> methods = obj->s5run_method_names();
     if (m_fd >= 0) {
         Writer w;
-        w.put_string("File");
+        w.put_string(class_name);
         w.put_i32(id);
-        w.put_string("File");
-        w.put_u32((uint32_t)k_methods_count);
-        for (size_t i = 0; i < k_methods_count; ++i)
-            w.put_string(k_methods[i]);
+        w.put_string(class_name);
+        w.put_u32((uint32_t)methods.size());
+        for (size_t i = 0; i < methods.size(); ++i)
+            w.put_string(methods[i]);
         _send_message(M_REGISTER_OBJ, w.data());
-        _expect_register_resp("register_object(File)");
+        _expect_register_resp("register_object(" + class_name + ")");
         return;
     }
     PendingObject o;
-    o.name = "File";
+    o.name = class_name;
     o.this_id = id;
-    o.type = "File";
-    o.methods.assign(k_methods, k_methods + k_methods_count);
+    o.type = class_name;
+    o.methods = methods;
     m_pending_objects.push_back(o);
 }
 
-void client::impl::registry_global_object_FileSystem(std::shared_ptr<FileSystem> obj) {
-    static const char *k_methods[] = {"GetList"};
-    static const size_t k_methods_count = 1;
-    int32_t id = ++m_next_this_id;
-    m_instances_FileSystem[id] = obj;
+void client::impl::add_function(const std::shared_ptr<s5run_function> &fn) {
+    const std::string name = fn->s5run_function_name();
+    std::map<std::string, fn_registrar_t>::const_iterator rit =
+        m_function_registrars.find(name);
+    if (rit == m_function_registrars.end())
+        throw std::runtime_error("add_function: unknown function: " + name);
+    rit->second(fn);
     if (m_fd >= 0) {
         Writer w;
-        w.put_string("FileSystem");
-        w.put_i32(id);
-        w.put_string("FileSystem");
-        w.put_u32((uint32_t)k_methods_count);
-        for (size_t i = 0; i < k_methods_count; ++i)
-            w.put_string(k_methods[i]);
-        _send_message(M_REGISTER_OBJ, w.data());
-        _expect_register_resp("register_object(FileSystem)");
-        return;
-    }
-    PendingObject o;
-    o.name = "FileSystem";
-    o.this_id = id;
-    o.type = "FileSystem";
-    o.methods.assign(k_methods, k_methods + k_methods_count);
-    m_pending_objects.push_back(o);
-}
-
-void client::impl::registry_global_object_console(std::shared_ptr<console> obj) {
-    static const char *k_methods[] = {"log", "warning", "error"};
-    static const size_t k_methods_count = 3;
-    int32_t id = ++m_next_this_id;
-    m_instances_console[id] = obj;
-    if (m_fd >= 0) {
-        Writer w;
-        w.put_string("console");
-        w.put_i32(id);
-        w.put_string("console");
-        w.put_u32((uint32_t)k_methods_count);
-        for (size_t i = 0; i < k_methods_count; ++i)
-            w.put_string(k_methods[i]);
-        _send_message(M_REGISTER_OBJ, w.data());
-        _expect_register_resp("register_object(console)");
-        return;
-    }
-    PendingObject o;
-    o.name = "console";
-    o.this_id = id;
-    o.type = "console";
-    o.methods.assign(k_methods, k_methods + k_methods_count);
-    m_pending_objects.push_back(o);
-}
-
-void client::impl::register_global_function_GetFile(
-    std::shared_ptr<GlobalFunction_GetFile> fn) {
-    m_fn_GetFile = fn;
-    m_handlers["GetFile"] = [this](int32_t cb_id, Reader &r) {
-        _cb_GetFile(cb_id, r);
-    };
-    if (m_fd >= 0) {
-        Writer w;
-        w.put_string("GetFile");
+        w.put_string(name);
         _send_message(M_REGISTER_FUNC, w.data());
-        _expect_register_resp("register_function(GetFile)");
+        _expect_register_resp("register_function(" + name + ")");
         return;
     }
     PendingFunction pf;
-    pf.name = "GetFile";
-    m_pending_functions.push_back(pf);
-}
-
-void client::impl::register_global_function_GetTimeNow(
-    std::shared_ptr<GlobalFunction_GetTimeNow> fn) {
-    m_fn_GetTimeNow = fn;
-    m_handlers["GetTimeNow"] = [this](int32_t cb_id, Reader &r) {
-        _cb_GetTimeNow(cb_id, r);
-    };
-    if (m_fd >= 0) {
-        Writer w;
-        w.put_string("GetTimeNow");
-        _send_message(M_REGISTER_FUNC, w.data());
-        _expect_register_resp("register_function(GetTimeNow)");
-        return;
-    }
-    PendingFunction pf;
-    pf.name = "GetTimeNow";
-    m_pending_functions.push_back(pf);
-}
-
-void client::impl::register_global_function_HasFile(
-    std::shared_ptr<GlobalFunction_HasFile> fn) {
-    m_fn_HasFile = fn;
-    m_handlers["HasFile"] = [this](int32_t cb_id, Reader &r) {
-        _cb_HasFile(cb_id, r);
-    };
-    if (m_fd >= 0) {
-        Writer w;
-        w.put_string("HasFile");
-        _send_message(M_REGISTER_FUNC, w.data());
-        _expect_register_resp("register_function(HasFile)");
-        return;
-    }
-    PendingFunction pf;
-    pf.name = "HasFile";
-    m_pending_functions.push_back(pf);
-}
-
-void client::impl::register_global_function_GetFileList(
-    std::shared_ptr<GlobalFunction_GetFileList> fn) {
-    m_fn_GetFileList = fn;
-    m_handlers["GetFileList"] = [this](int32_t cb_id, Reader &r) {
-        _cb_GetFileList(cb_id, r);
-    };
-    if (m_fd >= 0) {
-        Writer w;
-        w.put_string("GetFileList");
-        _send_message(M_REGISTER_FUNC, w.data());
-        _expect_register_resp("register_function(GetFileList)");
-        return;
-    }
-    PendingFunction pf;
-    pf.name = "GetFileList";
+    pf.name = name;
     m_pending_functions.push_back(pf);
 }
 
@@ -811,8 +712,8 @@ void client::impl::_cbm_FileSystem_GetList(int32_t cb_id, Reader &r) {
 
 void client::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n != 2) {
-        throw std::runtime_error("console.log: expected 2 argument(s)");
+    if (n < 1) {
+        throw std::runtime_error("console.log: expected this_id");
     }
     int32_t this_id = (int32_t)read_int(r);
     std::map<int32_t, std::shared_ptr<console>>::const_iterator it =
@@ -820,7 +721,11 @@ void client::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
     if (it == m_instances_console.end()) {
         throw std::runtime_error("console: unknown this_id");
     }
-        std::vector<std::string> a_args = read_array__string(r);
+    n -= 1;
+        std::vector<std::string> a_args;
+        a_args.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            a_args.push_back(_value_to_string(decode_value(r)));
     it->second->log(a_args);
     Writer w;
     w.put_i32(cb_id);
@@ -831,8 +736,8 @@ void client::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
 
 void client::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n != 2) {
-        throw std::runtime_error("console.warning: expected 2 argument(s)");
+    if (n < 1) {
+        throw std::runtime_error("console.warning: expected this_id");
     }
     int32_t this_id = (int32_t)read_int(r);
     std::map<int32_t, std::shared_ptr<console>>::const_iterator it =
@@ -840,7 +745,11 @@ void client::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
     if (it == m_instances_console.end()) {
         throw std::runtime_error("console: unknown this_id");
     }
-        std::vector<std::string> a_args = read_array__string(r);
+    n -= 1;
+        std::vector<std::string> a_args;
+        a_args.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            a_args.push_back(_value_to_string(decode_value(r)));
     it->second->warning(a_args);
     Writer w;
     w.put_i32(cb_id);
@@ -851,8 +760,8 @@ void client::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
 
 void client::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n != 2) {
-        throw std::runtime_error("console.error: expected 2 argument(s)");
+    if (n < 1) {
+        throw std::runtime_error("console.error: expected this_id");
     }
     int32_t this_id = (int32_t)read_int(r);
     std::map<int32_t, std::shared_ptr<console>>::const_iterator it =
@@ -860,7 +769,11 @@ void client::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
     if (it == m_instances_console.end()) {
         throw std::runtime_error("console: unknown this_id");
     }
-        std::vector<std::string> a_args = read_array__string(r);
+    n -= 1;
+        std::vector<std::string> a_args;
+        a_args.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            a_args.push_back(_value_to_string(decode_value(r)));
     it->second->error(a_args);
     Writer w;
     w.put_i32(cb_id);
@@ -888,6 +801,39 @@ int32_t client::impl::_register_instance_console(const std::shared_ptr<console> 
 }
 
 void client::impl::_register_method_handlers() {
+    m_instance_registrars["File"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
+        m_instances_File[id] = std::static_pointer_cast<File>(obj);
+    };
+    m_instance_registrars["FileSystem"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
+        m_instances_FileSystem[id] = std::static_pointer_cast<FileSystem>(obj);
+    };
+    m_instance_registrars["console"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
+        m_instances_console[id] = std::static_pointer_cast<console>(obj);
+    };
+    m_function_registrars["GetFile"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetFile = std::static_pointer_cast<GlobalFunction_GetFile>(fn);
+        m_handlers["GetFile"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetFile(cb_id, r);
+        };
+    };
+    m_function_registrars["GetTimeNow"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetTimeNow = std::static_pointer_cast<GlobalFunction_GetTimeNow>(fn);
+        m_handlers["GetTimeNow"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetTimeNow(cb_id, r);
+        };
+    };
+    m_function_registrars["HasFile"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_HasFile = std::static_pointer_cast<GlobalFunction_HasFile>(fn);
+        m_handlers["HasFile"] = [this](int32_t cb_id, Reader &r) {
+            _cb_HasFile(cb_id, r);
+        };
+    };
+    m_function_registrars["GetFileList"] = [this](const std::shared_ptr<s5run_function> &fn) {
+        m_fn_GetFileList = std::static_pointer_cast<GlobalFunction_GetFileList>(fn);
+        m_handlers["GetFileList"] = [this](int32_t cb_id, Reader &r) {
+            _cb_GetFileList(cb_id, r);
+        };
+    };
     m_handlers["GetSize"] = [this](int32_t cb_id, Reader &r) {
         _cbm_File_GetSize(cb_id, r);
     };
@@ -1013,60 +959,33 @@ void client::set_server_address(const std::string &address) {
     m_impl->set_server_address(address);
 }
 
-void client::registry_global_object(File *obj) {
-    m_impl->registry_global_object_File(std::shared_ptr<File>(obj));
+void client::add_context_provider(const std::string &address,
+                                  const std::string &api_key,
+                                  const std::vector<std::string> &contexts) {
+    (void)api_key;
+    const std::string prefix = "s5run://";
+    if (address.compare(0, prefix.size(), prefix) != 0)
+        throw std::runtime_error("add_context_provider: expected format s5run://host:port");
+    if (contexts.empty())
+        throw std::runtime_error("add_context_provider: contexts list is empty");
+    throw std::runtime_error("add_context_provider: not implemented yet");
 }
 
-void client::registry_global_object(std::shared_ptr<File> obj) {
-    m_impl->registry_global_object_File(obj);
+void client::add_object(s5run_object *obj) {
+    m_impl->add_object(std::shared_ptr<s5run_object>(obj));
 }
 
-void client::registry_global_object(FileSystem *obj) {
-    m_impl->registry_global_object_FileSystem(std::shared_ptr<FileSystem>(obj));
+void client::add_object(const std::shared_ptr<s5run_object> &obj) {
+    m_impl->add_object(obj);
 }
 
-void client::registry_global_object(std::shared_ptr<FileSystem> obj) {
-    m_impl->registry_global_object_FileSystem(obj);
+void client::add_class(const std::shared_ptr<s5run_object> &sample) {
+    m_impl->register_type(sample->s5run_class_name(),
+                          sample->s5run_method_names());
 }
 
-void client::registry_global_object(console *obj) {
-    m_impl->registry_global_object_console(std::shared_ptr<console>(obj));
-}
-
-void client::registry_global_object(std::shared_ptr<console> obj) {
-    m_impl->registry_global_object_console(obj);
-}
-
-void client::_registry_class_impl(File *) {
-    m_impl->register_type("File", {"GetSize", "ReadBytes"});
-}
-
-void client::_registry_class_impl(FileSystem *) {
-    m_impl->register_type("FileSystem", {"GetList"});
-}
-
-void client::_registry_class_impl(console *) {
-    m_impl->register_type("console", {"log", "warning", "error"});
-}
-
-void client::_registry_global_function_impl(GlobalFunction_GetFile *fn) {
-    m_impl->register_global_function_GetFile(
-        std::shared_ptr<GlobalFunction_GetFile>(fn));
-}
-
-void client::_registry_global_function_impl(GlobalFunction_GetTimeNow *fn) {
-    m_impl->register_global_function_GetTimeNow(
-        std::shared_ptr<GlobalFunction_GetTimeNow>(fn));
-}
-
-void client::_registry_global_function_impl(GlobalFunction_HasFile *fn) {
-    m_impl->register_global_function_HasFile(
-        std::shared_ptr<GlobalFunction_HasFile>(fn));
-}
-
-void client::_registry_global_function_impl(GlobalFunction_GetFileList *fn) {
-    m_impl->register_global_function_GetFileList(
-        std::shared_ptr<GlobalFunction_GetFileList>(fn));
+void client::add_function(const std::shared_ptr<s5run_function> &fn) {
+    m_impl->add_function(fn);
 }
 
 value client::run(const std::string &script, const std::string &entry,

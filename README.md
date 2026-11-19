@@ -115,30 +115,27 @@ For example json:
       "methods": [
         {
           "name": "log",
-          "arguments": [
-            {
-              "type": "array<string>",
-              "name": "args"
-            }
-          ]
+          "arguments": {
+            "convert-from": "...",
+            "type": "array<string>",
+            "name": "args"
+          }
         },
         {
           "name": "warning",
-          "arguments": [
-            {
-              "type": "array<string>",
-              "name": "args"
-            }
-          ]
+          "arguments": {
+            "convert-from": "...",
+            "type": "array<string>",
+            "name": "args"
+          }
         },
         {
           "name": "error",
-          "arguments": [
-            {
-              "type": "array<string>",
-              "name": "args"
-            }
-          ]
+          "arguments": {
+            "convert-from": "...",
+            "type": "array<string>",
+            "name": "args"
+          }
         }
       ]
     }
@@ -168,12 +165,13 @@ How to run:
 
 ```
 auto cli = s5run_cli_example::make_client();
-cli->registry_class<MyFile>();
-cli->registry_global_function<MyGetFile>();
-cli->registry_global_function<MyHasFile>();
-cli->registry_global_function<MyGetTimeNow>();
-cli->registry_global_object(new MyConsole());
-cli->registry_global_object(new MyFileSystem());
+cli->add_context_provider("s5run://localhost:7775", "some_api_key", {"Storage", "Cache"});
+cli->add_class(std::make_shared<MyFile>());
+cli->add_function(std::make_shared<MyGetFile>());
+cli->add_function(std::make_shared<MyHasFile>());
+cli->add_function(std::make_shared<MyGetTimeNow>());
+cli->add_object(std::make_shared<MyConsole>());
+cli->add_object(std::make_shared<MyFileSystem>());
 cli->set_server_address("s5run://localhost:7777");
 auto result = cli->run(script, "main", {s5run_cli_example::value("test.txt")});
 

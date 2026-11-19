@@ -50,6 +50,12 @@ public:
                                 int64_t this_id,
                                 const json::Array& methods) = 0;
 
+    // Install a JS object with method stubs as a global property, so
+    // scripts call it as `name.method(...)`.
+    virtual void register_global_object(const std::string& name,
+                                        int64_t this_id,
+                                        const json::Array& methods) = 0;
+
     virtual JsValue make_value(JsContext ctx, const json::Value& v) = 0;
 
     virtual ExecResult execute(const std::string& script,

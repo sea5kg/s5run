@@ -10,15 +10,19 @@ from .s5run_cli_typeref import S5RunCliTypeRef, s5run_parse_type
 
 class S5RunCliArgument:
 
-    def __init__(self, type: str, name: str):
+    def __init__(self, type: str, name: str, convert_from: str = ""):
         self.__type = type
         self.__name = name
+        self.__convert_from = convert_from
 
     def type(self) -> str:
         return self.__type
 
     def name(self) -> str:
         return self.__name
+
+    def convert_from(self) -> str:
+        return self.__convert_from
 
     def type_ref(self) -> S5RunCliTypeRef:
         return s5run_parse_type(self.__type)
@@ -165,8 +169,30 @@ class S5RunCliSchema:
         return section
 
     def __parse_arguments(self, func):
+        if "arguments" not in func:
+            return []
+        raw = func["arguments"]
+        if isinstance(raw, dict):
+            # Object form: a "conversion function" — all arguments passed
+            # from the script are collected into a single parameter.
+            for key in ("convert-from", "type", "name"):
+                if key not in raw:
+                    sys.exit("Missing '" + key + "' in arguments (object form) of " + str(func))
+            if raw["convert-from"] != "...":
+                sys.exit("Unsupported 'convert-from' value '" + str(raw["convert-from"])
+                         + "' in " + str(func))
+            if raw["type"] != "array<string>":
+                sys.exit("Unsupported 'type' for convert arguments (only array<string>): "
+                         + str(raw["type"]) + " in " + str(func))
+            return [
+                S5RunCliArgument(
+                    type=raw["type"],
+                    name=raw["name"],
+                    convert_from=raw["convert-from"],
+                )
+            ]
         ret = []
-        for a in func["arguments"]:
+        for a in raw:
             if "type" not in a:
                 sys.exit("Missing argument type in function " + str(func))
             if "name" not in a:
