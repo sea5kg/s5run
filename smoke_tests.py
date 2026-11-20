@@ -113,6 +113,14 @@ def _have_jdk():
     return all(shutil.which(cmd) for cmd in ("javac", "jar", "java"))
 
 
+def test_py_gen_client(port):
+    print("== py-gen-client: scenarios")
+    ret = subprocess.call([sys.executable, "tests/py-client/test_client.py",
+                           "127.0.0.1", str(port)], cwd=ROOT)
+    assert ret == 0, "py-gen-client failed with code %d" % ret
+    print("  PASS")
+
+
 def test_java_client(port):
     print("== java-client: build and run")
     if not _have_jdk():
@@ -287,6 +295,7 @@ def main():
         test_server_stats("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
         test_cpp_gen_client(port)
+        test_py_gen_client(port)
         test_java_client(port)
     finally:
         stop_server(proc)
