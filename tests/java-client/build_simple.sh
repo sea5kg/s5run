@@ -28,5 +28,5 @@ check_ret $? "Detect client version"
 jar -cmf manifest.mf s5run-client-$CLIENT_VERSION.jar -C bin .
 check_ret $? "Build s5run-client-$CLIENT_VERSION.jar"
 
-java -jar s5run-client-$CLIENT_VERSION.jar
+java -jar s5run-client-$CLIENT_VERSION.jar "$@"
 check_ret $? "Run s5run-client-$CLIENT_VERSION.jar"

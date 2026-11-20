@@ -113,12 +113,13 @@ def _have_jdk():
     return all(shutil.which(cmd) for cmd in ("javac", "jar", "java"))
 
 
-def test_java_client():
+def test_java_client(port):
     print("== java-client: build and run")
     if not _have_jdk():
         print("  SKIP: JDK not found")
         return
-    _run(["./build_simple.sh"], "compile and run java-client", cwd=JAVA_CLIENT_DIR)
+    _run(["./build_simple.sh", "127.0.0.1", str(port)],
+         "compile and run java-client", cwd=JAVA_CLIENT_DIR)
     print("  PASS")
 
 
@@ -286,9 +287,9 @@ def main():
         test_server_stats("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
         test_cpp_gen_client(port)
+        test_java_client(port)
     finally:
         stop_server(proc)
-    test_java_client()
     print("all smoke tests passed")
 
 

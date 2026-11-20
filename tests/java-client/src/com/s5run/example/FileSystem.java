@@ -3,8 +3,12 @@ package com.s5run.example;
 
 import java.util.*;
 
-public interface FileSystem {
-    long getThisId();
-    void setThisId(long id);
+public interface FileSystem extends S5RunObject {
+    @Override
+    default String s5runClassName() { return "FileSystem"; }
+
+    @Override
+    default List<String> s5runMethodNames() { return List.of("GetList"); }
+
     List<String> GetList(String filepath);
 }
