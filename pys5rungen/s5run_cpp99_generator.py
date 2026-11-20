@@ -139,7 +139,7 @@ class _Cpp99Generator:
 
     def __init__(self, schema):
         self.schema = schema
-        self.ns = schema.cpp99_namespace
+        self.ns = schema.get_cpp_options("cpp99").namespace()
         self.usage = _Usage()
         for c in schema.classes:
             for m in c.methods():
@@ -230,10 +230,10 @@ class _Cpp99Generator:
         return L
 
     @staticmethod
-    def _unknown_ref_line(fname, prefix, argname):
+    def _unknown_ref_line(fname, prefix, arg_name):
         return ("            throw std::runtime_error(\"" + fname
                 + ": unknown object reference: \""
-                + " + num_to_str(" + prefix + "ref_id_" + argname + "));")
+                + " + num_to_str(" + prefix + "ref_id_" + arg_name + "));")
 
     def _encode_result(self, fm, expr) -> list:
         if _is_void(fm):

@@ -14,6 +14,10 @@ RUN apt-get -y update \
     curl \
     pkg-config \
     libcurl4-openssl-dev \
+    openjdk-11-jdk \
+    openjdk-17-jdk \
+    openjdk-21-jdk \
+    golang-go \
     zlib1g-dev \
     libpng-dev \
     python3 \

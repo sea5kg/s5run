@@ -3,7 +3,7 @@
 /.wsjcpp
 /test-client
 __pycache__
+s5run-client-*.jar
+
 /tests/cpp11-client/bin
 /tests/cpp99-client/bin
-/tests/java-client/bin
-/tests/java-client/s5run-client-*.jar

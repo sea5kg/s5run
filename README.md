@@ -1,5 +1,8 @@
 # s5run
 
+[![s5run Version](https://img.shields.io/badge/s5run-v0.2.0-yellow.svg)](https://github.com/sea5kg/s5run) [![s5run ProgrammingLanguage](https://img.shields.io/badge/ProgrammingLanguage-c++-yellow.svg)](https://github.com/sea5kg/s5run) [![Docker Pulls](https://img.shields.io/docker/pulls/sea5kg/s5run.svg)](https://hub.docker.com/r/sea5kg/s5run/) [![Github Stars](https://img.shields.io/github/stars/sea5kg/s5run.svg?label=github%20%E2%98%85)](https://github.com/sea5kg/s5run/) [![Github Stars](https://img.shields.io/github/contributors/sea5kg/s5run.svg)](https://github.com/sea5kg/s5run/) [![Github Forks](https://img.shields.io/github/forks/sea5kg/s5run.svg?label=github%20forks)](https://github.com/sea5kg/s5run/)
+
+
 Look's like: *Reversible RPC (bidirectional streaming/callback bridge) over a single connection.*
 
 
@@ -16,7 +19,18 @@ Not implemented yet:
 - `add_context_provider`
 
 
-## s5run-client.json
+## Generation client code library (context-provider)
+
+Hardcoded file `s5run-client.json`
+
+Supported:
+
+- cpp99 - generate client library code for C++ 99 standard
+- cpp11 - generate client library code for C++ 11 standard
+- java11 - generate client library for java11
+- java17 - generate client library for java17
+- java21 - generate client library for java21
+- py - generate client library for python
 
 For example json:
 

@@ -119,22 +119,45 @@ class S5RunCliClass:
         return self.__methods
 
 
+class S5RunCliSchemaCppOptions:
+    """ helper class for options generator """
+    def __init__(self, name: str, opt):
+        self.__name = name
+        self.__opt = opt
+        if "namespace" not in opt:
+            sys.exit("Missing 'namespace' in options." + name + " " + str(opt))
+        # TODO validate "namespace" - because used as filename
+        if "output-dir" not in opt:
+            sys.exit("Missing 'output-dir' in options." + name + " " + str(opt))
+
+    def get_name(self):
+        """ return name """
+        return self.__name
+
+    def namespace(self):
+        return self.__opt["namespace"]
+
+    def output_dir(self):
+        return self.__opt["output-dir"]
+
 class S5RunCliSchema:
 
     def __init__(self):
         self.__schema = {}
+        self.__options = {}
         self.version = 1
         self.client_version = "0.0.0"
-        self.namespace = ""
-        self.java_package = ""
+        self.java21_package = ""
+        self.java21_output_dir = ""
         self.py_module = ""
-        self.cpp_output_dir = ""
-        self.java_output_dir = ""
+        self.java17_output_dir = ""
+        self.java17_package = ""
+        self.java11_output_dir = ""
+        self.java11_package = ""
+        self.java11_output_dir = ""
         self.py_output_dir = ""
         self.go_output_dir = ""
         self.go_package = ""
-        self.cpp99_output_dir = ""
-        self.cpp99_namespace = ""
         self.functions: List[S5RunCliFunction] = []
         self.classes: List[S5RunCliClass] = []
 
@@ -145,15 +168,22 @@ class S5RunCliSchema:
             self.__schema = json.load(f)
         self.__parse_version()
         self.__parse_client_version()
-        self.__parse_cpp11_options()
-        self.__parse_java_options()
+        self.__parse_cpp_options("cpp11")
+        self.__parse_cpp_options("cpp99")
+        self.__parse_java21_options()
+        self.__parse_java17_options()
+        self.__parse_java11_options()
         self.__parse_py_options()
         self.__parse_go_options()
-        self.__parse_cpp99_options()
         self.__resolve_names()
         self.__parse_functions()
         self.__parse_classes()
         self.__validate()
+
+    def get_cpp_options(self, name) -> S5RunCliSchemaCppOptions:
+        if name not in self.__options:
+            sys.exit("Not found " + name + " in options")
+        return self.__options[name]
 
     def __parse_version(self):
         if "version" in self.__schema:
@@ -168,24 +198,29 @@ class S5RunCliSchema:
             sys.exit("S5RunCliSchema: invalid 'client-version' (expected X.Y.Z): " + str(value))
         self.client_version = str(value)
 
-    def __parse_cpp11_options(self):
-        section = self.__parse_options_section("cpp11", required=False)
-        if section is None:
-            return
-        if "namespace" not in section:
-            sys.exit("Missing 'namespace' in options.cpp11 " + str(section))
-        self.cpp_output_dir = section["output-dir"]
-        self.namespace = section["namespace"]
-
-    def __parse_java_options(self):
+    def __parse_java21_options(self):
         section = self.__parse_options_section("java", required=False)
         if section is None:
             return
-        self.java_output_dir = section["output-dir"]
+        self.java21_output_dir = section["output-dir"]
         if "package" in section:
-            self.java_package = section["package"]
-            if not self.namespace:
-                self.namespace = section["package"]
+            self.java21_package = section["package"]
+
+    def __parse_java17_options(self):
+        section = self.__parse_options_section("java17", required=False)
+        if section is None:
+            return
+        self.java17_output_dir = section["output-dir"]
+        if "package" in section:
+            self.java17_package = section["package"]
+
+    def __parse_java11_options(self):
+        section = self.__parse_options_section("java11", required=False)
+        if section is None:
+            return
+        self.java11_output_dir = section["output-dir"]
+        if "package" in section:
+            self.java11_package = section["package"]
 
     def __parse_py_options(self):
         section = self.__parse_options_section("py", required=False)
@@ -194,8 +229,6 @@ class S5RunCliSchema:
         self.py_output_dir = section["output-dir"]
         if "module" in section:
             self.py_module = section["module"]
-            if not self.namespace:
-                self.namespace = section["module"]
 
     def __parse_go_options(self):
         section = self.__parse_options_section("go", required=False)
@@ -204,22 +237,18 @@ class S5RunCliSchema:
         self.go_output_dir = section["output-dir"]
         if "package" in section:
             self.go_package = section["package"]
-            if not self.namespace:
-                self.namespace = section["package"]
 
-    def __parse_cpp99_options(self):
-        section = self.__parse_options_section("cpp99", required=False)
-        if section is None:
+    def __parse_cpp_options(self, name):
+        if "options" not in self.__schema:
             return
-        if "namespace" not in section:
-            sys.exit("Missing 'namespace' in options.cpp99 " + str(section))
-        self.cpp99_output_dir = section["output-dir"]
-        self.cpp99_namespace = section["namespace"]
+        if name not in self.__schema["options"]:
+            return
+        self.__options[name] = S5RunCliSchemaCppOptions(name, self.__schema["options"][name])
 
     def __resolve_names(self):
         # Languages without an explicit name fall back to the shared namespace.
-        if not self.java_package:
-            self.java_package = self.namespace
+        if not self.java21_package:
+            self.java21_package = self.namespace
         if not self.py_module:
             self.py_module = self.namespace
 
@@ -335,16 +364,6 @@ class S5RunCliSchema:
         return {c.name() for c in self.classes}
 
     def __validate(self) -> None:
-        if (not self.cpp_output_dir and not self.java_output_dir
-                and not self.py_output_dir and not self.go_output_dir
-                and not self.cpp99_output_dir):
-            sys.exit("S5RunCliSchema: no output dirs configured (options.cpp11/java/py)")
-
-        if (self.java_output_dir or self.py_output_dir) and not self.namespace:
-            sys.exit("S5RunCliSchema: 'namespace' is required when java or py is configured "
-                     "(set it in options.cpp11 'namespace', options.java 'package' "
-                     "or options.py 'module')")
-
         known = self.iface_names | self.class_names
         unresolved = {}  # type name -> list of usages
 

@@ -20,7 +20,12 @@ cd "$(dirname "$0")"
 # cleanup before success build
 rm -rf bin
 
-javac -d bin $(find ./src -name "*.java")
+RELEASE_FLAG=""
+if [ -n "$JAVA_RELEASE" ]; then
+    RELEASE_FLAG="--release $JAVA_RELEASE"
+fi
+
+javac $RELEASE_FLAG -d bin $(find ./src -name "*.java")
 check_ret $? "Compile"
 
 CLIENT_VERSION=$(grep -o 'VERSION = "[^"]*"' $(find ./src -name "ClientVersion.java") | grep -o '[0-9][^"]*')

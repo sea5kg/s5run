@@ -24,10 +24,12 @@ CPP11_GEN_BIN = os.path.join(CPP11_CLIENT_DIR, "bin", "cpp11-client")
 CPP99_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp99-client")
 CPP99_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp99-client")
 CPP99_CLIENT_BIN = os.path.join(CPP99_CLIENT_DIR, "bin", "cpp99-client")
-JAVA_CLIENT_DIR = os.path.join(ROOT, "tests", "java-client")
+JAVA21_CLIENT_DIR = os.path.join(ROOT, "tests", "java21-client")
+JAVA17_CLIENT_DIR = os.path.join(ROOT, "tests", "java17-client")
+JAVA11_CLIENT_DIR = os.path.join(ROOT, "tests", "java11-client")
 
-sys.path.insert(0, ROOT)
-import tests.libs5runtests.s5run_wire as w
+sys.path.insert(0, os.path.join(ROOT, "tests"))
+import py_tests.s5run_wire as w
 
 
 class CallbackError(Exception):
@@ -63,37 +65,71 @@ def _run(cmd, what, cwd=ROOT):
 
 
 def _generated_outputs():
+    """All generated files listed in s5run-client.json output dirs."""
     with open(os.path.join(ROOT, "s5run-client.json"), "r", encoding="utf-8") as f:
         cfg = json.load(f)
     options = cfg.get("options", {})
-    ns = ""
-    for name, key in (("cpp11", "namespace"), ("java", "package"), ("py", "module")):
-        ns = (options.get(name) or {}).get(key, "")
-        if ns:
-            break
     rel = lambda p: os.path.join(ROOT, p)
     outputs = []
-    if "cpp11" in options:
-        outputs += [
-            rel(options["cpp11"]["output-dir"]) + ns + ".h",
-            rel(options["cpp11"]["output-dir"]) + ns + ".cpp",
-        ]
+
+    # C++ variants (cpp11, cpp99): {output-dir}/{namespace}.h + .cpp
+    for name in ("cpp11", "cpp99"):
+        if name in options:
+            ns = options[name].get("namespace", "")
+            outputs += [
+                rel(options[name]["output-dir"]) + ns + ".h",
+                rel(options[name]["output-dir"]) + ns + ".cpp",
+            ]
+
+    # Python: {output-dir}/{module}.py
     if "py" in options:
-        module = (options["py"].get("module") or ns)
+        module = options["py"].get("module", "")
         outputs.append(rel(options["py"]["output-dir"]) + module + ".py")
-    if "java" in options:
-        package = (options["java"].get("package") or ns).replace(".", "/")
-        outputs += glob.glob(rel(options["java"]["output-dir"]) + package + "/*.java")
-    return outputs
+
+    # Java variants (java=21, java17, java11): {output-dir}/{package as path}/*.java
+    for name in ("java", "java17", "java11", "go"):
+        if name in options:
+            pkg = options[name].get("package", "")
+            pkg_dir = pkg.replace(".", "/") if pkg else ""
+            outputs += glob.glob(rel(options[name]["output-dir"]) + pkg_dir + "/*.java")
+            outputs += glob.glob(rel(options[name]["output-dir"]) + pkg_dir + "/*.go")
+
+    return [p for p in outputs if os.path.exists(p)]
+
+
+def _clean_generated_outputs():
+    """Delete all generated code AND build artifacts to guarantee a fresh build."""
+    outputs = _generated_outputs()
+    for path in outputs:
+        try:
+            os.remove(path)
+            print("  cleaned: %s" % os.path.relpath(path, ROOT))
+        except OSError:
+            pass
+    # build artifacts
+    import shutil
+    dirs_to_clean = [
+        os.path.join(ROOT, "tests", "cpp11-client", "bin"),
+        os.path.join(ROOT, "tests", "cpp99-client", "bin"),
+        os.path.join(ROOT, "tmp", "cpp11-client"),
+        os.path.join(ROOT, "tmp", "cpp99-client"),
+    ]
+    jars = glob.glob(os.path.join(ROOT, "tests", "java*-client", "s5run-client-*.jar"))
+    for jar in jars:
+        try:
+            os.remove(jar)
+            print("  cleaned: %s" % os.path.relpath(jar, ROOT))
+        except OSError:
+            pass
+    for d in dirs_to_clean:
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+            print("  cleaned: %s/" % os.path.relpath(d, ROOT))
 
 
 def ensure_generated():
-    inputs = [os.path.join(ROOT, "s5run-client.json"),
-              os.path.join(ROOT, "pys5rungen")]
-    inputs += _iter_files(os.path.join(ROOT, "libs5run_client_code_generator"))
-    outputs = _generated_outputs()
-    if not outputs or _newest_mtime(inputs) > _newest_mtime(outputs):
-        _run([sys.executable, "-m", "pys5rungen", "all"], "regenerate client code")
+    _clean_generated_outputs()
+    _run([sys.executable, "-m", "pys5rungen", "all"], "regenerate client code")
 
 
 def ensure_server():
@@ -114,6 +150,55 @@ def ensure_cpp_client():
 
 def _have_jdk():
     return all(shutil.which(cmd) for cmd in ("javac", "jar", "java"))
+
+
+def _jdk_path(version):
+    """JAVA_HOME override for a specific Java version, e.g. _jdk_path(11)."""
+    env = os.environ.get(f"JAVA{version}_HOME", "")
+    if env and os.path.isfile(os.path.join(env, "bin", "javac")):
+        return env
+    candidates = [
+        f"/usr/lib/jvm/java-{version}-openjdk-amd64",
+        f"/usr/lib/jvm/java-{version}-openjdk",
+        f"/usr/lib/jvm/java-{version}-openjdk-arm64",
+    ]
+    for c in candidates:
+        if os.path.isfile(os.path.join(c, "bin", "javac")):
+            return c
+    return None
+
+
+def _have_jdk_version(version):
+    """True if this Java version target is buildable: a matching JDK is
+    installed OR the default javac is new enough to cross-compile via
+    --release."""
+    if _jdk_path(version):
+        return True
+    if _have_jdk():
+        try:
+            out = subprocess.check_output(["javac", "--version"], stderr=subprocess.STDOUT, text=True)
+            major = int(out.strip().split()[1].split(".")[0])
+            return major >= version
+        except (ValueError, subprocess.CalledProcessError, FileNotFoundError):
+            return False
+    return False
+
+
+def _java_build_env(version):
+    """Env with JAVA_HOME and JAVA_RELEASE for the target version.
+
+    Uses the system javac with --release N when no dedicated JDK<N> is
+    installed (cross-compilation)."""
+    env = os.environ.copy()
+    jdk = _jdk_path(version)
+    if jdk:
+        env["JAVA_HOME"] = jdk
+        env["PATH"] = os.path.join(jdk, "bin") + os.pathsep + env["PATH"]
+        env["JAVA_RELEASE"] = str(version)
+    elif _have_jdk():
+        # cross-compile through the default (newer) javac
+        env["JAVA_RELEASE"] = str(version)
+    return env
 
 
 def test_py_gen_client(port):
@@ -139,13 +224,39 @@ def test_cpp99_client(port):
     print("  PASS")
 
 
-def test_java_client(port):
-    print("== java-client: build and run")
-    if not _have_jdk():
-        print("  SKIP: JDK not found")
+def test_java17_client(port):
+    print("== java17-client: build and run")
+    if not _have_jdk_version(17):
+        print("  SKIP: JDK 17 not available")
         return
-    _run(["./build_simple.sh", "127.0.0.1", str(port)],
-         "compile and run java-client", cwd=JAVA_CLIENT_DIR)
+    env = _java_build_env(17)
+    ret = subprocess.call(["./build_simple.sh", "127.0.0.1", str(port)],
+                          cwd=JAVA17_CLIENT_DIR, env=env)
+    assert ret == 0, "java17-client failed with code %d" % ret
+    print("  PASS")
+
+
+def test_java11_client(port):
+    print("== java11-client: build and run")
+    if not _have_jdk_version(11):
+        print("  SKIP: JDK 11 not available (no JDK 11 and javac < 11)")
+        return
+    env = _java_build_env(11)
+    ret = subprocess.call(["./build_simple.sh", "127.0.0.1", str(port)],
+                          cwd=JAVA11_CLIENT_DIR, env=env)
+    assert ret == 0, "java11-client failed with code %d" % ret
+    print("  PASS")
+
+
+def test_java21_client(port):
+    print("== java21-client: build and run")
+    if not _have_jdk_version(21):
+        print("  SKIP: JDK 21 not available")
+        return
+    env = _java_build_env(21)
+    ret = subprocess.call(["./build_simple.sh", "127.0.0.1", str(port)],
+                          cwd=JAVA21_CLIENT_DIR, env=env)
+    assert ret == 0, "java21-client failed with code %d" % ret
     print("  PASS")
 
 
@@ -351,7 +462,9 @@ def main():
         test_cpp_gen_client(port)
         test_py_gen_client(port)
         test_cpp99_client(port)
-        test_java_client(port)
+        test_java11_client(port)
+        test_java17_client(port)
+        test_java21_client(port)
     finally:
         stop_server(proc)
     print("all smoke tests passed")

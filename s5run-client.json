@@ -6,7 +6,7 @@
       "namespace": "s5run_cli_example"
     },
     "java": {
-      "output-dir": "tests/java-client/src/",
+      "output-dir": "tests/java21-client/src/",
       "package": "com.s5run.example"
     },
     "py": {
@@ -20,6 +20,14 @@
     "cpp99": {
       "output-dir": "tests/cpp99-client/s5run_cli/",
       "namespace": "s5run_cli_cpp99"
+    },
+    "java17": {
+      "output-dir": "tests/java17-client/src/",
+      "package": "com.s5run.example"
+    },
+    "java11": {
+      "output-dir": "tests/java11-client/src/",
+      "package": "com.s5run.example"
     }
   },
   "version": 1,

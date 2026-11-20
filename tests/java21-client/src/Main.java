@@ -152,11 +152,11 @@ public class Main {
         primitivesWithTwoServers();
         errorPath();
 
-        System.out.println("java-client: all smoke tests passed");
+        System.out.println("java21-client: all smoke tests passed");
     }
 
     static void happyPath() {
-        System.out.println("== java-client: happy path");
+        System.out.println("== java21-client: happy path");
         try (Context ctx = new Context()
                 .addClass(new MyFile(1024))
                 .addFunction(new MyGetFile())
@@ -193,7 +193,7 @@ public class Main {
     }
 
     static void primitivesWithTwoServers() {
-        System.out.println("== java-client: primitives (two servers)");
+        System.out.println("== java21-client: primitives (two servers)");
         try (Context ctx = new Context()
                 .addFunction(new MyGetPi())
                 .addFunction(new MyGetServerPort())
@@ -214,7 +214,7 @@ public class Main {
     }
 
     static void errorPath() {
-        System.out.println("== java-client: error path");
+        System.out.println("== java21-client: error path");
         try (Context ctx = new Context()
                 .addFunction(new MyHasFile())
                 .addServer(new RemoteServerInfo().address(address))

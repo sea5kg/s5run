@@ -84,7 +84,7 @@ class _Java17Generator:
 
     def __init__(self, schema):
         self.schema = schema
-        self.pkg = schema.java_package
+        self.pkg = schema.java21_package
 
     # ------------------------------------------------------------------
     # file helpers
@@ -266,8 +266,8 @@ class _Java17Generator:
     # files
     # ------------------------------------------------------------------
 
-    def generate(self, java_output_dir: str) -> None:
-        pkg_dir = os.path.join(java_output_dir, *self.pkg.split("."))
+    def generate(self, java21_output_dir: str) -> None:
+        pkg_dir = os.path.join(java21_output_dir, *self.pkg.split("."))
         os.makedirs(pkg_dir, exist_ok=True)
 
         self._write(pkg_dir, "Wire", self._wire())
@@ -323,30 +323,31 @@ public final class ClientVersion {{
 
         encode_value = '''
     public static void encodeValue(Writer w, Value v) {
-        switch (v) {
-            case Value.Null n -> w.u8(T_UNDEFINED);
-            case Value.Bool b -> { w.u8(T_BOOL); w.bool(b.v()); }
-            case Value.Int i -> w.int64(i.v());
-            case Value.Dbl d -> { w.u8(T_FLOAT64); w.f64(d.v()); }
-            case Value.Str s -> w.strValue(s.v());
-            case Value.Arr a -> {
-                w.u8(T_ARRAY);
-                w.u32(a.v().size());
-                for (Value e : a.v()) encodeValue(w, e);
+        if (v instanceof Value.Null) {
+            w.u8(T_UNDEFINED);
+        } else if (v instanceof Value.Bool b) {
+            w.u8(T_BOOL); w.bool(b.v());
+        } else if (v instanceof Value.Int i) {
+            w.int64(i.v());
+        } else if (v instanceof Value.Dbl d) {
+            w.u8(T_FLOAT64); w.f64(d.v());
+        } else if (v instanceof Value.Str s) {
+            w.strValue(s.v());
+        } else if (v instanceof Value.Arr a) {
+            w.u8(T_ARRAY);
+            w.u32(a.v().size());
+            for (Value e : a.v()) encodeValue(w, e);
+        } else if (v instanceof Value.Obj o) {
+            w.u8(T_OBJECT);
+            w.u32(o.v().size());
+            for (var en : o.v().entrySet()) {
+                w.strValue(en.getKey());
+                encodeValue(w, en.getValue());
             }
-            case Value.Obj o -> {
-                w.u8(T_OBJECT);
-                w.u32(o.v().size());
-                for (var en : o.v().entrySet()) {
-                    w.strValue(en.getKey());
-                    encodeValue(w, en.getValue());
-                }
-            }
-            case Value.Ref rf -> {
-                w.u8(T_REF);
-                w.i32(rf.thisId());
-                w.str(rf.type());
-            }
+        } else if (v instanceof Value.Ref rf) {
+            w.u8(T_REF);
+            w.i32(rf.thisId());
+            w.str(rf.type());
         }
     }
 
@@ -383,14 +384,12 @@ public final class ClientVersion {{
 
         value_to_string = '''
     public static String valueToString(Value v) {
-        return switch (v) {
-            case Value.Null n -> "null";
-            case Value.Bool b -> Boolean.toString(b.v());
-            case Value.Int i -> Long.toString(i.v());
-            case Value.Dbl d -> Double.toString(d.v());
-            case Value.Str s -> s.v();
-            default -> throw new RuntimeException("wire: expected a scalar argument");
-        };
+        if (v instanceof Value.Null) return "null";
+        if (v instanceof Value.Bool b) return Boolean.toString(b.v());
+        if (v instanceof Value.Int i) return Long.toString(i.v());
+        if (v instanceof Value.Dbl d) return Double.toString(d.v());
+        if (v instanceof Value.Str s) return s.v();
+        throw new RuntimeException("wire: expected a scalar argument");
     }'''
 
         return f'''
@@ -1148,5 +1147,5 @@ public final class Context implements AutoCloseable {{
 '''
 
 
-def generate(schema, java_output_dir: str) -> None:
-    _Java17Generator(schema).generate(java_output_dir)
+def generate(schema, java17_output_dir: str) -> None:
+    _Java17Generator(schema).generate(java17_output_dir)

@@ -1,13 +1,15 @@
+#!/usr/bin/env python3
+##################################################################################
+#
+#            ░░░░░░░
+#           ░██▓▓▓▓▒
+#  ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
+#  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
+#   ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+#  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
+#   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
 #
 # MIT License
-#
-#           ░░░░░░░
-#          ░██▓▓▓▓▒
-# ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
-# ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
-#  ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
-# ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
-#  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
 #
 # Copyright (c) 2026 Evgenii Sopov
 #
@@ -31,6 +33,7 @@
 #
 # Original repository: https://github.com/sea5kg/s5run
 #
+##################################################################################
 
 """CLI entry point."""
 
@@ -93,7 +96,9 @@ def print_usage() -> None:
         "  all     generate client code for all configured languages\n"
         "  cpp11   generate only the C++11 client\n"
         "  cpp99   generate only the legacy C++98 client\n"
-        "  java    generate only the Java 21 client\n"
+        "  java21  generate only the Java 21 client\n"
+        "  java17  generate only the Java 17 client\n"
+        "  java11  generate only the Java 11 client\n"
         "  py      generate only the Python client\n"
         "  go      generate only the Go client\n"
         "  help    show this help"
@@ -143,7 +148,11 @@ def main(argv=None) -> int:
     elif command == "cpp99":
         gen.generate_cpp99()
     elif command == "java":
-        gen.generate_java()
+        gen.generate_java21()
+    elif command == "java17":
+        gen.generate_java17()
+    elif command == "java11":
+        gen.generate_java11()
     elif command == "py":
         gen.generate_py()
     elif command == "go":
