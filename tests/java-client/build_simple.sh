@@ -17,6 +17,7 @@ check_ret() {
 
 cd "$(dirname "$0")"
 
+# cleanup before success build
 rm -rf bin
 
 javac -d bin $(find ./src -name "*.java")
@@ -27,6 +28,10 @@ check_ret $? "Detect client version"
 
 jar -cmf manifest.mf s5run-client-$CLIENT_VERSION.jar -C bin .
 check_ret $? "Build s5run-client-$CLIENT_VERSION.jar"
+
+# cleanup bin files after success build
+rm -rf bin
+check_ret $? "rm -rf bin"
 
 java -jar s5run-client-$CLIENT_VERSION.jar "$@"
 check_ret $? "Run s5run-client-$CLIENT_VERSION.jar"
