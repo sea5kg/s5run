@@ -62,6 +62,8 @@ CPP98_CLIENT_BIN = os.path.join(CPP98_CLIENT_DIR, "bin", "cpp98-client")
 JAVA21_CLIENT_DIR = os.path.join(ROOT, "tests", "java21-client")
 JAVA17_CLIENT_DIR = os.path.join(ROOT, "tests", "java17-client")
 JAVA11_CLIENT_DIR = os.path.join(ROOT, "tests", "java11-client")
+GO_CLIENT_DIR = os.path.join(ROOT, "tests", "go-client")
+GO_CLIENT_BIN = os.path.join(GO_CLIENT_DIR, "bin", "go-client")
 
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 import py_tests.s5run_wire as w
@@ -250,6 +252,21 @@ def ensure_cpp98_client():
         _run(["cmake", "-H" + CPP98_CLIENT_DIR, "-B" + CPP98_CLIENT_BUILD,
               "-DCMAKE_BUILD_TYPE=Release"], "configure cpp98-client", cwd=ROOT)
         _run(["cmake", "--build", CPP98_CLIENT_BUILD, "--config", "Release"], "build cpp98-client")
+
+
+def _have_go():
+    return shutil.which("go") is not None
+
+
+def test_go_client(port):
+    print("== go-client: scenarios")
+    if not _have_go():
+        print("  SKIP: Go not found")
+        return
+    _run(["go", "build", "-o", GO_CLIENT_BIN, "./cmd_main.go"], "build go-client", cwd=GO_CLIENT_DIR)
+    ret = subprocess.call([GO_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
+    assert ret == 0, "go-client failed with code %d" % ret
+    print("  PASS")
 
 
 def test_cpp98_client(port):
@@ -496,6 +513,7 @@ def main():
         test_callback_error("127.0.0.1", port)
         test_cpp_gen_client(port)
         test_py_gen_client(port)
+        test_go_client(port)
         test_cpp98_client(port)
         test_java11_client(port)
         test_java17_client(port)

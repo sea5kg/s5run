@@ -115,10 +115,10 @@ type console interface {
 	Error(args []string)
 }
 
-type consoleBase struct{}
+type ConsoleBase struct{}
 
-func (consoleBase) S5RunClassName() string { return "console" }
-func (consoleBase) S5RunMethodNames() []string {
+func (ConsoleBase) S5RunClassName() string { return "console" }
+func (ConsoleBase) S5RunMethodNames() []string {
 	return []string{"log", "warning", "error"}
 }
 

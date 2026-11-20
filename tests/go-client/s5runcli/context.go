@@ -45,12 +45,16 @@ func NewContext() *Context {
 		functions: map[string]interface{}{},
 		instances: map[string]map[int]S5RunObject{},
 	}
+	for k, v := range map[string]throwingHandler{
 		"GetSize": ctx.callbackmFileGetSize,
 		"ReadBytes": ctx.callbackmFileReadBytes,
 		"GetList": ctx.callbackmFileSystemGetList,
 		"log": ctx.callbackmconsoleLog,
 		"warning": ctx.callbackmconsoleWarning,
 		"error": ctx.callbackmconsoleError,
+	} {
+		ctx.handlers[k] = v
+	}
 	return ctx
 }
 

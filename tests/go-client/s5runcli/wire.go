@@ -48,6 +48,30 @@ const (
 )
 
 // readHello consumes the server greeting "s5run <version> <protocol>".
+func writeBool(w *writer, v bool) {
+	w.u8(tagBool)
+	if v {
+		w.u8(1)
+	} else {
+		w.u8(0)
+	}
+}
+
+func writeDouble(w *writer, v float64) {
+	w.u8(tagFloat64)
+	w.f64(v)
+}
+
+func writeStrValue(w *writer, v string) {
+	w.u8(tagString)
+	w.rawStr(v)
+}
+
+func writeByte(w *writer, v byte) {
+	w.u8(tagUint8)
+	w.u8(v)
+}
+
 func readHello(conn net.Conn) error {
 	msgType, body, err := readFrame(conn)
 	if err != nil || msgType != msgServerHello {
@@ -171,7 +195,9 @@ func readInt(r *reader) int64 {
 	case tagInt8:
 		return int64(int8(r.u8()))
 	case tagInt16:
-		return int64(int16(binary.LittleEndian.Uint16(r.data[r.pos:])))
+		v := int64(int16(binary.LittleEndian.Uint16(r.data[r.pos:])))
+		r.pos += 2
+		return v
 	case tagInt32, tagUint32:
 		return int64(r.i32())
 	case tagInt64, tagUint64:

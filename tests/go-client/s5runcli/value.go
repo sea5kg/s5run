@@ -2,6 +2,8 @@
 // TODO: not compiled yet (no Go toolchain available at generation time).
 package s5runcli
 
+import "fmt"
+
 // Value is any script argument/result value.
 type Value interface{ isValue() }
 
