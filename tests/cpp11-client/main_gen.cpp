@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
       if (log_message != "hello test.txt 1 2") {
         throw std::runtime_error("unexpected console log: " + log_message);
       }
-      std::printf("  console.log got: \"%s\"\n", log_message);
+      std::printf("  console.log got: \"%s\"\n", log_message.c_str());
     }
     std::printf("  PASS\n");
   }
