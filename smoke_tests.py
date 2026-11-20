@@ -486,6 +486,7 @@ def main():
         test_java21_client(port)
     finally:
         stop_server(proc)
+        UtilsSmokeTests.clean_binaries(LOG.get_logger())
     print("all smoke tests passed")
 
 

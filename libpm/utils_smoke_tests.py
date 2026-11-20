@@ -100,3 +100,26 @@ class UtilsSmokeTests:
         else:
             _log.info("-> Cleanup. Nothing to clean")
         # sys.exit(1)
+
+    @staticmethod
+    def clean_binaries(_log):
+        """ Delete all generated code AND build artifacts to guarantee a fresh build. """
+        _tests_dir = os.path.join(ROOT_DIR, "tests")
+        _tests_dir = os.path.normpath(_tests_dir)
+        _counter = 0
+        for _dir in os.listdir(_tests_dir):
+            _dir = os.path.join(_tests_dir, _dir)
+            _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "bin")  # go, cpp
+
+            # *.jar files
+            for _file in os.listdir(_dir):
+                _file = os.path.join(_dir, _file)
+                if _file.endswith(".jar"):
+                    os.remove(_file)
+                    _counter += 1
+                    _log.debug("Removed: %s", _file)
+        if _counter > 0:
+            _log.info("-> Cleanup binaries. " + str(_counter) + " files and dirs cleaned.")
+        else:
+            _log.info("-> Cleanup binaries. Nothing to clean")
+        # sys.exit(1)
