@@ -16,6 +16,10 @@
     "go": {
       "output-dir": "tests/go-client/s5runcli/",
       "package": "s5runcli"
+    },
+    "cpp99": {
+      "output-dir": "tests/cpp99-client/s5run_cli/",
+      "namespace": "s5run_cli_cpp99"
     }
   },
   "version": 1,

@@ -92,7 +92,8 @@ def print_usage() -> None:
         f"  init    create a default example {SCHEMA_FILE} in the current directory\n"
         "  all     generate client code for all configured languages\n"
         "  cpp11   generate only the C++11 client\n"
-        "  java    generate only the Java client\n"
+        "  cpp99   generate only the legacy C++98 client\n"
+        "  java    generate only the Java 21 client\n"
         "  py      generate only the Python client\n"
         "  go      generate only the Go client\n"
         "  help    show this help"
@@ -139,6 +140,8 @@ def main(argv=None) -> int:
         gen.generate_all()
     elif command == "cpp11":
         gen.generate_cpp11()
+    elif command == "cpp99":
+        gen.generate_cpp99()
     elif command == "java":
         gen.generate_java()
     elif command == "py":

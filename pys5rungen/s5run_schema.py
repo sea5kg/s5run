@@ -133,6 +133,8 @@ class S5RunCliSchema:
         self.py_output_dir = ""
         self.go_output_dir = ""
         self.go_package = ""
+        self.cpp99_output_dir = ""
+        self.cpp99_namespace = ""
         self.functions: List[S5RunCliFunction] = []
         self.classes: List[S5RunCliClass] = []
 
@@ -147,6 +149,7 @@ class S5RunCliSchema:
         self.__parse_java_options()
         self.__parse_py_options()
         self.__parse_go_options()
+        self.__parse_cpp99_options()
         self.__resolve_names()
         self.__parse_functions()
         self.__parse_classes()
@@ -203,6 +206,15 @@ class S5RunCliSchema:
             self.go_package = section["package"]
             if not self.namespace:
                 self.namespace = section["package"]
+
+    def __parse_cpp99_options(self):
+        section = self.__parse_options_section("cpp99", required=False)
+        if section is None:
+            return
+        if "namespace" not in section:
+            sys.exit("Missing 'namespace' in options.cpp99 " + str(section))
+        self.cpp99_output_dir = section["output-dir"]
+        self.cpp99_namespace = section["namespace"]
 
     def __resolve_names(self):
         # Languages without an explicit name fall back to the shared namespace.
@@ -324,7 +336,8 @@ class S5RunCliSchema:
 
     def __validate(self) -> None:
         if (not self.cpp_output_dir and not self.java_output_dir
-                and not self.py_output_dir and not self.go_output_dir):
+                and not self.py_output_dir and not self.go_output_dir
+                and not self.cpp99_output_dir):
             sys.exit("S5RunCliSchema: no output dirs configured (options.cpp11/java/py)")
 
         if (self.java_output_dir or self.py_output_dir) and not self.namespace:

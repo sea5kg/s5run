@@ -39,8 +39,8 @@ Generator
 import os
 
 from .s5run_schema import S5RunCliSchema
-from . import (s5run_cpp11_generator, s5run_go_generator, s5run_java_generator,
-               s5run_py_generator)
+from . import (s5run_cpp11_generator, s5run_cpp99_generator, s5run_go_generator,
+               s5run_java_generator, s5run_py_generator)
 
 
 class S5RunCliGenerator:
@@ -71,6 +71,16 @@ class S5RunCliGenerator:
             return
         s5run_java_generator.generate(s, s.java_output_dir)
 
+    def generate_cpp99(self) -> None:
+        s = self.schema
+        if not s.cpp99_output_dir:
+            return
+        os.makedirs(s.cpp99_output_dir, exist_ok=True)
+        with open(os.path.join(s.cpp99_output_dir, f"{s.cpp99_namespace}.h"), "w", encoding="utf-8") as f:
+            f.write(s5run_cpp99_generator.generate_header(s))
+        with open(os.path.join(s.cpp99_output_dir, f"{s.cpp99_namespace}.cpp"), "w", encoding="utf-8") as f:
+            f.write(s5run_cpp99_generator.generate_impl(s))
+
     def generate_go(self) -> None:
         s = self.schema
         if not s.go_output_dir:
@@ -79,6 +89,7 @@ class S5RunCliGenerator:
 
     def generate_all(self) -> None:
         self.generate_cpp11()
+        self.generate_cpp99()
         self.generate_py()
         self.generate_java()
         self.generate_go()
@@ -92,6 +103,9 @@ class S5RunCliGenerator:
             lines.append(f"py   -> {s.py_output_dir}{s.py_module}.py")
         if what in ("all", "java") and s.java_output_dir:
             lines.append(f"java -> {s.java_output_dir}{s.java_package.replace('.', '/')}/")
+        if what in ("all", "cpp99") and s.cpp99_output_dir:
+            lines.append(f"cpp99-> {s.cpp99_output_dir}{s.cpp99_namespace}.h, "
+                         f"{s.cpp99_output_dir}{s.cpp99_namespace}.cpp")
         if what in ("all", "go") and s.go_output_dir:
             lines.append(f"go   -> {s.go_output_dir} (package {s.go_package})")
         return "\n".join(lines)
