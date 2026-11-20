@@ -56,9 +56,9 @@ SERVER_BIN = os.path.join(ROOT, "s5run")
 CPP11_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp11-client")
 CPP11_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp11-client")
 CPP11_GEN_BIN = os.path.join(CPP11_CLIENT_DIR, "bin", "cpp11-client")
-CPP99_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp99-client")
-CPP99_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp99-client")
-CPP99_CLIENT_BIN = os.path.join(CPP99_CLIENT_DIR, "bin", "cpp99-client")
+CPP98_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp98-client")
+CPP98_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp98-client")
+CPP98_CLIENT_BIN = os.path.join(CPP98_CLIENT_DIR, "bin", "cpp98-client")
 JAVA21_CLIENT_DIR = os.path.join(ROOT, "tests", "java21-client")
 JAVA17_CLIENT_DIR = os.path.join(ROOT, "tests", "java17-client")
 JAVA11_CLIENT_DIR = os.path.join(ROOT, "tests", "java11-client")
@@ -107,8 +107,8 @@ def _generated_outputs():
     rel = lambda p: os.path.join(ROOT, p)
     outputs = []
 
-    # C++ variants (cpp11, cpp99): {output-dir}/{namespace}.h + .cpp
-    for name in ("cpp11", "cpp99"):
+    # C++ variants (cpp11, cpp98): {output-dir}/{namespace}.h + .cpp
+    for name in ("cpp11", "cpp98"):
         if name in options:
             ns = options[name].get("namespace", "")
             outputs += [
@@ -145,9 +145,9 @@ def _clean_generated_outputs():
     import shutil
     dirs_to_clean = [
         os.path.join(ROOT, "tests", "cpp11-client", "bin"),
-        os.path.join(ROOT, "tests", "cpp99-client", "bin"),
+        os.path.join(ROOT, "tests", "cpp98-client", "bin"),
         os.path.join(ROOT, "tmp", "cpp11-client"),
-        os.path.join(ROOT, "tmp", "cpp99-client"),
+        os.path.join(ROOT, "tmp", "cpp98-client"),
     ]
     jars = glob.glob(os.path.join(ROOT, "tests", "java*-client", "s5run-client-*.jar"))
     for jar in jars:
@@ -244,18 +244,18 @@ def test_py_gen_client(port):
     print("  PASS")
 
 
-def ensure_cpp99_client():
-    inputs = _iter_files(CPP99_CLIENT_DIR)
-    if not os.path.exists(CPP99_CLIENT_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP99_CLIENT_BIN):
-        _run(["cmake", "-H" + CPP99_CLIENT_DIR, "-B" + CPP99_CLIENT_BUILD,
-              "-DCMAKE_BUILD_TYPE=Release"], "configure cpp99-client", cwd=ROOT)
-        _run(["cmake", "--build", CPP99_CLIENT_BUILD, "--config", "Release"], "build cpp99-client")
+def ensure_cpp98_client():
+    inputs = _iter_files(CPP98_CLIENT_DIR)
+    if not os.path.exists(CPP98_CLIENT_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP98_CLIENT_BIN):
+        _run(["cmake", "-H" + CPP98_CLIENT_DIR, "-B" + CPP98_CLIENT_BUILD,
+              "-DCMAKE_BUILD_TYPE=Release"], "configure cpp98-client", cwd=ROOT)
+        _run(["cmake", "--build", CPP98_CLIENT_BUILD, "--config", "Release"], "build cpp98-client")
 
 
-def test_cpp99_client(port):
-    print("== cpp99-client: scenarios")
-    ret = subprocess.call([CPP99_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "cpp99-client failed with code %d" % ret
+def test_cpp98_client(port):
+    print("== cpp98-client: scenarios")
+    ret = subprocess.call([CPP98_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
+    assert ret == 0, "cpp98-client failed with code %d" % ret
     print("  PASS")
 
 
@@ -485,7 +485,7 @@ def main():
     ensure_generated()
     ensure_server()
     ensure_cpp_client()
-    ensure_cpp99_client()
+    ensure_cpp98_client()
 
     port = _free_port()
     proc = start_server(port)
@@ -496,7 +496,7 @@ def main():
         test_callback_error("127.0.0.1", port)
         test_cpp_gen_client(port)
         test_py_gen_client(port)
-        test_cpp99_client(port)
+        test_cpp98_client(port)
         test_java11_client(port)
         test_java17_client(port)
         test_java21_client(port)

@@ -1,5 +1,5 @@
 // AUTO-GENERATED. DO NOT EDIT.
-#include "s5run_cli_cpp99.h"
+#include "s5run_cli_cpp98.h"
 
 #ifdef _WIN32
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -23,7 +23,7 @@
 #include <ctime>
 #include <stdexcept>
 
-namespace s5run_cli_cpp99 {
+namespace s5run_cli_cpp98 {
 
 namespace {
 
@@ -1355,4 +1355,4 @@ run_result run_script(context *ctx, const std::string &entry, const std::vector<
     return ctx->m_impl->run(entry, args);
 }
 
-} // namespace s5run_cli_cpp99
+} // namespace s5run_cli_cpp98

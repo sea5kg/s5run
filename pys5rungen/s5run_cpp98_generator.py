@@ -1,13 +1,15 @@
+#!/usr/bin/env python3
+##################################################################################
+#
+#            ░░░░░░░
+#           ░██▓▓▓▓▒
+#  ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
+#  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
+#   ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+#  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
+#   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
 #
 # MIT License
-#
-#           ░░░░░░░
-#          ░██▓▓▓▓▒
-# ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
-# ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
-#  ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
-# ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
-#  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ▒▒▒▒ ▒▒░ ░▒▒   ▒▒░
 #
 # Copyright (c) 2026 Evgenii Sopov
 #
@@ -18,8 +20,8 @@
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
 #
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
 #
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -31,6 +33,7 @@
 #
 # Original repository: https://github.com/sea5kg/s5run
 #
+##################################################################################
 
 """C++98 client generator for legacy toolchains (Windows/Linux portable)."""
 
@@ -135,11 +138,11 @@ class _Usage:
         return "array__" + self.suffix(ref.inner())
 
 
-class _Cpp99Generator:
+class _Cpp98Generator:
 
     def __init__(self, schema):
         self.schema = schema
-        self.ns = schema.get_cpp_options("cpp99").namespace()
+        self.ns = schema.get_cpp_options("cpp98").namespace()
         self.usage = _Usage()
         for c in schema.classes:
             for m in c.methods():
@@ -1746,8 +1749,8 @@ int remote_server_info::get_port() const { return m_port; }"""
 
 
 def generate_header(schema) -> str:
-    return _Cpp99Generator(schema).generate_header()
+    return _Cpp98Generator(schema).generate_header()
 
 
 def generate_impl(schema) -> str:
-    return _Cpp99Generator(schema).generate_impl()
+    return _Cpp98Generator(schema).generate_impl()

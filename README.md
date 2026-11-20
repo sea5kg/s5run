@@ -25,7 +25,7 @@ Hardcoded file `s5run-client.json`
 
 Supported:
 
-- cpp99 - generate client library code for C++ 99 standard
+- cpp98 - generate client library code for C++ 98 standard
 - cpp11 - generate client library code for C++ 11 standard
 - java11 - generate client library for java11
 - java17 - generate client library for java17

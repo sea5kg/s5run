@@ -1,7 +1,7 @@
 // Smoke test for the GENERATED legacy C++98 client (Windows/Linux portable).
 //
-// Usage: ./cpp99-client [host] [port]
-#include "s5run_cli_cpp99.h"
+// Usage: ./cpp98-client [host] [port]
+#include "s5run_cli_cpp98.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -32,28 +32,28 @@ static const char *kScript =
     "    };\n"
     "}\n";
 
-class MyFile : public s5run_cli_cpp99::File {
+class MyFile : public s5run_cli_cpp98::File {
 public:
-    explicit MyFile(s5run_cli_cpp99::i64 size) : m_size(size) {}
+    explicit MyFile(s5run_cli_cpp98::i64 size) : m_size(size) {}
 
-    virtual s5run_cli_cpp99::i64 GetSize() { return m_size; }
+    virtual s5run_cli_cpp98::i64 GetSize() { return m_size; }
 
-    virtual std::vector<s5run_cli_cpp99::u8> ReadBytes(s5run_cli_cpp99::i64 readBytes) {
-        std::vector<s5run_cli_cpp99::u8> out;
-        for (s5run_cli_cpp99::i64 i = 0; i < readBytes; ++i)
-            out.push_back((s5run_cli_cpp99::u8)('a' + (int)(i % 26)));
+    virtual std::vector<s5run_cli_cpp98::u8> ReadBytes(s5run_cli_cpp98::i64 readBytes) {
+        std::vector<s5run_cli_cpp98::u8> out;
+        for (s5run_cli_cpp98::i64 i = 0; i < readBytes; ++i)
+            out.push_back((s5run_cli_cpp98::u8)('a' + (int)(i % 26)));
         return out;
     }
 
 private:
-    s5run_cli_cpp99::i64 m_size;
+    s5run_cli_cpp98::i64 m_size;
 };
 
-class MyGetFile : public s5run_cli_cpp99::GlobalFunction_GetFile {
+class MyGetFile : public s5run_cli_cpp98::GlobalFunction_GetFile {
 public:
     static std::string last_path;
 
-    virtual s5run_cli_cpp99::File *execute(const std::string &filepath) {
+    virtual s5run_cli_cpp98::File *execute(const std::string &filepath) {
         last_path = filepath;
         return new MyFile(1024);
     }
@@ -61,58 +61,58 @@ public:
 
 std::string MyGetFile::last_path;
 
-class MyGetFileSize : public s5run_cli_cpp99::GlobalFunction_GetFileSize {
+class MyGetFileSize : public s5run_cli_cpp98::GlobalFunction_GetFileSize {
 public:
-    virtual s5run_cli_cpp99::i64 execute(s5run_cli_cpp99::File *file) {
+    virtual s5run_cli_cpp98::i64 execute(s5run_cli_cpp98::File *file) {
         return file->GetSize();
     }
 };
 
-class MyGetTimeNow : public s5run_cli_cpp99::GlobalFunction_GetTimeNow {
+class MyGetTimeNow : public s5run_cli_cpp98::GlobalFunction_GetTimeNow {
 public:
-    virtual s5run_cli_cpp99::i64 execute() { return 1737000000LL; }
+    virtual s5run_cli_cpp98::i64 execute() { return 1737000000LL; }
 };
 
-class MyHasFile : public s5run_cli_cpp99::GlobalFunction_HasFile {
+class MyHasFile : public s5run_cli_cpp98::GlobalFunction_HasFile {
 public:
     virtual bool execute(const std::string &filepath) {
         throw std::runtime_error("boom-hasfile");
     }
 };
 
-class MyGetOpenedFiles : public s5run_cli_cpp99::GlobalFunction_GetOpenedFiles {
+class MyGetOpenedFiles : public s5run_cli_cpp98::GlobalFunction_GetOpenedFiles {
 public:
-    virtual std::vector<s5run_cli_cpp99::File *> execute() {
-        std::vector<s5run_cli_cpp99::File *> out;
+    virtual std::vector<s5run_cli_cpp98::File *> execute() {
+        std::vector<s5run_cli_cpp98::File *> out;
         out.push_back(new MyFile(100));
         out.push_back(new MyFile(200));
         return out;
     }
 };
 
-static std::vector<s5run_cli_cpp99::i64> g_closed_sizes;
+static std::vector<s5run_cli_cpp98::i64> g_closed_sizes;
 
-class MyCloseFiles : public s5run_cli_cpp99::GlobalFunction_CloseFiles {
+class MyCloseFiles : public s5run_cli_cpp98::GlobalFunction_CloseFiles {
 public:
-    virtual void execute(const std::vector<s5run_cli_cpp99::File *> &files) {
+    virtual void execute(const std::vector<s5run_cli_cpp98::File *> &files) {
         for (std::size_t i = 0; i < files.size(); ++i)
             g_closed_sizes.push_back(files[i]->GetSize());
     }
 };
 
-class MyGetPi : public s5run_cli_cpp99::GlobalFunction_GetPi {
+class MyGetPi : public s5run_cli_cpp98::GlobalFunction_GetPi {
 public:
     virtual double execute() { return 3.14; }
 };
 
-class MyGetServerPort : public s5run_cli_cpp99::GlobalFunction_GetServerPort {
+class MyGetServerPort : public s5run_cli_cpp98::GlobalFunction_GetServerPort {
 public:
-    virtual s5run_cli_cpp99::i64 execute() { return 8080; }
+    virtual s5run_cli_cpp98::i64 execute() { return 8080; }
 };
 
 static std::vector<std::string> g_logs;
 
-class MyConsole : public s5run_cli_cpp99::console {
+class MyConsole : public s5run_cli_cpp98::console {
 public:
     virtual void log(const std::vector<std::string> &args) {
         std::string line;
@@ -130,7 +130,7 @@ public:
 
 static std::string g_fs_last_path;
 
-class MyFileSystem : public s5run_cli_cpp99::FileSystem {
+class MyFileSystem : public s5run_cli_cpp98::FileSystem {
 public:
     virtual std::vector<std::string> GetList(const std::string &filepath) {
         g_fs_last_path = filepath;
@@ -153,13 +153,13 @@ int main(int argc, char **argv) {
     std::string address = "s5run://" + host + ":" + (argc > 2 ? argv[2] : "7777");
 
     try {
-        check(std::string(s5run_cli_cpp99::context::client_version()) == "1.0.0",
+        check(std::string(s5run_cli_cpp98::context::client_version()) == "1.0.0",
               "client version");
 
         // == happy path
-        std::printf("== cpp99-client: happy path\n");
+        std::printf("== cpp98-client: happy path\n");
         {
-            s5run_cli_cpp99::context *ctx = s5run_cli_cpp99::make_context();
+            s5run_cli_cpp98::context *ctx = s5run_cli_cpp98::make_context();
             MyFile sample(1024);
             ctx->add_class(&sample);
             ctx->add_function(new MyGetFile());
@@ -174,21 +174,21 @@ int main(int argc, char **argv) {
             ctx->add_object(&fs);
             ctx->add_object(&con);
 
-            s5run_cli_cpp99::remote_server_info server0;
+            s5run_cli_cpp98::remote_server_info server0;
             server0.set_address(address);
             server0.set_api_key("some api key runner");
             ctx->add_server(&server0);
             ctx->set_script(kScript);
 
-            std::vector<s5run_cli_cpp99::value> args;
-            args.push_back(s5run_cli_cpp99::value("test.txt"));
-            s5run_cli_cpp99::run_result result = s5run_cli_cpp99::run_script(ctx, "main", args);
+            std::vector<s5run_cli_cpp98::value> args;
+            args.push_back(s5run_cli_cpp98::value("test.txt"));
+            s5run_cli_cpp98::run_result result = s5run_cli_cpp98::run_script(ctx, "main", args);
             delete ctx;
             if (result.has_error())
                 throw std::runtime_error("unexpected error: " + result.error());
             std::printf("  duration: %lld ms\n", (long long)result.duration());
 
-            const std::map<std::string, s5run_cli_cpp99::value> &obj = result.get_value().as_object();
+            const std::map<std::string, s5run_cli_cpp98::value> &obj = result.get_value().as_object();
             check(obj.find("size")->second.as_int() == 1024, "size");
             check(obj.find("sizeByRef")->second.as_int() == 1024, "sizeByRef");
             check(obj.find("openedCount")->second.as_int() == 2, "openedCount");
@@ -204,24 +204,24 @@ int main(int argc, char **argv) {
         }
 
         // == primitives (two servers, load balancing)
-        std::printf("== cpp99-client: primitives (two servers)\n");
+        std::printf("== cpp98-client: primitives (two servers)\n");
         {
-            s5run_cli_cpp99::context *ctx = s5run_cli_cpp99::make_context();
+            s5run_cli_cpp98::context *ctx = s5run_cli_cpp98::make_context();
             ctx->add_function(new MyGetPi());
             ctx->add_function(new MyGetServerPort());
-            s5run_cli_cpp99::remote_server_info s0;
+            s5run_cli_cpp98::remote_server_info s0;
             s0.set_address(address);
-            s5run_cli_cpp99::remote_server_info s1;
+            s5run_cli_cpp98::remote_server_info s1;
             s1.set_address(address);
             ctx->add_server(&s0);
             ctx->add_server(&s1);
             ctx->set_script("function main() { return { pi: GetPi(), port: GetServerPort() }; }");
 
-            s5run_cli_cpp99::run_result result = s5run_cli_cpp99::run_script(ctx, "main");
+            s5run_cli_cpp98::run_result result = s5run_cli_cpp98::run_script(ctx, "main");
             delete ctx;
             if (result.has_error())
                 throw std::runtime_error("unexpected error: " + result.error());
-            const std::map<std::string, s5run_cli_cpp99::value> &obj = result.get_value().as_object();
+            const std::map<std::string, s5run_cli_cpp98::value> &obj = result.get_value().as_object();
             double pi = obj.find("pi")->second.as_double();
             check(pi > 3.13 && pi < 3.15, "pi");
             check(obj.find("port")->second.as_int() == 8080, "port");
@@ -229,16 +229,16 @@ int main(int argc, char **argv) {
         }
 
         // == error path
-        std::printf("== cpp99-client: error path\n");
+        std::printf("== cpp98-client: error path\n");
         {
-            s5run_cli_cpp99::context *ctx = s5run_cli_cpp99::make_context();
+            s5run_cli_cpp98::context *ctx = s5run_cli_cpp98::make_context();
             ctx->add_function(new MyHasFile());
-            s5run_cli_cpp99::remote_server_info s0;
+            s5run_cli_cpp98::remote_server_info s0;
             s0.set_address(address);
             ctx->add_server(&s0);
             ctx->set_script("function main() {\n  return HasFile(\"x\");\n}");
 
-            s5run_cli_cpp99::run_result result = s5run_cli_cpp99::run_script(ctx, "main");
+            s5run_cli_cpp98::run_result result = s5run_cli_cpp98::run_script(ctx, "main");
             delete ctx;
             check(result.has_error(), "expected error");
             std::printf("  error: %s\n", result.error().substr(0, result.error().find('\n')).c_str());
@@ -248,7 +248,7 @@ int main(int argc, char **argv) {
             std::printf("  PASS\n");
         }
 
-        std::printf("cpp99-client: all smoke tests passed\n");
+        std::printf("cpp98-client: all smoke tests passed\n");
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "!!! FAIL: %s\n", e.what());

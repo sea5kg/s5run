@@ -172,7 +172,7 @@ class S5RunCliSchema:
         self.__parse_version()
         self.__parse_client_version()
         self.__parse_cpp_options("cpp11")
-        self.__parse_cpp_options("cpp99")
+        self.__parse_cpp_options("cpp98")
         self.__parse_java21_options()
         self.__parse_java17_options()
         self.__parse_java11_options()

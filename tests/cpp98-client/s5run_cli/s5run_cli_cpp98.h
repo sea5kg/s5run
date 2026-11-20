@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace s5run_cli_cpp99 {
+namespace s5run_cli_cpp98 {
 
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -251,4 +251,4 @@ private:
 
 run_result run_script(context *ctx, const std::string &entry, const std::vector<value> &args = std::vector<value>());
 
-} // namespace s5run_cli_cpp99
+} // namespace s5run_cli_cpp98
