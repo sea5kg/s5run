@@ -7,7 +7,7 @@ import java.io.*;
 import java.net.Socket;
 import java.util.*;
 
-public final class Context {
+public final class Context implements AutoCloseable {
     @FunctionalInterface
     interface ThrowingHandler {
         void handle(int cbId, Wire.Reader r) throws Exception;
@@ -468,6 +468,7 @@ public final class Context {
         }
         RemoteServerInfo srv = servers.get(best);
         socket = new Socket(srv.getHost(), srv.getPort());
+        socket.setTcpNoDelay(true);
         socket.setSoTimeout(10000);
         in = socket.getInputStream();
         out = socket.getOutputStream();
@@ -495,6 +496,7 @@ public final class Context {
     private static long probeServerLoad(RemoteServerInfo server) {
         try (Socket probe = new Socket()) {
             probe.connect(new java.net.InetSocketAddress(server.getHost(), server.getPort()), 2000);
+            probe.setTcpNoDelay(true);
             probe.setSoTimeout(2000);
             OutputStream po = probe.getOutputStream();
             InputStream pi = probe.getInputStream();
@@ -566,6 +568,20 @@ public final class Context {
         Wire.Reader r = new Wire.Reader(f.body);
         if (r.u8() == 0) {
             throw new RuntimeException("s5run: " + what + " error: " + r.str());
+        }
+    }
+
+    /** Closes the connection; the context can be reused afterwards. */
+    @Override
+    public void close() {
+        if (socket != null) {
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+            }
+            socket = null;
+            in = null;
+            out = null;
         }
     }
 

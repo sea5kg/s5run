@@ -157,7 +157,7 @@ public class Main {
 
     static void happyPath() {
         System.out.println("== java-client: happy path");
-        Context ctx = new Context()
+        try (Context ctx = new Context()
                 .addClass(new MyFile(1024))
                 .addFunction(new MyGetFile())
                 .addFunction(new MyGetFileSize())
@@ -169,7 +169,7 @@ public class Main {
                 .addObject(new MyFileSystem())
                 .addObject(new MyConsole())
                 .addServer(new RemoteServerInfo().address(address).apiKey("some api key runner"))
-                .setScript(K_SCRIPT);
+                .setScript(K_SCRIPT)) {
 
         RunResult result = Context.runScript(ctx, "main", List.of(new Value.Str("test.txt")));
         if (result.hasError()) {
@@ -189,16 +189,17 @@ public class Main {
         check(MyConsole.logs.get(0).equals("hello test.txt 1 2"), "console.log");
         check(MyCloseFiles.closedSizes.equals(List.of(100L, 200L)), "CloseFiles sizes");
         System.out.println("  PASS");
+        }
     }
 
     static void primitivesWithTwoServers() {
         System.out.println("== java-client: primitives (two servers)");
-        Context ctx = new Context()
+        try (Context ctx = new Context()
                 .addFunction(new MyGetPi())
                 .addFunction(new MyGetServerPort())
                 .addServer(new RemoteServerInfo().address(address))
                 .addServer(new RemoteServerInfo().address(address)) // same: exercises load balancing
-                .setScript("function main() { return { pi: GetPi(), port: GetServerPort() }; }");
+                .setScript("function main() { return { pi: GetPi(), port: GetServerPort() }; }")) {
 
         RunResult result = Context.runScript(ctx, "main", List.of());
         if (result.hasError()) {
@@ -209,23 +210,26 @@ public class Main {
         check(pi > 3.13 && pi < 3.15, "pi");
         check(((Value.Int) obj.get("port")).v() == 8080, "port");
         System.out.println("  PASS");
+        }
     }
 
     static void errorPath() {
         System.out.println("== java-client: error path");
-        Context ctx = new Context()
+        try (Context ctx = new Context()
                 .addFunction(new MyHasFile())
                 .addServer(new RemoteServerInfo().address(address))
-                .setScript("function main() {\n  return HasFile(\"x\");\n}");
+                .setScript("function main() {\n  return HasFile(\"x\");\n}")) {
 
         RunResult result = Context.runScript(ctx, "main", List.of());
         if (!result.hasError()) {
             throw new RuntimeException("expected 'boom-hasfile' error");
         }
+        System.out.println("  error: " + result.error());
         System.out.println("  error line: " + result.errorLine());
         check(result.error().contains("boom-hasfile"), "boom-hasfile in error");
         check(result.errorLine() == 2, "error line");
         System.out.println("  PASS");
+        }
     }
 
     static void check(boolean cond, String what) {

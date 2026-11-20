@@ -43,6 +43,7 @@
 #include "value_wire.h"
 
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -505,6 +506,12 @@ int server::run(const std::string &listen_address, int threads) {
     sockaddr_in caddr{};
     socklen_t clen = sizeof(caddr);
     int cfd = ::accept(g_listen_fd, (sockaddr *)&caddr, &clen);
+    if (cfd >= 0) {
+      // request-response protocol: disable Nagle so the response body
+      // is not held back waiting for the header ACK (40ms delayed-ack)
+      int nodelay = 1;
+      ::setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+    }
     if (cfd < 0) {
       if (g_stop)
         break;
