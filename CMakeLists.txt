@@ -91,7 +91,7 @@ add_subdirectory(src/third_party/sqlite3)
 #     SQLITE_THREADSAFE=0
 # )
 list (APPEND WSJCPP_LIBRARIES sqlite3-static)
-list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/src/third_party/sqlite3/src")
+list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/src/third_party/sqlite3/src")
 
 
 # server
@@ -101,6 +101,7 @@ add_executable(s5run
     # src/s5run/script_engines/lua_script_engine.cpp
     src/s5run/s5run_protocol.cpp
     src/s5run/s5run_server.cpp
+    src/s5run/s5run_queue.cpp
     src/s5run/s5run_thread_pool.cpp
     src/s5run/value_wire.cpp
 )

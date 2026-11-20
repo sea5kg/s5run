@@ -12,6 +12,10 @@ M_REGISTER_TYPE = 0x07
 M_REGISTER_RESP = 0x08
 M_STATS_REQ = 0x09
 M_STATS_RESP = 0x0A
+M_JOB_SUBMIT = 0x0B
+M_JOB_SUBMIT_RESP = 0x0C
+M_JOB_RESULT_REQ = 0x0D
+M_JOB_RESULT_RESP = 0x0E
 
 T_UNDEF = 0x00
 T_BOOL = 0x01
@@ -238,6 +242,38 @@ def request_stats(sock):
     if t != M_STATS_RESP:
         raise WireError("expected stats response, got msg type %d" % t)
     return r.u32(), r.u32(), r.u32(), r.u32()
+
+
+def submit_job(sock, script, entry, args):
+    """Submit a queue job; returns its uuid."""
+    w = Writer()
+    w.s(script)
+    w.s(entry)
+    w.u32(len(args))
+    for a in args:
+        w.val(a)
+    send_msg(sock, M_JOB_SUBMIT, w.b)
+    t, r = recv_msg(sock)
+    if t != M_JOB_SUBMIT_RESP:
+        raise WireError("expected job submit response, got %d" % t)
+    if r.u8() != 1:
+        raise WireError("job submit failed: " + r.s())
+    return r.s()
+
+
+def get_job_result(sock, uuid):
+    """Ask for a job status: (status, ok, value|error); status: 0/1/2/3/255."""
+    w = Writer()
+    w.s(uuid)
+    send_msg(sock, M_JOB_RESULT_REQ, w.b)
+    t, r = recv_msg(sock)
+    if t != M_JOB_RESULT_RESP:
+        raise WireError("expected job result response, got %d" % t)
+    status = r.u8()
+    if status in (2, 3):
+        ok = r.u8()
+        return status, ok, (r.val() if ok else r.s())
+    return status, None, None
 
 
 def _expect_register_resp(sock, what):

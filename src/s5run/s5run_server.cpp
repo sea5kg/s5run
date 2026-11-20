@@ -36,6 +36,7 @@
 #include "internal/s5run_globals.h"
 
 #include "internal/s5run_thread_pool.h"
+#include "s5run_queue.h"
 #include "s5run_protocol.h"
 #include "s5run_server.h"
 #include "script_engine.h"
@@ -47,6 +48,8 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
+#include <thread>
 #include <csignal>
 #include <cstdio>
 #include <map>
@@ -59,6 +62,7 @@ namespace s5run {
 
 std::atomic<bool> g_stop{false};
 std::atomic<int> g_connected_clients{0};
+job_queue *g_queue = nullptr;
 
 static int g_listen_fd = -1;
 
@@ -121,6 +125,8 @@ private:
   void handle_exec(engine::IScriptEngine *, const std::vector<uint8_t> &body, int fd);
   void send_exec_error(int fd, std::string);
   void send_stats(int fd);
+  void handle_job_submit(const std::vector<uint8_t> &body, int fd);
+  void handle_job_result(const std::vector<uint8_t> &body, int fd);
   void send_register_resp(int fd, bool, std::string);
   void register_method_callbacks(engine::IScriptEngine *, ClientChannel &,
                                 const std::vector<std::string> &methods);
@@ -169,6 +175,12 @@ void client_handler::handle() {
       case protocol_msg_type::M_STATS_REQ:
         send_stats(m_fd);
         break;
+      case protocol_msg_type::M_JOB_SUBMIT:
+        handle_job_submit(body, m_fd);
+        break;
+      case protocol_msg_type::M_JOB_RESULT_REQ:
+        handle_job_result(body, m_fd);
+        break;
       case protocol_msg_type::M_EXEC_REQ:
         handle_exec(eng.get(), body, m_fd);
         break;
@@ -185,6 +197,50 @@ void client_handler::handle() {
   }
   g_connected_clients.fetch_sub(1);
   ::close(m_fd);
+}
+
+void client_handler::handle_job_submit(const std::vector<uint8_t> &body, int fd) {
+  wire::Reader r(body.data(), body.size());
+  std::string script = r.get_string();
+  std::string entry = r.get_string();
+  std::vector<uint8_t> args_blob;
+  {
+    // re-encode args with the count prefix for the queue worker
+    uint32_t count = r.get_u32();
+    wire::Writer w;
+    w.put_u32(count);
+    for (uint32_t i = 0; i < count; ++i) {
+      Value v = value_from_wire(r);
+      value_to_wire(v, w);
+    }
+    args_blob = w.data();
+  }
+  std::string uuid = g_queue->submit(script, entry, args_blob);
+  wire::Writer w;
+  w.put_u8(1);
+  w.put_string(uuid);
+  s5run::write_message(fd, protocol_msg_type::M_JOB_SUBMIT_RESP, w.data());
+}
+
+void client_handler::handle_job_result(const std::vector<uint8_t> &body, int fd) {
+  wire::Reader r(body.data(), body.size());
+  std::string uuid = r.get_string();
+  job_queue::job_info job;
+  wire::Writer w;
+  if (!g_queue || !g_queue->get(uuid, job)) {
+    w.put_u8(0xFF); // unknown
+    s5run::write_message(fd, protocol_msg_type::M_JOB_RESULT_RESP, w.data());
+    return;
+  }
+  w.put_u8((uint8_t)job.state);
+  if (job.has_result) {
+    w.put_u8(job.result_ok ? 1 : 0);
+    if (job.result_ok)
+      w.put_bytes(job.result_value.data(), job.result_value.size());
+    else
+      w.put_string(job.result_error);
+  }
+  s5run::write_message(fd, protocol_msg_type::M_JOB_RESULT_RESP, w.data());
 }
 
 void client_handler::send_stats(int fd) {
@@ -331,6 +387,12 @@ void server::on_signal(int) {
     ::shutdown(g_listen_fd, SHUT_RDWR);
 }
 
+void server::enable_queue(const std::string &db_path, int ttl_seconds) {
+  m_queue_enabled = true;
+  m_queue_db = db_path;
+  m_queue_ttl = ttl_seconds;
+}
+
 int server::run(const std::string &listen_address, int threads) {
 
   std::string host = "0.0.0.0";
@@ -380,6 +442,57 @@ int server::run(const std::string &listen_address, int threads) {
 
   thread_pool pool(threads);
 
+  std::unique_ptr<job_queue> queue;
+  std::thread queue_worker;
+  if (m_queue_enabled) {
+    try {
+      queue.reset(new job_queue(m_queue_db, m_queue_ttl));
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "queue: %s\n", e.what());
+      return 1;
+    }
+    g_queue = queue.get();
+    queue_worker = std::thread([&queue]() {
+      int cleanup_counter = 0;
+      while (!g_stop) {
+        job_queue::job_info job;
+        if (!queue->claim_next(job)) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          continue;
+        }
+        std::vector<Value> args;
+        try {
+          wire::Reader r(job.args.data(), job.args.size());
+          uint32_t count = r.get_u32();
+          args.reserve(count);
+          for (uint32_t i = 0; i < count; ++i)
+            args.push_back(value_from_wire(r));
+        } catch (const std::exception &e) {
+          queue->store_result(job.id, false, {}, std::string("bad args: ") + e.what());
+          continue;
+        }
+        try {
+          auto eng = engine::make_quickjs_engine();
+          engine::ExecResult res = eng->execute(job.script, job.entry, args);
+          if (res.ok) {
+            wire::Writer w;
+            value_to_wire(res.value, w);
+            queue->store_result(job.id, true, w.data(), "");
+          } else {
+            queue->store_result(job.id, false, {}, res.error);
+          }
+        } catch (const std::exception &e) {
+          queue->store_result(job.id, false, {}, e.what());
+        }
+        if (++cleanup_counter >= 100) {
+          cleanup_counter = 0;
+          queue->cleanup();
+        }
+      }
+    });
+    std::printf("queue enabled: db=%s ttl=%ds\n", m_queue_db.c_str(), m_queue_ttl);
+  }
+
   while (!g_stop) {
     sockaddr_in caddr{};
     socklen_t clen = sizeof(caddr);
@@ -399,6 +512,9 @@ int server::run(const std::string &listen_address, int threads) {
 
   if (g_listen_fd >= 0)
     ::close(g_listen_fd);
+  g_queue = nullptr;
+  if (queue_worker.joinable())
+    queue_worker.join();
   std::printf("server stopped\n");
   return 0;
 }

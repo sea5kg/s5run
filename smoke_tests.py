@@ -146,8 +146,15 @@ def _free_port():
 def start_server(port):
     print("-- start server on :%d" % port)
     log = open(os.path.join(ROOT, "tmp", "smoke-server.log"), "w")
+    queue_db = os.path.join(ROOT, "tmp", "smoke-queue.sqlite3")
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(queue_db + suffix)
+        except OSError:
+            pass
     proc = subprocess.Popen([SERVER_BIN, "--listen", "127.0.0.1:" + str(port),
-                             "--threads", "2"], cwd=ROOT,
+                             "--threads", "2", "--queue", "--db", queue_db,
+                             "--ttl", "60"], cwd=ROOT,
                             stdout=log, stderr=subprocess.STDOUT)
     deadline = time.time() + 10
     while time.time() < deadline:
@@ -229,6 +236,33 @@ function main(path) {
     print("  PASS")
 
 
+def test_queue(host, port):
+    print("== py-client: job queue")
+    sock = w.connect(host, port)
+    uuid = w.submit_job(sock, "function main(a, b) { return a + b; }", "main", [2, 3])
+    print("  submitted:", uuid)
+    for _ in range(100):
+        status, ok, payload = w.get_job_result(sock, uuid)
+        if status in (2, 3):
+            break
+        time.sleep(0.1)
+    print("  result: status=%s payload=%s" % (status, payload))
+    assert status == 2 and ok and payload == 5
+
+    uuid2 = w.submit_job(sock, "function main() { return nope(); }", "main", [])
+    for _ in range(100):
+        status2, ok2, payload2 = w.get_job_result(sock, uuid2)
+        if status2 in (2, 3):
+            break
+        time.sleep(0.1)
+    assert status2 == 3 and not ok2 and "nope" in payload2
+
+    status3, _, _ = w.get_job_result(sock, "deadbeef-0000")
+    assert status3 == 0xFF, status3
+    sock.close()
+    print("  PASS")
+
+
 def test_server_stats(host, port):
     print("== py-client: server stats")
     sock = w.connect(host, port)
@@ -292,6 +326,7 @@ def main():
     proc = start_server(port)
     try:
         test_happy_path("127.0.0.1", port)
+        test_queue("127.0.0.1", port)
         test_server_stats("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
         test_cpp_gen_client(port)

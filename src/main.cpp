@@ -52,6 +52,10 @@ static void print_usage() {
     "  --listen [host:]port  start the script server, e.g. --listen 0.0.0.0:7777\n"
     "                        (host defaults to 0.0.0.0, so --listen 7777 works too)\n"
     "  --threads N           worker threads (defaults to hardware concurrency)\n"
+    "  --queue               enable the job queue (scripts without a client\n"
+    "                        context, results stored in sqlite)\n"
+    "  --db PATH             job queue database (default s5run-queue.sqlite3)\n"
+    "  --ttl SECONDS         how long to keep finished job results (default 3600)\n"
   );
 }
 
@@ -72,6 +76,8 @@ int main(int argc, char **argv) {
   if (threads == 0)
     threads = 4;
 
+  std::string queue_db;
+  int queue_ttl = 3600;
   bool need_help = false;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -81,6 +87,12 @@ int main(int argc, char **argv) {
       listen = argv[++i];
     } else if (arg == "--threads" && i + 1 < argc) {
       threads = static_cast<size_t>(std::atoi(argv[++i]));
+    } else if (arg == "--queue") {
+      queue_db = "s5run-queue.sqlite3";
+    } else if (arg == "--db" && i + 1 < argc) {
+      queue_db = argv[++i];
+    } else if (arg == "--ttl" && i + 1 < argc) {
+      queue_ttl = std::atoi(argv[++i]);
     } else {
       std::fprintf(stderr, "Unknown argument: %s\n\n", arg.c_str());
       print_usage();
@@ -99,5 +111,7 @@ int main(int argc, char **argv) {
   }
 
   s5run::server s;
+  if (!queue_db.empty())
+    s.enable_queue(queue_db, queue_ttl);
   return s.run(listen, threads);
 }

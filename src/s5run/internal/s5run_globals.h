@@ -50,6 +50,10 @@ enum protocol_msg_type : uint8_t {
   M_REGISTER_RESP = 0x08, // server -> client: ok, error
   M_STATS_REQ = 0x09,     // client -> server: empty
   M_STATS_RESP = 0x0A,    // server -> client: threads, busy, queued, clients (u32 x4)
+  M_JOB_SUBMIT = 0x0B,      // client -> server: script, entry, u32 count, values[]
+  M_JOB_SUBMIT_RESP = 0x0C, // server -> client: u8 ok, uuid | error
+  M_JOB_RESULT_REQ = 0x0D,  // client -> server: uuid
+  M_JOB_RESULT_RESP = 0x0E, // server -> client: u8 status, [u8 ok, value | error]
 };
 
 } // namespace s5run

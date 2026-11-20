@@ -45,7 +45,14 @@ public:
   // listen_address format: [host:]port
   int run(const std::string &listen_address, int thread_count);
 
+  // Enables the job queue (scripts executed without a client context),
+  // results are stored in sqlite and kept for ttl_seconds.
+  void enable_queue(const std::string &db_path, int ttl_seconds);
+
 private:
+  bool m_queue_enabled = false;
+  std::string m_queue_db = "s5run-queue.sqlite3";
+  int m_queue_ttl = 3600;
 };
 
 } // namespace s5run
