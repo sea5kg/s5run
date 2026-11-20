@@ -1,0 +1,21 @@
+name: "s5run"
+version: "v0.1.0"
+cmake_minimum_required: "3.20"
+cmake_cxx_standard: "20"
+description: "Remote script execution on another server (JavaScript). Using a special context sharing protocol."
+
+authors:
+  - name: "Evgenii Sopov"
+    email: "mrseakg@gmail.com"
+
+keywords:
+  - "c++"
+
+dependencies:
+  - name: "wsjcpp-core"
+    version: "v0.3.0"
+    url: "https://github.com/wsjcpp/wsjcpp-core:master"
+    origin: "https://github.com/"
+    installation-dir: "./src.wsjcpp/wsjcpp_core"
+    installation-datetime: "Fri, 20 Nov 2026 03:22:50 GMT"
+

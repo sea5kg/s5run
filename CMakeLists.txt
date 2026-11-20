@@ -40,6 +40,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(EXECUTABLE_OUTPUT_PATH ${s5run_SOURCE_DIR})
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/src.wsjcpp/CMakeLists.txt)
+
+#### BEGIN_WSJCPP_APPEND
+#### END_WSJCPP_APPEND
+
 find_package(Threads REQUIRED)
 
 # include header dirs
@@ -93,18 +98,19 @@ add_subdirectory(src/third_party/sqlite3)
 list (APPEND WSJCPP_LIBRARIES sqlite3-static)
 list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/src/third_party/sqlite3/src")
 
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/main.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/script_engines/quickjs_script_engine.cpp")
+# list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/script_engines/lua_script_engine.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_protocol.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_server.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_queue.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_thread_pool.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/value_wire.cpp")
+
 
 # server
-add_executable(s5run
-    src/main.cpp
-    src/s5run/script_engines/quickjs_script_engine.cpp
-    # src/s5run/script_engines/lua_script_engine.cpp
-    src/s5run/s5run_protocol.cpp
-    src/s5run/s5run_server.cpp
-    src/s5run/s5run_queue.cpp
-    src/s5run/s5run_thread_pool.cpp
-    src/s5run/value_wire.cpp
-)
+add_executable(s5run ${WSJCPP_SOURCES})
 
 target_include_directories(
   s5run

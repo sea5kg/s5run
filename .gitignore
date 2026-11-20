@@ -1,5 +1,6 @@
 /tmp
 /s5run
+/.wsjcpp
 /test-client
 __pycache__
 /tests/cpp11-client/bin
