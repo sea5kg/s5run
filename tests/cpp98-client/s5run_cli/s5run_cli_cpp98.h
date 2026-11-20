@@ -28,66 +28,34 @@ context * make_context();
 
 class value {
 public:
-    enum kind {
-        K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF
-    };
-
-    value();
-    value(bool b);
-    value(i64 i);
-    value(double d);
-    value(const char *s);
-    value(const std::string &s);
-    value(const std::vector<value> &a);
+    enum kind { K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF };
+    value(); value(bool b); value(i64 i); value(double d); value(const char *s);
+    value(const std::string &s); value(const std::vector<value> &a);
     value(const std::map<std::string, value> &o);
-    value(const value &other);
-    value &operator=(const value &other);
-    ~value();
-
+    value(const value &other); value &operator=(const value &other); ~value();
     static value make_ref(int this_id, const std::string &type);
-
-    kind get_kind() const;
-    bool is_null() const;
-    bool as_bool() const;
-    i64 as_int() const;
-    double as_double() const;
+    kind get_kind() const; bool is_null() const; bool as_bool() const;
+    i64 as_int() const; double as_double() const;
     const std::string &as_string() const;
     const std::vector<value> &as_array() const;
     const std::map<std::string, value> &as_object() const;
-    int ref_this_id() const;
-    const std::string &ref_type() const;
-
+    int ref_this_id() const; const std::string &ref_type() const;
 private:
-    void destroy();
-    void copy_from(const value &other);
-
-    kind m_kind;
-    bool m_b;
-    i64 m_i;
-    double m_d;
-    std::string m_s;
-    std::vector<value> m_a;
-    std::map<std::string, value> m_o;
+    void destroy(); void copy_from(const value &other);
+    kind m_kind; bool m_b; i64 m_i; double m_d;
+    std::string m_s; std::vector<value> m_a; std::map<std::string, value> m_o;
 };
 
-// Settings of a remote s5run server (dedovskiy style setters).
 class remote_server_info {
 public:
     remote_server_info();
-    // Address format: s5run://host:port
     void set_address(const std::string &address);
     const std::string &get_address() const;
     void set_api_key(const std::string &api_key);
     const std::string &get_api_key() const;
-    // Valid after a successful set_address.
-    const std::string &get_host() const;
-    int get_port() const;
-
+    const std::string &get_host() const; int get_port() const;
 private:
-    std::string m_address;
-    std::string m_api_key;
-    std::string m_host;
-    int m_port;
+    std::string m_address; std::string m_api_key; std::string m_host; int m_port;
 };
 
 class s5run_object {
@@ -210,42 +178,30 @@ public:
 
 class context {
 public:
-    context();
-    ~context();
-
+    context(); ~context();
     static const char *client_version() { return "1.0.0"; }
-
     void set_script(const std::string &script);
     void add_server(remote_server_info *server);
     void add_class(s5run_object *sample);
     void add_object(s5run_object *obj);
     void add_function(s5run_function *fn);
-
     class context_impl;
-
 private:
-    context(const context &);
-    context &operator=(const context &);
-    context_impl *m_impl;
     friend run_result run_script(context *ctx, const std::string &entry,
                                  const std::vector<value> &args);
+    context_impl *m_impl;
 };
 
 class run_result {
 public:
     run_result();
-    bool has_error() const;
-    const std::string &error() const;
-    int error_line() const;
-    i64 duration() const; // milliseconds
-    const value &get_value() const;
-
+    bool has_error() const; const std::string &error() const;
+    int error_line() const; i64 duration() const; const value &get_value() const;
 private:
     friend class context::context_impl;
-    bool m_has_error;
-    std::string m_error;
-    int m_error_line;
-    i64 m_duration_ms;
+    friend run_result run_script(context *ctx, const std::string &entry,
+                                 const std::vector<value> &args);
+    bool m_has_error; std::string m_error; int m_error_line; i64 m_duration_ms;
     value m_value;
 };
 

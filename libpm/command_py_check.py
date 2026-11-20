@@ -38,7 +38,6 @@
 """ Command for linting python scripts """
 
 import sys
-import os
 import logging
 from .utils_shell import UtilsShell
 # from .pm_config import PmConfig
@@ -81,7 +80,7 @@ class CommandPyCheck:
         for py_file in check_python_files:
             ret, _output = UtilsShell.run_command_get_output(
                 self.__log,
-                ['python3', '-m', 'pycodestyle', py_file, '--max-line-length=100'],
+                ['python3', '-m', 'pycodestyle', py_file, '--max-line-length=120'],
             )
             if ret == 0:
                 self.__log.info("OK (pep8): %s", py_file)
@@ -92,7 +91,7 @@ class CommandPyCheck:
 
             ret, _output = UtilsShell.run_command_get_output(
                 self.__log,
-                ['python3', '-m', 'pylint', py_file, '--max-line-length=100'],
+                ['python3', '-m', 'pylint', py_file, '--max-line-length=120'],
             )
             if ret == 0:
                 self.__log.info("OK (pylint): %s", py_file)

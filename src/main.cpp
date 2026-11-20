@@ -41,6 +41,7 @@
 #include <iostream>
 
 #include "s5run_server.h"
+#include "generators/s5run_generators.h"
 
 static void print_usage() {
   std::printf(
@@ -57,6 +58,9 @@ static void print_usage() {
     "                        context, results stored in sqlite)\n"
     "  --db PATH             job queue database (default s5run-queue.sqlite3)\n"
     "  --ttl SECONDS         how long to keep finished job results (default 3600)\n"
+    "  --generate LANG       generate client code (cpp98)\n"
+    "  --output-dir DIR      output dir for --generate\n"
+    "  --schema FILE         schema file (default s5run-client.json)\n"
   );
 }
 
@@ -79,6 +83,9 @@ int main(int argc, char **argv) {
 
   std::string queue_db;
   int queue_ttl = 3600;
+  std::string generate_lang;
+  std::string generate_output;
+  std::string generate_schema = "s5run-client.json";
   bool need_help = false;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -94,6 +101,12 @@ int main(int argc, char **argv) {
       queue_db = argv[++i];
     } else if (arg == "--ttl" && i + 1 < argc) {
       queue_ttl = std::atoi(argv[++i]);
+    } else if (arg == "--generate" && i + 1 < argc) {
+      generate_lang = argv[++i];
+    } else if (arg == "--output-dir" && i + 1 < argc) {
+      generate_output = argv[++i];
+    } else if (arg == "--schema" && i + 1 < argc) {
+      generate_schema = argv[++i];
     } else {
       std::fprintf(stderr, "Unknown argument: %s\n\n", arg.c_str());
       print_usage();
@@ -104,6 +117,26 @@ int main(int argc, char **argv) {
   if (need_help) {
     print_usage();
     return 0;
+  }
+
+  if (!generate_lang.empty()) {
+    if (generate_output.empty()) {
+      std::fprintf(stderr, "--generate requires --output-dir\n");
+      return 1;
+    }
+    auto schema = s5run::generators::load_schema(generate_schema);
+    auto all_generators = s5run::generators::all();
+
+    if (all_generators.count(generate_lang) > 0) {
+      auto gen = all_generators[generate_lang];
+      auto files = gen->generate(schema, generate_output);
+      for (const auto &f : files)
+        std::printf("generated: %s\n", f.c_str());
+      return 0;
+    }
+
+    std::fprintf(stderr, "unknown generator: %s\n", generate_lang.c_str());
+    return 1;
   }
 
   if (listen.empty()) {

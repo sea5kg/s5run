@@ -43,7 +43,6 @@ import os
 
 from .s5run_schema import S5RunCliSchema
 from . import s5run_cpp11_generator
-from . import s5run_cpp98_generator
 from . import s5run_go_generator
 from . import s5run_java21_generator
 from . import s5run_java17_generator
@@ -82,9 +81,6 @@ class S5RunCliGenerator:
             return
         s5run_java21_generator.generate(s, s.java21_output_dir)
 
-    def generate_cpp98(self) -> None:
-        self.__generate_cpp("cpp98", s5run_cpp98_generator.generate_header, s5run_cpp98_generator.generate_impl)
-
     def generate_java17(self) -> None:
         s = self.schema
         if not s.java17_output_dir:
@@ -118,7 +114,6 @@ class S5RunCliGenerator:
 
     def generate_all(self) -> None:
         self.generate_cpp11()
-        self.generate_cpp98()
         self.generate_py()
         self.generate_java21()
         self.generate_java17()
@@ -136,10 +131,6 @@ class S5RunCliGenerator:
             lines.append(f"py   -> {s.py_output_dir}{s.py_module}.py")
         if what in ("all", "java21") and s.java21_output_dir:
             lines.append(f"java21 -> {s.java21_output_dir}{s.java21_package.replace('.', '/')}/")
-        if what in ("all", "cpp98"):
-            opt = s.get_cpp_options("cpp98")
-            # TODO redesign this from Generator.report() or something like this
-            lines.append(f"cpp98 -> {opt.output_dir()}{opt.namespace()}.h, {opt.output_dir()}{opt.namespace()}.cpp")
         if what in ("all", "java17") and s.java17_output_dir:
             lines.append(f"j17  -> {s.java17_output_dir}{s.java17_package.replace('.', '/')}/")
         if what in ("all", "java11") and s.java11_output_dir:

@@ -104,7 +104,7 @@ class CommandCodeStats:
                 all_code_lines += len(lines)
                 wsjcpp_code_lines += len(lines)
 
-        # todo update in readme
+        # may be update section in readme ?
         self.__log.info(
             "\n\n"
             "s5run code lines: %s\n"

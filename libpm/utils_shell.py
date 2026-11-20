@@ -46,11 +46,13 @@ class UtilsShell:
     """ UtilsShell """
 
     @staticmethod
-    def run_command(_command, _output=None, exit_on_error=True):
+    def run_command(_command, _log=None, exit_on_error=True, print_output_on_exit=False):
         """ run_command """
-        print("Run command: " + " ".join(_command))
-        if _output is not None:
-            _output.write("Run command: " + " ".join(_command) + "\n")
+        _collect_output = []
+        _msg = "Run command: " + " ".join(_command) + "\n"
+        _collect_output += [_msg]
+        if _log is not None:
+            _log.debug(_msg)
         with subprocess.Popen(
             _command,
             stdout=subprocess.PIPE,
@@ -63,27 +65,35 @@ class UtilsShell:
                 _line = _proc.stdout.readline()
                 if _line:
                     _line = _line.decode("utf-8").strip()
-                    print(_line)
-                    if _output is not None:
-                        _output.write(_line + "\n")
+                    _collect_output += [_line]
+                    if _log is not None:
+                        _log.debug(_line)
             while _line:
                 _line = _proc.stdout.readline()
                 if _line:
                     _line = _line.decode("utf-8").strip()
-                    print(_line)
-                    if _output is not None:
-                        _output.write(_line + "\n")
+                    _collect_output += [_line]
+                    if _log is not None:
+                        _log.debug(_line + "\n")
                 else:
                     break
             if _returncode != 0:
                 print("ERROR: returncode " + str(_returncode))
-                if _output is not None:
-                    _output.write("ERROR: returncode " + str(_returncode) + "\n")
+                _msg = "ERROR: returncode " + str(_returncode) + "\n"
+                _collect_output += [_msg]
+                if _log is not None:
+                    _log.error(_msg)
                 if exit_on_error:
+                    if print_output_on_exit:
+                        print("\n".join(_collect_output))
                     sys.exit(_returncode)
             return _returncode
-        print("ERROR: Could not start process")
+        _msg = "ERROR: Could not start process"
+        _collect_output += [_msg]
+        _log.error(_msg)
         if exit_on_error:
+            if print_output_on_exit:
+                print("\n".join(_collect_output))
             sys.exit(-1)
         return -1
 

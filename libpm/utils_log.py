@@ -43,18 +43,34 @@ import sys
 
 class UtilsLog:
     """ UtilsLog """
-    def __init__(self, name):
+    def __init__(self, name, filepath=None):
         self.__log = logging.getLogger(name)
-        self.__log.setLevel(logging.DEBUG)
         formatter = logging.Formatter(
             '[%(asctime)s] %(levelname)s [%(filename)s.%(funcName)s:%(lineno)d] %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        self.__shell_out = logging.StreamHandler(sys.stdout)
-        self.__shell_out.setLevel(logging.DEBUG)
-        self.__shell_out.setFormatter(formatter)
-        self.__log.addHandler(self.__shell_out)
+
+        # INFO / DEBUG -> stdout  (PowerShell won't wrap these)
+        self.__stdout_handler = logging.StreamHandler(sys.stdout)
+        self.__stdout_handler.setLevel(logging.INFO)
+        self.__stdout_handler.addFilter(lambda r: r.levelno < logging.WARNING)
+        formatter = logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
+        self.__stdout_handler.setFormatter(formatter)
+
+        # WARNING / ERROR / CRITICAL -> stderr
+        self.__stderr_handler = logging.StreamHandler(sys.stderr)
+        self.__stderr_handler.setLevel(logging.WARNING)
+        self.__stderr_handler.setFormatter(formatter)
+
+        self.__log.setLevel(logging.DEBUG)
         self.__log.propagate = False
+        self.__log.addHandler(self.__stdout_handler)
+        self.__log.addHandler(self.__stderr_handler)
+
+        if filepath is not None:
+            self.__file_handler = logging.FileHandler(filepath)
+            self.__file_handler.setLevel(logging.DEBUG)
+            self.__log.addHandler(self.__file_handler)
 
     def get_logger(self):
         """ return configured logger """
@@ -63,4 +79,4 @@ class UtilsLog:
     def set_level(self, level):
         """ set level """
         self.__log.setLevel(level)
-        self.__shell_out.setLevel(level)
+        self.__stdout.setLevel(level)

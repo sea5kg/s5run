@@ -50,6 +50,7 @@ from .utils_log import UtilsLog
 from .utils_files import UtilsFiles
 from .utils_shell import UtilsShell
 from .utils_strings import UtilsStrings
+from .utils_smoke_tests import UtilsSmokeTests
 
 
 def print_custom_help(parser):

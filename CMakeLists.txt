@@ -99,8 +99,13 @@ add_subdirectory(src/third_party/sqlite3)
 # )
 list (APPEND WSJCPP_LIBRARIES sqlite3-static)
 list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/src/third_party/sqlite3/src")
+list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/src/third_party")
 
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src")
+# generators
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_cpp98_generator.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generators.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_schema.cpp")
+
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/main.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/script_engines/quickjs_script_engine.cpp")
 # list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/script_engines/lua_script_engine.cpp")
