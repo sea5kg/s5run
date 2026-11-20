@@ -410,7 +410,7 @@ public final class Wire {{
         M_EXEC_REQ = 0x01, M_EXEC_RESP = 0x02, M_CALLBACK_REQ = 0x03,
         M_CALLBACK_RESP = 0x04, M_REGISTER_FUNC = 0x05, M_REGISTER_OBJ = 0x06,
         M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08,
-        M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A;
+        M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A, M_SERVER_HELLO = 0x0F;
 
     public static final class Writer {{
         private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
@@ -999,6 +999,25 @@ public final class Context {{
         socket.setSoTimeout(10000);
         in = socket.getInputStream();
         out = socket.getOutputStream();
+        readHello(in, out);
+    }}
+
+    private static void readHello(InputStream in, OutputStream out) throws Exception {{
+        byte[] head = in.readNBytes(5);
+        if (head.length < 5) throw new RuntimeException("s5run: expected server hello");
+        int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
+        int msgType = head[4] & 0xFF;
+        byte[] body = in.readNBytes(len - 1);
+        if (msgType != Wire.M_SERVER_HELLO || body.length < len - 1)
+            throw new RuntimeException("s5run: expected server hello");
+        String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        String[] parts = text.split(" ");
+        if (parts.length != 3 || !parts[0].equals("s5run"))
+            throw new RuntimeException("s5run: bad server hello: " + text);
+        int protocol = Integer.parseInt(parts[2]);
+        if (protocol != 2)
+            throw new RuntimeException("s5run: server protocol version " + protocol
+                    + " is not supported (client supports 2)");
     }}
 
     private static long probeServerLoad(RemoteServerInfo server) {{
@@ -1007,6 +1026,7 @@ public final class Context {{
             probe.setSoTimeout(2000);
             OutputStream po = probe.getOutputStream();
             InputStream pi = probe.getInputStream();
+            readHello(pi, po);
             writeFrame(po, Wire.M_STATS_REQ, new byte[0]);
             byte[] head = pi.readNBytes(5);
             if (head.length < 5) return -1;

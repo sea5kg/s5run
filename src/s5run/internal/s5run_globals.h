@@ -39,6 +39,9 @@
 
 namespace s5run {
 
+constexpr const char *S5RUN_SERVER_VERSION = "v0.1.0";
+constexpr int S5RUN_PROTOCOL_VERSION = 2;
+
 enum protocol_msg_type : uint8_t {
   M_EXEC_REQ = 0x01,      // client -> server: script, entry, args
   M_EXEC_RESP = 0x02,     // server -> client: ok, value, error
@@ -54,6 +57,8 @@ enum protocol_msg_type : uint8_t {
   M_JOB_SUBMIT_RESP = 0x0C, // server -> client: u8 ok, uuid | error
   M_JOB_RESULT_REQ = 0x0D,  // client -> server: uuid
   M_JOB_RESULT_RESP = 0x0E, // server -> client: u8 status, [u8 ok, value | error]
+  M_SERVER_HELLO = 0x0F,   // server -> client (first frame): plain text
+                           // "s5run <server-version> <protocol-version>"
 };
 
 } // namespace s5run

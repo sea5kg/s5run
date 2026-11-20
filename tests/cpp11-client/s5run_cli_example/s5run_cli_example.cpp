@@ -36,7 +36,7 @@ enum {
     M_EXEC_REQ = 0x01, M_EXEC_RESP = 0x02, M_CALLBACK_REQ = 0x03,
     M_CALLBACK_RESP = 0x04, M_REGISTER_FUNC = 0x05, M_REGISTER_OBJ = 0x06,
     M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08,
-    M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A
+    M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A, M_SERVER_HELLO = 0x0F
 };
 
 class Writer {
@@ -404,6 +404,7 @@ private:
     void _connect();
     void _disconnect();
     void _flush_pending();
+    static void _read_hello(int fd);
     static bool _send_message_fd(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);
     static bool _read_message_fd(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);
     static bool _read_exact_fd(int fd, void *buf, size_t n);
@@ -498,6 +499,23 @@ void context::impl::_connect() {
     tv.tv_usec = 0;
     ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     m_fd = fd;
+    _read_hello(m_fd);
+}
+
+void context::impl::_read_hello(int fd) {
+    uint8_t msg_type = 0;
+    std::vector<uint8_t> body;
+    if (!_read_message_fd(fd, msg_type, body) || msg_type != M_SERVER_HELLO)
+        throw std::runtime_error("s5run: expected server hello");
+    std::string text(body.begin(), body.end());
+    if (text.compare(0, 6, "s5run ") != 0)
+        throw std::runtime_error("s5run: bad server hello: " + text);
+    size_t last_space = text.rfind(' ');
+    if (last_space == std::string::npos)
+        throw std::runtime_error("s5run: bad server hello: " + text);
+    int protocol = atoi(text.substr(last_space + 1).c_str());
+    if (protocol != 2)
+        throw std::runtime_error("s5run: server protocol version " + std::to_string(protocol) + " is not supported (client supports 2)");
 }
 
 void context::impl::_disconnect() {
@@ -1111,6 +1129,7 @@ long context::impl::_probe_server_load(const std::shared_ptr<remote_server_info>
     tv.tv_sec = 2;
     tv.tv_usec = 0;
     ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    _read_hello(fd);
     std::vector<uint8_t> empty_body;
     if (!_send_message_fd(fd, M_STATS_REQ, empty_body)) {
         ::close(fd);

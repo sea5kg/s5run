@@ -110,6 +110,13 @@ int connect_to(const std::string &host, uint16_t port) {
   if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0)
     throw std::runtime_error("connect failed");
   s5run::set_recv_timeout(fd, 10000);
+
+  // consume the server hello
+  uint8_t hello_type = 0;
+  std::vector<uint8_t> hello_body;
+  if (!s5run::read_message(fd, hello_type, hello_body)
+      || hello_type != s5run::M_SERVER_HELLO)
+    throw std::runtime_error("expected server hello");
   return fd;
 }
 

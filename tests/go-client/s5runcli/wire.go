@@ -44,7 +44,29 @@ const (
 	msgRegisterResp  uint8 = 0x08
 	msgStatsReq      uint8 = 0x09
 	msgStatsResp     uint8 = 0x0A
+	msgServerHello   uint8 = 0x0F
 )
+
+// readHello consumes the server greeting "s5run <version> <protocol>".
+func readHello(conn net.Conn) error {
+	msgType, body, err := readFrame(conn)
+	if err != nil || msgType != msgServerHello {
+		return errors.New("s5run: expected server hello")
+	}
+	text := string(body)
+	if len(text) < 6 || text[:6] != "s5run " {
+		return errors.New("s5run: bad server hello: " + text)
+	}
+	for i := len(text) - 1; i > 5; i-- {
+		if text[i] == ' ' {
+			if parseInt(text[i+1:]) != 2 {
+				return errors.New("s5run: server protocol version is not supported (client supports 2)")
+			}
+			return nil
+		}
+	}
+	return errors.New("s5run: bad server hello: " + text)
+}
 
 type writer struct{ buf bytes.Buffer }
 

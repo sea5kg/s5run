@@ -19,7 +19,7 @@ public final class Wire {
         M_EXEC_REQ = 0x01, M_EXEC_RESP = 0x02, M_CALLBACK_REQ = 0x03,
         M_CALLBACK_RESP = 0x04, M_REGISTER_FUNC = 0x05, M_REGISTER_OBJ = 0x06,
         M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08,
-        M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A;
+        M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A, M_SERVER_HELLO = 0x0F;
 
     public static final class Writer {
         private final ByteArrayOutputStream buf = new ByteArrayOutputStream();

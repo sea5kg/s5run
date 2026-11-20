@@ -16,6 +16,9 @@ M_JOB_SUBMIT = 0x0B
 M_JOB_SUBMIT_RESP = 0x0C
 M_JOB_RESULT_REQ = 0x0D
 M_JOB_RESULT_RESP = 0x0E
+M_SERVER_HELLO = 0x0F
+
+SUPPORTED_PROTOCOL_VERSION = 2
 
 T_UNDEF = 0x00
 T_BOOL = 0x01
@@ -210,7 +213,28 @@ class Reader:
 
 
 def connect(host, port):
-    return socket.create_connection((host, port))
+    """Connect and consume the server hello; returns the socket."""
+    sock = socket.create_connection((host, port))
+    read_hello(sock)
+    return sock
+
+
+def read_hello(sock):
+    """Consume the server greeting: "s5run <version> <protocol>".
+
+    Returns (server_version, protocol_version); raises on mismatch."""
+    t, r = recv_msg(sock)
+    if t != M_SERVER_HELLO:
+        raise WireError("expected server hello, got msg type %d" % t)
+    text = r.d[r.p:].decode("utf-8")
+    parts = text.split(" ")
+    if len(parts) != 3 or parts[0] != "s5run":
+        raise WireError("bad server hello: %r" % text)
+    protocol = int(parts[2])
+    if protocol != SUPPORTED_PROTOCOL_VERSION:
+        raise WireError("server protocol %d, client supports %d"
+                        % (protocol, SUPPORTED_PROTOCOL_VERSION))
+    return parts[1], protocol
 
 
 def send_msg(sock, msg_type, body):

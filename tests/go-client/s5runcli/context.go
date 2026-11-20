@@ -443,7 +443,7 @@ func (ctx *Context) connect() error {
 		return err
 	}
 	ctx.conn = conn
-	return nil
+	return readHello(conn)
 }
 
 func probeServerLoad(server *RemoteServerInfo) (int64, error) {
@@ -453,6 +453,9 @@ func probeServerLoad(server *RemoteServerInfo) (int64, error) {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	if err := readHello(conn); err != nil {
+		return -1, err
+	}
 	if err := writeFrame(conn, msgStatsReq, nil); err != nil {
 		return -1, err
 	}

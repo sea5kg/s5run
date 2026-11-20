@@ -45,6 +45,7 @@ class _Msg(IntEnum):
     REGISTER_RESP = 0x08
     STATS_REQ = 0x09
     STATS_RESP = 0x0A
+    SERVER_HELLO = 0x0F
 
 
 @dataclass(frozen=True, slots=True)
@@ -885,6 +886,7 @@ class Context:
         srv = self._servers[best]
         sock = socket.create_connection((srv.host, srv.port), timeout=10.0)
         self._sock = sock
+        _read_hello(sock)
 
     def _flush_pending(self) -> None:
         for name, methods in self._pending_types:
@@ -968,17 +970,43 @@ class Context:
         self.close()
 
 
+def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    chunks = bytearray()
+    while len(chunks) < n:
+        chunk = sock.recv(n - len(chunks))
+        if not chunk:
+            raise RuntimeError("s5run: connection closed")
+        chunks += chunk
+    return bytes(chunks)
+
+
+def _read_hello(sock: socket.socket) -> None:
+    """Consume the server greeting "s5run <version> <protocol>"."""
+    import struct as _struct
+    head = _recv_exact(sock, 5)
+    (length,) = _struct.unpack(">I", head[:4])
+    if head[4] != _Msg.SERVER_HELLO:
+        raise RuntimeError("s5run: expected server hello")
+    body = sock.recv(length - 1)
+    text = body.decode("utf-8")
+    parts = text.split(" ")
+    if len(parts) != 3 or parts[0] != "s5run":
+        raise RuntimeError(f"s5run: bad server hello: {text!r}")
+    if int(parts[2]) != 2:
+        raise RuntimeError(
+            f"s5run: server protocol version {parts[2]} is not supported (client supports 2)")
+
+
 def _probe_server_load(server: RemoteServerInfo) -> int:
     try:
         with socket.create_connection((server.host, server.port), timeout=2.0) as sock:
             sock.settimeout(2.0)
             payload = bytes([_Msg.STATS_REQ])
+            _read_hello(sock)
             sock.sendall(struct.pack(">I", len(payload)) + payload)
-            head = sock.recv(5)
-            if len(head) < 5:
-                return -1
+            head = _recv_exact(sock, 5)
             (length,) = struct.unpack(">I", head[:4])
-            body = sock.recv(length - 1)
+            body = _recv_exact(sock, length - 1)
             if head[4] != _Msg.STATS_RESP or len(body) < 16:
                 return -1
             buf = _Reader(body)
