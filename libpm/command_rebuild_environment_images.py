@@ -111,9 +111,9 @@ class CommandRebuildEnvironmentImages:
             description=desc
         )
         _parser_rebuild_env_images.add_argument(
-            '--no-build',
-            dest='no_build',
-            help='Only update Dockerfile.*-environment. no build now',
+            '--build',
+            dest='build',
+            help='Update Dockerfile.*-environment and build it',
             action='store_true',
         )
 
@@ -168,13 +168,13 @@ RUN sed -i -e "s/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/" /etc/locale.gen && \\
 """)
         return _filename
 
-    def execute(self, no_build):
+    def execute(self, args):
         """ executing """
         os.chdir(self.__config.get_root_dir())
         build_env = self.__update_dockerfile_build_env()
         release_env = self.__update_dockerfile_release_env()
 
-        if no_build:
+        if not args.build:
             return
 
         self.__log.info("Rebuild environment images...")
@@ -185,6 +185,7 @@ RUN sed -i -e "s/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/" /etc/locale.gen && \\
         tag_release_today = tag_release + ":release-environment-" + self.__dt_tag
         tag_release_latest = tag_release + ":release-environment-latest"
 
+        UtilsDocker.pull_image("debian:" + self.__debian_version, self.__log)
         UtilsDocker.silent_remove_image(tag_build_today, self.__log)
         UtilsDocker.silent_remove_image(tag_build_latest, self.__log)
         UtilsDocker.silent_remove_image(tag_release_today, self.__log)

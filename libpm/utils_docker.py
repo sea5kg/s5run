@@ -69,6 +69,14 @@ class UtilsDocker:
                 sys.exit(1)
 
     @staticmethod
+    def pull_image(image_name_with_tag, _log):
+        """ pull image (refresh to latest version) """
+        ret = os.system("docker rmi " + image_name_with_tag)
+        if ret != 0:
+            _log.error("Could not pull image %s", image_name_with_tag)
+            sys.exit(1)
+
+    @staticmethod
     def build_docker_image(tag, filename, _log):
         """ build image """
         cmd = "docker build --rm --tag " + tag + " -f " + filename + " ."

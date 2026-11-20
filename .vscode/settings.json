@@ -1,12 +1,25 @@
 {
     "cSpell.words": [
+        "cerrno",
+        "cstdio",
+        "cstdlib",
+        "cstring",
         "Evgenii",
+        "FFFFFFFFL",
         "lcrypto",
         "libgenclientrunscriptsserver",
+        "libpm",
+        "libpthread",
         "lssl",
+        "netinet",
+        "npos",
         "quickjs",
         "runcligen",
+        "rungen",
         "Sopov",
+        "sprintf",
+        "stdexcept",
+        "unistd",
         "WSJCPP"
     ]
 }

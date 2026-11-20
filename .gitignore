@@ -5,4 +5,5 @@
 __pycache__
 s5run-client-*.jar
 /tests/*/bin
-
+/Dockerfile.build-environment
+/Dockerfile.release-environment

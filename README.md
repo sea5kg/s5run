@@ -209,13 +209,16 @@ $ ./build_simple.sh
 
 ## Build image
 
+### Rebuild docker images for environments
+
+Just generate Dockerfile's:
+
 ```sh
+$ ./pm.py rebuild-environment-images --build
+```
 
-# build env if need
-$ docker build --rm=true -t "sea5kg/s5run:build-environment-2026-11-20" -f Dockerfile.build-environment .
-$ docker build --rm=true -t "sea5kg/s5run:release-environment-2026-11-20" -f Dockerfile.release-environment .
-
-# build image
+Build image:
+```sh
 $ docker build --rm=true -t "sea5kg/s5run:v0.1.0" .
 ```
 
