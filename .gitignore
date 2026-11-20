@@ -4,6 +4,5 @@
 /test-client
 __pycache__
 s5run-client-*.jar
+/tests/*/bin
 
-/tests/cpp11-client/bin
-/tests/cpp99-client/bin
