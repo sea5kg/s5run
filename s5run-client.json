@@ -12,6 +12,10 @@
     "py": {
       "output-dir": "tests/py-client/",
       "module": "libs5run_cli_example"
+    },
+    "go": {
+      "output-dir": "tests/go-client/s5runcli/",
+      "package": "s5runcli"
     }
   },
   "version": 1,

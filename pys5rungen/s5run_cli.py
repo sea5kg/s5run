@@ -94,6 +94,7 @@ def print_usage() -> None:
         "  cpp11   generate only the C++11 client\n"
         "  java    generate only the Java client\n"
         "  py      generate only the Python client\n"
+        "  go      generate only the Go client\n"
         "  help    show this help"
     )
 
@@ -142,6 +143,8 @@ def main(argv=None) -> int:
         gen.generate_java()
     elif command == "py":
         gen.generate_py()
+    elif command == "go":
+        gen.generate_go()
     else:
         print(f"error: unknown command: {command}", file=sys.stderr)
         print_usage()
