@@ -6,6 +6,9 @@
 - Added wsjcpp package manager
 - Added send server hello "s5run <server-version> <protocol-version>"
 - Fixed periodically crash in java-client
+- Redesign command line
+- Generator cpp11 moved to s5run app
+- Added generators for cpp98, java11, java17, java21
 
 ## [v0.1.0] - (2026 Nov 20)
 
