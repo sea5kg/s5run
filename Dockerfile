@@ -18,4 +18,4 @@ LABEL "repository"="https://github.com/sea5kg/s5run"
 COPY --from=0 /root/s5run /usr/bin/s5run
 
 EXPOSE 7777
-CMD ["s5run","--listen", "0.0.0.0:7777"]
+CMD ["s5run", "server", "--listen", "0.0.0.0:7777"]
