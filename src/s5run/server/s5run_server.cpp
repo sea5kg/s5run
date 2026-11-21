@@ -34,14 +34,14 @@
  *
  ***********************************************************************************/
 
-#include "internal/s5run_globals.h"
+#include "s5run_globals.h"
 
-#include "internal/s5run_thread_pool.h"
+#include "s5run_thread_pool.h"
 #include "s5run_queue.h"
-#include "s5run_protocol.h"
+#include "../protocol/s5run_protocol.h"
 #include "s5run_server.h"
-#include "script_engine.h"
-#include "value_wire.h"
+#include "../engine/s5run_engine.h"
+#include "s5run_value_wire.h"
 
 #include <arpa/inet.h>
 #include <netinet/tcp.h>

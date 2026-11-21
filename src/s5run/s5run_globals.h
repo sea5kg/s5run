@@ -34,57 +34,32 @@
  *
  ***********************************************************************************/
 
-#include "internal/s5run_thread_pool.h"
+#pragma once
+
+#include <cstdint>
 
 namespace s5run {
 
-thread_pool::thread_pool(size_t n) {
-  for (size_t i = 0; i < n; ++i)
-    workers_.emplace_back([this] {
-      worker_loop();
-    });
-}
+constexpr const char *S5RUN_SERVER_VERSION = "v0.1.0";
+constexpr int S5RUN_PROTOCOL_VERSION = 2;
 
-thread_pool::~thread_pool() {
-  {
-    std::lock_guard lk(m_);
-    stop_ = true;
-  }
-  cv_.notify_all();
-  for (auto &t : workers_)
-    t.join();
-}
-
-void thread_pool::submit(std::shared_ptr<thread_pool_task> task) {
-  {
-    std::lock_guard lk(m_);
-    tasks_.push(std::move(task));
-  }
-  m_queued.fetch_add(1);
-  cv_.notify_one();
-}
-
-void thread_pool::worker_loop() {
-  while (true) {
-    std::shared_ptr<thread_pool_task> task;
-    {
-      std::unique_lock lk(m_);
-      cv_.wait(lk, [this] {
-        return stop_ || !tasks_.empty();
-      });
-      if (stop_ && tasks_.empty())
-        return;
-      task = std::move(tasks_.front());
-      tasks_.pop();
-      m_queued.fetch_sub(1);
-    }
-    m_busy.fetch_add(1);
-    try {
-      task->handle();
-    } catch (...) { /* log */
-    }
-    m_busy.fetch_sub(1);
-  }
-}
+enum protocol_msg_type : uint8_t {
+  M_EXEC_REQ = 0x01,      // client -> server: script, entry, args
+  M_EXEC_RESP = 0x02,     // server -> client: ok, value, error
+  M_CALLBACK_REQ = 0x03,  // server -> client: id, method, args
+  M_CALLBACK_RESP = 0x04, // client -> server: id, ok, value, error
+  M_REGISTER_FUNC = 0x05, // client -> server: name
+  M_REGISTER_OBJ = 0x06,  // client -> server: name, this_id, type, methods
+  M_REGISTER_TYPE = 0x07, // client -> server: name, methods
+  M_REGISTER_RESP = 0x08, // server -> client: ok, error
+  M_STATS_REQ = 0x09,     // client -> server: empty
+  M_STATS_RESP = 0x0A,    // server -> client: threads, busy, queued, clients (u32 x4)
+  M_JOB_SUBMIT = 0x0B,      // client -> server: script, entry, u32 count, values[]
+  M_JOB_SUBMIT_RESP = 0x0C, // server -> client: u8 ok, uuid | error
+  M_JOB_RESULT_REQ = 0x0D,  // client -> server: uuid
+  M_JOB_RESULT_RESP = 0x0E, // server -> client: u8 status, [u8 ok, value | error]
+  M_SERVER_HELLO = 0x0F,   // server -> client (first frame): plain text
+                           // "s5run <server-version> <protocol-version>"
+};
 
 } // namespace s5run

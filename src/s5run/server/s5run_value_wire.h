@@ -36,8 +36,8 @@
 
 #pragma once
 
-#include "s5run_value.h"
-#include "wire.h"
+#include "../engine/s5run_value.h"
+#include "../protocol/s5run_wire.h"
 
 namespace s5run {
 

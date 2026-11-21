@@ -58,7 +58,7 @@ public:
 
 class MyGetServerPort : public s5run_cli_example::GlobalFunction_GetServerPort {
 public:
-  uint64_t execute() override {
+  int64_t execute() override {
     return 8080;
   }
 };

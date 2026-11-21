@@ -103,17 +103,24 @@ list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/src/third_party")
 
 # generators
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_cpp98_generator.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_cpp11_generator.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generators.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_schema.cpp")
 
+# protocol
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/protocol/s5run_protocol.cpp")
+
+# engine
+# list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/engine/s5run_engine_lua.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/engine/s5run_engine_quickjs.cpp")
+
+# server
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_value_wire.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_server.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_queue.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_thread_pool.cpp")
+
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/main.cpp")
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/script_engines/quickjs_script_engine.cpp")
-# list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/script_engines/lua_script_engine.cpp")
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_protocol.cpp")
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_server.cpp")
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_queue.cpp")
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/s5run_thread_pool.cpp")
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/value_wire.cpp")
 
 
 # server

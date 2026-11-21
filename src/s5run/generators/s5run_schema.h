@@ -78,6 +78,7 @@ struct schema_options {
 struct schema {
   std::string client_version = "0.0.0";
   schema_options cpp98;
+  schema_options cpp11;
   std::vector<schema_function> functions;
   std::vector<schema_class> classes;
 };

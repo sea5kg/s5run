@@ -3,15 +3,16 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <cstdio>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
-#include <ctime>
 #include <cstring>
+#include <ctime>
 #include <functional>
 #include <stdexcept>
 
@@ -354,33 +355,22 @@ public:
         _register_method_handlers();
     }
 
-    ~impl() {
-        _disconnect();
-    }
+    ~impl() { _disconnect(); }
 
-    void add_server(const std::shared_ptr<remote_server_info> &server);
     void set_script(const std::string &script);
+    void add_server(const std::shared_ptr<remote_server_info> &server);
     void register_type(const std::string &name,
                        const std::vector<std::string> &methods);
     void add_object(const std::shared_ptr<s5run_object> &obj);
     void add_function(const std::shared_ptr<s5run_function> &fn);
     std::shared_ptr<run_result> run(const std::string &entry,
-                                 const std::vector<value> &args);
+                                   const std::vector<value> &args);
 
 private:
-    struct PendingType {
-        std::string name;
-        std::vector<std::string> methods;
-    };
-    struct PendingObject {
-        std::string name;
-        int32_t this_id;
-        std::string type;
-        std::vector<std::string> methods;
-    };
-    struct PendingFunction {
-        std::string name;
-    };
+    struct PendingType { std::string name; std::vector<std::string> methods; };
+    struct PendingObject { std::string name; int32_t this_id; std::string type;
+                          std::vector<std::string> methods; };
+    struct PendingFunction { std::string name; };
 
     void _cb_GetFile(int32_t cb_id, Reader &r);
     void _cb_GetFileSize(int32_t cb_id, Reader &r);
@@ -401,9 +391,7 @@ private:
     int32_t _register_instance_FileSystem(const std::shared_ptr<FileSystem> &obj);
     int32_t _register_instance_console(const std::shared_ptr<console> &obj);
     void _register_method_handlers();
-    void _connect();
-    void _disconnect();
-    void _flush_pending();
+    void _connect(); void _disconnect(); void _flush_pending();
     static void _read_hello(int fd);
     static bool _send_message_fd(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);
     static bool _read_message_fd(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);
@@ -411,10 +399,12 @@ private:
     static bool _write_all_fd(int fd, const void *buf, size_t n);
     bool _send_message(uint8_t msg_type, const std::vector<uint8_t> &body);
     bool _read_message(uint8_t &msg_type, std::vector<uint8_t> &body);
+    bool _read_exact(void *buf, size_t n);
+    bool _write_all(const void *buf, size_t n);
     void _expect_register_resp(const std::string &what);
     void _dispatch_callback(std::vector<uint8_t> &body);
-    static long _probe_server_load(const std::shared_ptr<remote_server_info> &server);
     static int _parse_error_line(const std::string &error);
+    static long _probe_server_load(const std::shared_ptr<remote_server_info> &server);
 
     std::string m_script;
     std::vector<std::shared_ptr<remote_server_info>> m_servers;
@@ -441,20 +431,6 @@ private:
     std::map<int32_t, std::shared_ptr<FileSystem>> m_instances_FileSystem;
     std::map<int32_t, std::shared_ptr<console>> m_instances_console;
 };
-
-// ---------------------------------------------------------------------------
-// context::impl - address / connection
-// ---------------------------------------------------------------------------
-
-void context::impl::set_script(const std::string &script) {
-    m_script = script;
-}
-
-void context::impl::add_server(const std::shared_ptr<remote_server_info> &server) {
-    if (!server)
-        throw std::runtime_error("add_server: server is null");
-    m_servers.push_back(server);
-}
 
 void context::impl::_connect() {
     if (m_fd >= 0)
@@ -600,6 +576,14 @@ void context::impl::_expect_register_resp(const std::string &what) {
         throw std::runtime_error("s5run: " + what + " error: " + r.get_string());
 }
 
+void context::impl::set_script(const std::string &script) {
+    m_script = script;
+}
+
+void context::impl::add_server(const std::shared_ptr<remote_server_info> &server) {
+    m_servers.push_back(server);
+}
+
 void context::impl::register_type(const std::string &name,
                                  const std::vector<std::string> &methods) {
     if (m_fd >= 0) {
@@ -618,10 +602,11 @@ void context::impl::register_type(const std::string &name,
     m_pending_types.push_back(t);
 }
 
+
+
 void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     const std::string class_name = obj->s5run_class_name();
-    std::map<std::string, registrar_t>::const_iterator rit =
-        m_instance_registrars.find(class_name);
+    auto rit = m_instance_registrars.find(class_name);
     if (rit == m_instance_registrars.end())
         throw std::runtime_error("add_object: unknown class: " + class_name);
     int32_t id = ++m_next_this_id;
@@ -649,8 +634,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
 
 void context::impl::add_function(const std::shared_ptr<s5run_function> &fn) {
     const std::string name = fn->s5run_function_name();
-    std::map<std::string, fn_registrar_t>::const_iterator rit =
-        m_function_registrars.find(name);
+    auto rit = m_function_registrars.find(name);
     if (rit == m_function_registrars.end())
         throw std::runtime_error("add_function: unknown function: " + name);
     rit->second(fn);
@@ -666,39 +650,32 @@ void context::impl::add_function(const std::shared_ptr<s5run_function> &fn) {
     m_pending_functions.push_back(pf);
 }
 
+
 void context::impl::_cb_GetFile(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
-        throw std::runtime_error("GetFile: expected 1 argument(s)");
+        throw std::runtime_error("GetFile: wrong argument count");
     }
-    std::string a_filepath = read_string(r);
+        std::string a_filepath = read_string(r);
     std::shared_ptr<File> res = m_fn_GetFile->execute(a_filepath);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-    int32_t obj_id = _register_instance_File(res);
-    w.put_u8(T_REF);
-    w.put_i32(obj_id);
-    w.put_string("File");
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        int32_t obj_id = _register_instance_File(res);
+        w.put_u8(T_REF); w.put_i32(obj_id); w.put_string("File");
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cb_GetFileSize(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
-        throw std::runtime_error("GetFileSize: expected 1 argument(s)");
+        throw std::runtime_error("GetFileSize: wrong argument count");
     }
-    int32_t a_ref_id_file = read_ref(r);
-    std::map<int32_t, std::shared_ptr<File>>::const_iterator a_it_file =
-        m_instances_File.find(a_ref_id_file);
-    if (a_it_file == m_instances_File.end()) {
-        throw std::runtime_error("GetFileSize: unknown object reference: " + std::to_string(a_ref_id_file));
-    }
-    std::shared_ptr<File> a_file = a_it_file->second;
+        int32_t a_ref_id_file = read_ref(r);
+        auto a_it_file = m_instances_File.find(a_ref_id_file);
+        if (a_it_file == m_instances_File.end())
+            throw std::runtime_error("GetFileSize: unknown object reference");
+        std::shared_ptr<File> a_file = a_it_file->second;
     int64_t res = m_fn_GetFileSize->execute(a_file);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
         write_int(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
@@ -706,12 +683,10 @@ void context::impl::_cb_GetFileSize(int32_t cb_id, Reader &r) {
 void context::impl::_cb_GetTimeNow(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
-        throw std::runtime_error("GetTimeNow: expected 0 argument(s)");
+        throw std::runtime_error("GetTimeNow: wrong argument count");
     }
     int64_t res = m_fn_GetTimeNow->execute();
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
         write_int(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
@@ -719,13 +694,11 @@ void context::impl::_cb_GetTimeNow(int32_t cb_id, Reader &r) {
 void context::impl::_cb_HasFile(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
-        throw std::runtime_error("HasFile: expected 1 argument(s)");
+        throw std::runtime_error("HasFile: wrong argument count");
     }
-    std::string a_filepath = read_string(r);
+        std::string a_filepath = read_string(r);
     bool res = m_fn_HasFile->execute(a_filepath);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
         write_bool(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
@@ -733,73 +706,62 @@ void context::impl::_cb_HasFile(int32_t cb_id, Reader &r) {
 void context::impl::_cb_GetFileList(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
-        throw std::runtime_error("GetFileList: expected 1 argument(s)");
+        throw std::runtime_error("GetFileList: wrong argument count");
     }
-    std::string a_filepath = read_string(r);
+        std::string a_filepath = read_string(r);
     std::vector<std::string> res = m_fn_GetFileList->execute(a_filepath);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-        write_array__string(w, res);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_ARRAY); w.put_u32((uint32_t)res.size());
+        for (size_t i = 0; i < res.size(); ++i)
+            write_string(w, res[i]);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cb_GetOpenedFiles(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
-        throw std::runtime_error("GetOpenedFiles: expected 0 argument(s)");
+        throw std::runtime_error("GetOpenedFiles: wrong argument count");
     }
     std::vector<std::shared_ptr<File>> res = m_fn_GetOpenedFiles->execute();
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-    w.put_u8(T_ARRAY);
-    w.put_u32((uint32_t)res.size());
-    for (size_t i = 0; i < res.size(); ++i) {
-        int32_t obj_id = _register_instance_File(res[i]);
-        w.put_u8(T_REF);
-        w.put_i32(obj_id);
-        w.put_string("File");
-    }
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_ARRAY);
+        w.put_u32((uint32_t)res.size());
+        for (size_t i = 0; i < res.size(); ++i) {
+            int32_t obj_id = _register_instance_File(res[i]);
+            w.put_u8(T_REF); w.put_i32(obj_id); w.put_string("File");
+        }
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cb_CloseFiles(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 1) {
-        throw std::runtime_error("CloseFiles: expected 1 argument(s)");
+        throw std::runtime_error("CloseFiles: wrong argument count");
     }
-    if (r.get_u8() != T_ARRAY)
-        throw std::runtime_error("wire: expected array");
-    uint32_t cnt_files = r.get_u32();
-    std::vector<std::shared_ptr<File>> a_files;
-    a_files.reserve(cnt_files);
-    for (uint32_t i = 0; i < cnt_files; ++i) {
-        int32_t a_ref_id_files = read_ref(r);
-        std::map<int32_t, std::shared_ptr<File>>::const_iterator a_it_files =
-            m_instances_File.find(a_ref_id_files);
-        if (a_it_files == m_instances_File.end()) {
-            throw std::runtime_error("CloseFiles: unknown object reference: " + std::to_string(a_ref_id_files));
+        if (r.get_u8() != T_ARRAY) throw std::runtime_error("wire: expected array");
+        uint32_t cnt_files = r.get_u32();
+        std::vector<std::shared_ptr<File>> a_files;
+        a_files.reserve(cnt_files);
+        for (uint32_t i = 0; i < cnt_files; ++i) {
+            int32_t a_ref_id = read_ref(r);
+            auto a_it = m_instances_File.find(a_ref_id);
+            if (a_it == m_instances_File.end())
+                throw std::runtime_error("CloseFiles: unknown object reference");
+            a_files.push_back(a_it->second);
         }
-        a_files.push_back(a_it_files->second);
-    }
     m_fn_CloseFiles->execute(a_files);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-    w.put_u8(T_UNDEFINED);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_UNDEFINED);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cb_GetPi(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
-        throw std::runtime_error("GetPi: expected 0 argument(s)");
+        throw std::runtime_error("GetPi: wrong argument count");
     }
     double res = m_fn_GetPi->execute();
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
         write_double(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
@@ -807,144 +769,104 @@ void context::impl::_cb_GetPi(int32_t cb_id, Reader &r) {
 void context::impl::_cb_GetServerPort(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
     if (n != 0) {
-        throw std::runtime_error("GetServerPort: expected 0 argument(s)");
+        throw std::runtime_error("GetServerPort: wrong argument count");
     }
-    uint64_t res = m_fn_GetServerPort->execute();
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
+    int64_t res = m_fn_GetServerPort->execute();
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
         write_int(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cbm_File_GetSize(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n != 1) {
-        throw std::runtime_error("File.GetSize: expected 1 argument(s)");
-    }
+    if (n != 1) { throw std::runtime_error("File.GetSize: wrong argument count"); }
     int32_t this_id = (int32_t)read_int(r);
-    std::map<int32_t, std::shared_ptr<File>>::const_iterator it =
-        m_instances_File.find(this_id);
-    if (it == m_instances_File.end()) {
-        throw std::runtime_error("File: unknown this_id");
-    }
+    auto it = m_instances_File.find(this_id);
+    if (it == m_instances_File.end()) { throw std::runtime_error("File: unknown this_id"); }
     int64_t res = it->second->GetSize();
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
         write_int(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cbm_File_ReadBytes(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n != 2) {
-        throw std::runtime_error("File.ReadBytes: expected 2 argument(s)");
-    }
+    if (n != 2) { throw std::runtime_error("File.ReadBytes: wrong argument count"); }
     int32_t this_id = (int32_t)read_int(r);
-    std::map<int32_t, std::shared_ptr<File>>::const_iterator it =
-        m_instances_File.find(this_id);
-    if (it == m_instances_File.end()) {
-        throw std::runtime_error("File: unknown this_id");
-    }
-    int64_t a_readBytes = read_int(r);
+    auto it = m_instances_File.find(this_id);
+    if (it == m_instances_File.end()) { throw std::runtime_error("File: unknown this_id"); }
+        int64_t a_readBytes = read_int(r);
     std::vector<uint8_t> res = it->second->ReadBytes(a_readBytes);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-        write_array__byte(w, res);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_ARRAY); w.put_u32((uint32_t)res.size());
+        for (size_t i = 0; i < res.size(); ++i)
+            write_byte(w, res[i]);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cbm_FileSystem_GetList(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n != 2) {
-        throw std::runtime_error("FileSystem.GetList: expected 2 argument(s)");
-    }
+    if (n != 2) { throw std::runtime_error("FileSystem.GetList: wrong argument count"); }
     int32_t this_id = (int32_t)read_int(r);
-    std::map<int32_t, std::shared_ptr<FileSystem>>::const_iterator it =
-        m_instances_FileSystem.find(this_id);
-    if (it == m_instances_FileSystem.end()) {
-        throw std::runtime_error("FileSystem: unknown this_id");
-    }
-    std::string a_filepath = read_string(r);
+    auto it = m_instances_FileSystem.find(this_id);
+    if (it == m_instances_FileSystem.end()) { throw std::runtime_error("FileSystem: unknown this_id"); }
+        std::string a_filepath = read_string(r);
     std::vector<std::string> res = it->second->GetList(a_filepath);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-        write_array__string(w, res);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_ARRAY); w.put_u32((uint32_t)res.size());
+        for (size_t i = 0; i < res.size(); ++i)
+            write_string(w, res[i]);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cbm_console_log(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n < 1) {
-        throw std::runtime_error("console.log: expected this_id");
-    }
-    int32_t this_id = (int32_t)read_int(r);
-    std::map<int32_t, std::shared_ptr<console>>::const_iterator it =
-        m_instances_console.find(this_id);
-    if (it == m_instances_console.end()) {
-        throw std::runtime_error("console: unknown this_id");
-    }
+    if (n < 1) { throw std::runtime_error("console.log: expected this_id"); }
     n -= 1;
-    std::vector<std::string> a_args;
-    a_args.reserve(n);
-    for (uint32_t i = 0; i < n; ++i)
-        a_args.push_back(_value_to_string(decode_value(r)));
+    int32_t this_id = (int32_t)read_int(r);
+    auto it = m_instances_console.find(this_id);
+    if (it == m_instances_console.end()) { throw std::runtime_error("console: unknown this_id"); }
+        std::vector<std::string> a_args;
+        a_args.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            a_args.push_back(_value_to_string(decode_value(r)));
     it->second->log(a_args);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-    w.put_u8(T_UNDEFINED);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_UNDEFINED);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cbm_console_warning(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n < 1) {
-        throw std::runtime_error("console.warning: expected this_id");
-    }
-    int32_t this_id = (int32_t)read_int(r);
-    std::map<int32_t, std::shared_ptr<console>>::const_iterator it =
-        m_instances_console.find(this_id);
-    if (it == m_instances_console.end()) {
-        throw std::runtime_error("console: unknown this_id");
-    }
+    if (n < 1) { throw std::runtime_error("console.warning: expected this_id"); }
     n -= 1;
-    std::vector<std::string> a_args;
-    a_args.reserve(n);
-    for (uint32_t i = 0; i < n; ++i)
-        a_args.push_back(_value_to_string(decode_value(r)));
+    int32_t this_id = (int32_t)read_int(r);
+    auto it = m_instances_console.find(this_id);
+    if (it == m_instances_console.end()) { throw std::runtime_error("console: unknown this_id"); }
+        std::vector<std::string> a_args;
+        a_args.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            a_args.push_back(_value_to_string(decode_value(r)));
     it->second->warning(a_args);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-    w.put_u8(T_UNDEFINED);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_UNDEFINED);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
 void context::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
     uint32_t n = r.get_u32();
-    if (n < 1) {
-        throw std::runtime_error("console.error: expected this_id");
-    }
-    int32_t this_id = (int32_t)read_int(r);
-    std::map<int32_t, std::shared_ptr<console>>::const_iterator it =
-        m_instances_console.find(this_id);
-    if (it == m_instances_console.end()) {
-        throw std::runtime_error("console: unknown this_id");
-    }
+    if (n < 1) { throw std::runtime_error("console.error: expected this_id"); }
     n -= 1;
-    std::vector<std::string> a_args;
-    a_args.reserve(n);
-    for (uint32_t i = 0; i < n; ++i)
-        a_args.push_back(_value_to_string(decode_value(r)));
+    int32_t this_id = (int32_t)read_int(r);
+    auto it = m_instances_console.find(this_id);
+    if (it == m_instances_console.end()) { throw std::runtime_error("console: unknown this_id"); }
+        std::vector<std::string> a_args;
+        a_args.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            a_args.push_back(_value_to_string(decode_value(r)));
     it->second->error(a_args);
-    Writer w;
-    w.put_i32(cb_id);
-    w.put_u8(1);
-    w.put_u8(T_UNDEFINED);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_UNDEFINED);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
@@ -970,11 +892,29 @@ void context::impl::_register_method_handlers() {
     m_instance_registrars["File"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_File[id] = std::static_pointer_cast<File>(obj);
     };
+    m_handlers["GetSize"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_File_GetSize(cb_id, r);
+    };
+    m_handlers["ReadBytes"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_File_ReadBytes(cb_id, r);
+    };
     m_instance_registrars["FileSystem"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_FileSystem[id] = std::static_pointer_cast<FileSystem>(obj);
     };
+    m_handlers["GetList"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_FileSystem_GetList(cb_id, r);
+    };
     m_instance_registrars["console"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_console[id] = std::static_pointer_cast<console>(obj);
+    };
+    m_handlers["log"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_console_log(cb_id, r);
+    };
+    m_handlers["warning"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_console_warning(cb_id, r);
+    };
+    m_handlers["error"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_console_error(cb_id, r);
     };
     m_function_registrars["GetFile"] = [this](const std::shared_ptr<s5run_function> &fn) {
         m_fn_GetFile = std::static_pointer_cast<GlobalFunction_GetFile>(fn);
@@ -1029,24 +969,6 @@ void context::impl::_register_method_handlers() {
         m_handlers["GetServerPort"] = [this](int32_t cb_id, Reader &r) {
             _cb_GetServerPort(cb_id, r);
         };
-    };
-    m_handlers["GetSize"] = [this](int32_t cb_id, Reader &r) {
-        _cbm_File_GetSize(cb_id, r);
-    };
-    m_handlers["ReadBytes"] = [this](int32_t cb_id, Reader &r) {
-        _cbm_File_ReadBytes(cb_id, r);
-    };
-    m_handlers["GetList"] = [this](int32_t cb_id, Reader &r) {
-        _cbm_FileSystem_GetList(cb_id, r);
-    };
-    m_handlers["log"] = [this](int32_t cb_id, Reader &r) {
-        _cbm_console_log(cb_id, r);
-    };
-    m_handlers["warning"] = [this](int32_t cb_id, Reader &r) {
-        _cbm_console_warning(cb_id, r);
-    };
-    m_handlers["error"] = [this](int32_t cb_id, Reader &r) {
-        _cbm_console_error(cb_id, r);
     };
 }
 
@@ -1168,6 +1090,7 @@ int context::impl::_parse_error_line(const std::string &error) {
     return 0;
 }
 
+
 std::shared_ptr<run_result> context::impl::run(const std::string &entry,
                                  const std::vector<value> &args) {
     std::shared_ptr<run_result> out(new run_result());
@@ -1213,6 +1136,7 @@ std::shared_ptr<run_result> context::impl::run(const std::string &entry,
 // ---------------------------------------------------------------------------
 // context
 // ---------------------------------------------------------------------------
+
 
 context::context() : m_impl(new context::impl()) {
 }

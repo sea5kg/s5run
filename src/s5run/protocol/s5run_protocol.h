@@ -36,43 +36,29 @@
 
 #pragma once
 
-#include <atomic>
-#include <condition_variable>
-#include <cstddef>
-#include <mutex>
-#include <queue>
-#include <thread>
-#include <vector>
+#include "s5run_wire.h"
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <sys/socket.h>
 
 namespace s5run {
 
-class thread_pool_task {
-public:
-  virtual void handle() = 0;
-};
+constexpr uint32_t kMaxFrame = 8 * 1024 * 1024;
 
-class thread_pool {
-public:
-  explicit thread_pool(size_t n);
-  ~thread_pool();
+bool read_exact(int fd, void *buf, size_t n);
+bool write_all(int fd, const void *buf, size_t n);
 
-  void submit(std::shared_ptr<thread_pool_task> task);
+std::optional<std::string> read_frame(int fd);
+bool write_frame(int fd, const std::string &data);
 
-  // -- load statistics --
-  size_t threads_count() const { return workers_.size(); }
-  size_t busy_count() const { return m_busy.load(); }
-  size_t queued_count() const { return m_queued.load(); }
+bool set_recv_timeout(int fd, int ms);
 
-private:
-  void worker_loop();
+// Write a message: frame_len + msg_type + body.
+bool write_message(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);
 
-  std::vector<std::thread> workers_;
-  std::queue<std::shared_ptr<thread_pool_task>> tasks_;
-  std::mutex m_;
-  std::condition_variable cv_;
-  bool stop_ = false;
-  std::atomic<size_t> m_busy{0};
-  std::atomic<size_t> m_queued{0};
-};
+// Read a message: returns (msg_type, body). nullopt on EOF/error.
+bool read_message(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);
 
 } // namespace s5run

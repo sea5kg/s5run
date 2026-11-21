@@ -40,7 +40,7 @@
 #include <thread>
 #include <iostream>
 
-#include "s5run_server.h"
+#include "server/s5run_server.h"
 #include "generators/s5run_generators.h"
 
 static void print_usage() {

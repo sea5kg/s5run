@@ -36,24 +36,43 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <vector>
+
 namespace s5run {
 
-class server {
+class thread_pool_task {
 public:
-  server();
-  static void on_signal(int);
+  virtual void handle() = 0;
+};
 
-  // listen_address format: [host:]port
-  int run(const std::string &listen_address, int thread_count);
+class thread_pool {
+public:
+  explicit thread_pool(size_t n);
+  ~thread_pool();
 
-  // Enables the job queue (scripts executed without a client context),
-  // results are stored in sqlite and kept for ttl_seconds.
-  void enable_queue(const std::string &db_path, int ttl_seconds);
+  void submit(std::shared_ptr<thread_pool_task> task);
+
+  // -- load statistics --
+  size_t threads_count() const { return workers_.size(); }
+  size_t busy_count() const { return m_busy.load(); }
+  size_t queued_count() const { return m_queued.load(); }
 
 private:
-  bool m_queue_enabled = false;
-  std::string m_queue_db = "s5run-queue.sqlite3";
-  int m_queue_ttl = 3600;
+  void worker_loop();
+
+  std::vector<std::thread> workers_;
+  std::queue<std::shared_ptr<thread_pool_task>> tasks_;
+  std::mutex m_;
+  std::condition_variable cv_;
+  bool stop_ = false;
+  std::atomic<size_t> m_busy{0};
+  std::atomic<size_t> m_queued{0};
 };
 
 } // namespace s5run

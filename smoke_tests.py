@@ -110,7 +110,8 @@ def ensure_generated():
     LOG.get_logger().info("-> Generating client's libs ...")
 
     _todo_generate = {
-        "cpp98": os.path.join(ROOT, "tests", "cpp98-client", "s5run_cli")
+        "cpp98": os.path.join(ROOT, "tests", "cpp98-client", "s5run_cli"),
+        "cpp11": os.path.join(ROOT, "tests", "cpp11-client", "s5run_cli_example"),
     }
     _langs = _todo_generate.keys()
     _langs = sorted(_langs)
@@ -124,7 +125,6 @@ def ensure_generated():
 
     # other languages via pys5rungen
     _todo_generate2 = [
-        "cpp11",
         "py",
         "java21",
         "java17",
@@ -144,6 +144,7 @@ def ensure_generated():
 def ensure_cpp_client():
     inputs = _iter_files(CPP11_CLIENT_DIR)
     if not os.path.exists(CPP11_GEN_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP11_GEN_BIN):
+        os.makedirs(os.path.join(CPP11_CLIENT_DIR, "bin"), exist_ok=True)
         _run(["cmake", "-H" + CPP11_CLIENT_DIR, "-B" + CPP11_CLIENT_BUILD,
               "-DCMAKE_BUILD_TYPE=Release"], "configure cpp11-client", cwd=ROOT)
         _run(["cmake", "--build", CPP11_CLIENT_BUILD, "--config", "Release"], "build cpp11-client")
@@ -211,6 +212,7 @@ def test_py_gen_client(port):
 
 
 def ensure_cpp98_client():
+    os.makedirs(os.path.join(CPP98_CLIENT_DIR, "bin"), exist_ok=True)
     inputs = _iter_files(CPP98_CLIENT_DIR)
     if not os.path.exists(CPP98_CLIENT_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP98_CLIENT_BIN):
         _run(["cmake", "-H" + CPP98_CLIENT_DIR, "-B" + CPP98_CLIENT_BUILD,

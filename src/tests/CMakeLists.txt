@@ -40,8 +40,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY tests)
 
 list (APPEND TEST_S5RUN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../")
 
-list (APPEND TEST_S5RUN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/value_wire.cpp")
-list (APPEND TEST_S5RUN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/s5run_protocol.cpp")
+list (APPEND TEST_S5RUN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/server/s5run_value_wire.cpp")
+list (APPEND TEST_S5RUN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/protocol/s5run_protocol.cpp")
 list (APPEND TEST_S5RUN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/include/")
 list (APPEND TEST_S5RUN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../src/s5run/")
 

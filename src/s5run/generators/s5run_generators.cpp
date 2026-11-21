@@ -36,14 +36,13 @@
 
 #include "s5run_generators.h"
 
-#include "s5run_cpp98_generator.h"
-
 namespace s5run {
 namespace generators {
 
 std::map<std::string, std::shared_ptr<IGenerator>> all() {
     std::map<std::string, std::shared_ptr<IGenerator>> ret;
-    ret["cpp98"] = std::make_shared<cpp98_generator>();
+    ret["cpp98"] = make_cpp98_generator();
+    ret["cpp11"] = make_cpp11_generator();
     return ret;
 };
 

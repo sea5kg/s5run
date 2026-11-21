@@ -42,7 +42,6 @@ Generator
 import os
 
 from .s5run_schema import S5RunCliSchema
-from . import s5run_cpp11_generator
 from . import s5run_go_generator
 from . import s5run_java21_generator
 from . import s5run_java17_generator
@@ -63,9 +62,6 @@ class S5RunCliGenerator:
             f.write(_generate_header(s))
         with open(os.path.join(opt.output_dir(), f"{opt.namespace()}.cpp"), "w", encoding="utf-8") as f:
             f.write(_generate_impl(s))
-
-    def generate_cpp11(self) -> None:
-        self.__generate_cpp("cpp11", s5run_cpp11_generator.generate_header, s5run_cpp11_generator.generate_impl)
 
     def generate_py(self) -> None:
         s = self.schema

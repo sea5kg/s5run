@@ -1,0 +1,18 @@
+# s5run server
+
+listen: 0.0.0.0:7777
+threads: auto  # or specify
+
+web-admin: # not implemented yet
+  enabled: false
+
+
+api-keys: # not implemented yet
+  enabled: false
+
+cron: # not implemented yet
+  enabled: false
+
+queue:
+  enabled: false
+  keep-result-ttl-sec: 3600

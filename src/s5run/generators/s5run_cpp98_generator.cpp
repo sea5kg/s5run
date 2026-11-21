@@ -34,7 +34,7 @@
  *
  ***********************************************************************************/
 
-#include "s5run_cpp98_generator.h"
+#include "s5run_generators.h"
 
 #include "nlohmann/json.hpp"
 
@@ -45,6 +45,16 @@
 
 namespace s5run {
 namespace generators {
+
+class cpp98_generator : public IGenerator {
+public:
+  std::vector<std::string> generate(const schema &s,
+                                     const std::string &output_dir) override;
+
+private:
+  std::string generate_header(const schema &s) const;
+  std::string generate_impl(const schema &s) const;
+};
 
 // -----------------------------------------------------------------------
 // Type helpers
@@ -58,7 +68,7 @@ static std::string cpp_type(const std::string &t) {
   if (t == "byte") return "u8";
   if (t.substr(0, 6) == "array<")
     return "std::vector<" + cpp_type(t.substr(6, t.size() - 7)) + ">";
-  return t + " *";
+  return "base_context_class_" + t + " *";
 }
 
 static std::string param_type(const std::string &t) {
@@ -406,8 +416,8 @@ std::string cpp98_generator::generate_header(const schema &s) const {
 
   for (size_t i = 0; i < s.classes.size(); ++i) {
     const schema_class &c = s.classes[i];
-    out += "class " + c.name + " : public s5run_object {\npublic:\n";
-    out += "    virtual ~" + c.name + "() {}\n";
+    out += "class base_context_class_" + c.name + " : public s5run_object {\npublic:\n";
+    out += "    virtual ~base_context_class_" + c.name + "() {}\n";
     out += "    virtual std::string s5run_class_name() const { return \"" + c.name + "\"; }\n";
     out += "    virtual std::vector<std::string> s5run_method_names() const {\n";
     out += "        std::vector<std::string> out;\n";
@@ -435,9 +445,10 @@ std::string cpp98_generator::generate_header(const schema &s) const {
       if (k > 0) args += ", ";
       args += param_type(f.arguments[k].type) + " " + f.arguments[k].name;
     }
-    out += "class GlobalFunction_" + f.name + " : public s5run_function {\npublic:\n";
+
+    out += "class base_context_function_" + f.name + " : public s5run_function {\npublic:\n";
     out += "    virtual std::string s5run_function_name() const { return \"" + f.name + "\"; }\n";
-    out += "    virtual ~GlobalFunction_" + f.name + "() {}\n";
+    out += "    virtual ~base_context_function_" + f.name + "() {}\n";
     out += "    virtual " + ret + " execute(" + args + ") = 0;\n};\n\n";
   }
 
@@ -488,21 +499,21 @@ static void emit_decode_args(std::string &out, const std::vector<schema_argument
       std::string cls = array_inner(a.type);
       out += "    if (r.get_u8() != T_ARRAY) throw std::runtime_error(\"wire: expected array\");\n";
       out += "    u32 cnt_" + a.name + " = r.get_u32();\n";
-      out += "    std::vector<" + cls + " *> a_" + a.name + ";\n";
+      out += "    std::vector<base_context_class_" + cls + " *> a_" + a.name + ";\n";
       out += "    a_" + a.name + ".reserve(cnt_" + a.name + ");\n";
       out += "    for (u32 i = 0; i < cnt_" + a.name + "; ++i) {\n";
       out += "        i32 a_ref_id = read_ref(r);\n";
-      out += "        std::map<i32, " + cls + " *>::const_iterator a_it = m_instances_" + cls + ".find(a_ref_id);\n";
+      out += "        std::map<i32, base_context_class_" + cls + " *>::const_iterator a_it = m_instances_" + cls + ".find(a_ref_id);\n";
       out += "        if (a_it == m_instances_" + cls + ".end()) throw std::runtime_error(\"" +
                   owner_name + ": unknown object reference\");\n";
       out += "        a_" + a.name + ".push_back(a_it->second);\n";
       out += "    }\n";
     } else if (is_ref(a.type)) {
       out += "    i32 a_ref_id_" + a.name + " = read_ref(r);\n";
-      out += "    std::map<i32, " + a.type + " *>::const_iterator a_it_" + a.name + " = m_instances_" + a.type + ".find(a_ref_id_" + a.name + ");\n";
+      out += "    std::map<i32, base_context_class_" + a.type + " *>::const_iterator a_it_" + a.name + " = m_instances_" + a.type + ".find(a_ref_id_" + a.name + ");\n";
       out += "    if (a_it_" + a.name + " == m_instances_" + a.type + ".end()) throw std::runtime_error(\"" +
                   owner_name + ": unknown object reference\");\n";
-      out += "    " + a.type + " *a_" + a.name + " = a_it_" + a.name + "->second;\n";
+      out += "    base_context_class_" + a.type + " *a_" + a.name + " = a_it_" + a.name + "->second;\n";
     } else {
       std::string ct = cpp_type(a.type);
       if (a.type == "bool") {
@@ -615,7 +626,7 @@ static std::string gen_m_callback(const schema_class &c, const schema_method &m)
                 c.name + "." + m.name + ": wrong argument count\");\n";
   }
   out += "    i32 this_id = (i32)read_int(r);\n";
-  out += "    std::map<i32, " + c.name + " *>::const_iterator it = m_instances_" + c.name + ".find(this_id);\n";
+  out += "    std::map<i32, base_context_class_" + c.name + " *>::const_iterator it = m_instances_" + c.name + ".find(this_id);\n";
   out += "    if (it == m_instances_" + c.name + ".end()) throw std::runtime_error(\"" + c.name + ": unknown this_id\");\n";
   emit_decode_args(out, m.arguments, c.name + "." + m.name);
   std::string call_args;
@@ -877,7 +888,7 @@ int remote_server_info::get_port() const { return m_port; }
 
   // Instance registration declarations
   for (auto &c : s.classes)
-    out += "    i32 register_instance_" + c.name + "(" + c.name + " *obj);\n";
+    out += "    i32 register_instance_" + c.name + "(base_context_class_" + c.name + " *obj);\n";
 
   out += "    void store_instance(const std::string &cls, i32 id, s5run_object *obj);\n";
   out += "    void dispatch_callback(const std::vector<u8> &body);\n";
@@ -898,9 +909,9 @@ int remote_server_info::get_port() const { return m_port; }
   out += "    std::vector<std::string> m_pending_functions;\n";
   out += "    sock_t m_sock;\n    i32 m_next_this_id;\n";
   for (auto &f : s.functions)
-    out += "    GlobalFunction_" + f.name + " *m_fn_" + f.name + ";\n";
+    out += "    base_context_function_" + f.name + " *m_fn_" + f.name + ";\n";
   for (auto &c : s.classes)
-    out += "    std::map<i32, " + c.name + " *> m_instances_" + c.name + ";\n";
+    out += "    std::map<i32, base_context_class_" + c.name + " *> m_instances_" + c.name + ";\n";
   out += "};\n\n";
 
   // Static methods of context_impl
@@ -947,7 +958,7 @@ void context::context_impl::add_function(s5run_function *fn) {
   // add_function: if/else chain by name
   for (auto &f : s.functions) {
     out += "    if (fn->s5run_function_name() == \"" + f.name + "\") {\n";
-    out += "        m_fn_" + f.name + " = (GlobalFunction_" + f.name + " *)fn;\n    }\n";
+    out += "        m_fn_" + f.name + " = (base_context_function_" + f.name + " *)fn;\n    }\n";
   }
   out += R"CODE(    if (m_sock != S5RUN_BAD_SOCKET) {
         Writer w;
@@ -962,7 +973,7 @@ void context::context_impl::add_function(s5run_function *fn) {
 void context::context_impl::store_instance(const std::string &cls, i32 id, s5run_object *obj) {
 )CODE";
   for (auto &c : s.classes) {
-    out += "    if (cls == \"" + c.name + "\") { m_instances_" + c.name + "[id] = (" + c.name + " *)obj; return; }\n";
+    out += "    if (cls == \"" + c.name + "\") { m_instances_" + c.name + "[id] = (base_context_class_" + c.name + " *)obj; return; }\n";
   }
   out += R"CODE(    throw std::runtime_error("add_object: unknown class: " + cls);
 }
@@ -970,7 +981,7 @@ void context::context_impl::store_instance(const std::string &cls, i32 id, s5run
 
   // Register instance methods
   for (auto &c : s.classes) {
-    out += "\ni32 context::context_impl::register_instance_" + c.name + "(" + c.name + " *obj) {\n";
+    out += "\ni32 context::context_impl::register_instance_" + c.name + "(base_context_class_" + c.name + " *obj) {\n";
     out += "    i32 id = ++m_next_this_id;\n";
     out += "    m_instances_" + c.name + "[id] = obj;\n    return id;\n}\n";
   }
@@ -1215,6 +1226,10 @@ std::vector<std::string> cpp98_generator::generate(const schema &s,
   written.push_back(impl_path);
 
   return written;
+}
+
+std::shared_ptr<IGenerator> make_cpp98_generator() {
+  return std::make_shared<cpp98_generator>();
 }
 
 } // namespace generators

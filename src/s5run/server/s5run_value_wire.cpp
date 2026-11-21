@@ -34,7 +34,7 @@
  *
  ***********************************************************************************/
 
-#include "value_wire.h"
+#include "s5run_value_wire.h"
 
 #include <cstring>
 
@@ -142,8 +142,8 @@ Value value_from_wire(wire::Reader &r) {
     uint32_t n = r.get_u32();
     ValueObject o;
     for (uint32_t i = 0; i < n; ++i) {
-      uint8_t ktag = r.get_u8();
-      if (ktag != wire::T_STRING)
+      uint8_t k_tag = r.get_u8();
+      if (k_tag != wire::T_STRING)
         throw std::runtime_error("wire: object key must be a string");
       std::string key = r.get_string();
       o[key] = value_from_wire(r);

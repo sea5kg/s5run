@@ -14,7 +14,6 @@ class remote_server_info;
 class run_result;
 std::shared_ptr<context> make_context();
 
-// Generic value: used for run() arguments and results.
 class value {
 public:
     enum kind {
@@ -60,8 +59,6 @@ private:
     std::vector<value> m_a;
     std::map<std::string, value> m_o;
 };
-
-// Settings of a remote s5run server.
 class remote_server_info {
 public:
     remote_server_info() : m_port(0), m_have_address(false) {}
@@ -84,9 +81,6 @@ private:
     uint16_t m_port;
     bool m_have_address;
 };
-
-// Common root of all generated classes: lets the client work with
-// objects without knowing their concrete types.
 class s5run_object {
 public:
     virtual ~s5run_object() {}
@@ -98,10 +92,10 @@ class File : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "File"; }
     std::vector<std::string> s5run_method_names() const override {
-        std::vector<std::string> out;
-        out.push_back("GetSize");
-        out.push_back("ReadBytes");
-        return out;
+        std::vector<std::string> out_;
+        out_.push_back("GetSize");
+        out_.push_back("ReadBytes");
+        return out_;
     }
     virtual ~File() {}
     virtual int64_t GetSize() = 0;
@@ -112,9 +106,9 @@ class FileSystem : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "FileSystem"; }
     std::vector<std::string> s5run_method_names() const override {
-        std::vector<std::string> out;
-        out.push_back("GetList");
-        return out;
+        std::vector<std::string> out_;
+        out_.push_back("GetList");
+        return out_;
     }
     virtual ~FileSystem() {}
     virtual std::vector<std::string> GetList(const std::string & filepath) = 0;
@@ -124,11 +118,11 @@ class console : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "console"; }
     std::vector<std::string> s5run_method_names() const override {
-        std::vector<std::string> out;
-        out.push_back("log");
-        out.push_back("warning");
-        out.push_back("error");
-        return out;
+        std::vector<std::string> out_;
+        out_.push_back("log");
+        out_.push_back("warning");
+        out_.push_back("error");
+        return out_;
     }
     virtual ~console() {}
     virtual void log(const std::vector<std::string> & args) = 0;
@@ -136,8 +130,6 @@ public:
     virtual void error(const std::vector<std::string> & args) = 0;
 };
 
-// Common root of all generated global functions: lets the client
-// register implementations without knowing their concrete types.
 class s5run_function {
 public:
     virtual ~s5run_function() {}
@@ -204,7 +196,7 @@ class GlobalFunction_GetServerPort : public s5run_function {
 public:
     std::string s5run_function_name() const override { return "GetServerPort"; }
     virtual ~GlobalFunction_GetServerPort() {}
-    virtual uint64_t execute() = 0;
+    virtual int64_t execute() = 0;
 };
 
 class context {
@@ -255,7 +247,6 @@ private:
     impl *m_impl;
 };
 
-// Result of a script run: either a value or an error with details.
 class run_result {
 public:
     bool has_error() const { return m_has_error; }

@@ -71,9 +71,9 @@ public:
     virtual std::string s5run_function_name() const = 0;
 };
 
-class File : public s5run_object {
+class base_context_class_File : public s5run_object {
 public:
-    virtual ~File() {}
+    virtual ~base_context_class_File() {}
     virtual std::string s5run_class_name() const { return "File"; }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
@@ -85,9 +85,9 @@ public:
     virtual std::vector<u8> ReadBytes(i64 readBytes) = 0;
 };
 
-class FileSystem : public s5run_object {
+class base_context_class_FileSystem : public s5run_object {
 public:
-    virtual ~FileSystem() {}
+    virtual ~base_context_class_FileSystem() {}
     virtual std::string s5run_class_name() const { return "FileSystem"; }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
@@ -97,9 +97,9 @@ public:
     virtual std::vector<std::string> GetList(const std::string & filepath) = 0;
 };
 
-class console : public s5run_object {
+class base_context_class_console : public s5run_object {
 public:
-    virtual ~console() {}
+    virtual ~base_context_class_console() {}
     virtual std::string s5run_class_name() const { return "console"; }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
@@ -113,66 +113,66 @@ public:
     virtual void error(const std::vector<std::string> & args) = 0;
 };
 
-class GlobalFunction_GetFile : public s5run_function {
+class base_context_function_GetFile : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetFile"; }
-    virtual ~GlobalFunction_GetFile() {}
-    virtual File * execute(const std::string & filepath) = 0;
+    virtual ~base_context_function_GetFile() {}
+    virtual base_context_class_File * execute(const std::string & filepath) = 0;
 };
 
-class GlobalFunction_GetFileSize : public s5run_function {
+class base_context_function_GetFileSize : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetFileSize"; }
-    virtual ~GlobalFunction_GetFileSize() {}
-    virtual i64 execute(File * file) = 0;
+    virtual ~base_context_function_GetFileSize() {}
+    virtual i64 execute(base_context_class_File * file) = 0;
 };
 
-class GlobalFunction_GetTimeNow : public s5run_function {
+class base_context_function_GetTimeNow : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetTimeNow"; }
-    virtual ~GlobalFunction_GetTimeNow() {}
+    virtual ~base_context_function_GetTimeNow() {}
     virtual i64 execute() = 0;
 };
 
-class GlobalFunction_HasFile : public s5run_function {
+class base_context_function_HasFile : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "HasFile"; }
-    virtual ~GlobalFunction_HasFile() {}
+    virtual ~base_context_function_HasFile() {}
     virtual bool execute(const std::string & filepath) = 0;
 };
 
-class GlobalFunction_GetFileList : public s5run_function {
+class base_context_function_GetFileList : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetFileList"; }
-    virtual ~GlobalFunction_GetFileList() {}
+    virtual ~base_context_function_GetFileList() {}
     virtual std::vector<std::string> execute(const std::string & filepath) = 0;
 };
 
-class GlobalFunction_GetOpenedFiles : public s5run_function {
+class base_context_function_GetOpenedFiles : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetOpenedFiles"; }
-    virtual ~GlobalFunction_GetOpenedFiles() {}
-    virtual std::vector<File *> execute() = 0;
+    virtual ~base_context_function_GetOpenedFiles() {}
+    virtual std::vector<base_context_class_File *> execute() = 0;
 };
 
-class GlobalFunction_CloseFiles : public s5run_function {
+class base_context_function_CloseFiles : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "CloseFiles"; }
-    virtual ~GlobalFunction_CloseFiles() {}
-    virtual void execute(const std::vector<File *> & files) = 0;
+    virtual ~base_context_function_CloseFiles() {}
+    virtual void execute(const std::vector<base_context_class_File *> & files) = 0;
 };
 
-class GlobalFunction_GetPi : public s5run_function {
+class base_context_function_GetPi : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetPi"; }
-    virtual ~GlobalFunction_GetPi() {}
+    virtual ~base_context_function_GetPi() {}
     virtual double execute() = 0;
 };
 
-class GlobalFunction_GetServerPort : public s5run_function {
+class base_context_function_GetServerPort : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "GetServerPort"; }
-    virtual ~GlobalFunction_GetServerPort() {}
+    virtual ~base_context_function_GetServerPort() {}
     virtual i64 execute() = 0;
 };
 

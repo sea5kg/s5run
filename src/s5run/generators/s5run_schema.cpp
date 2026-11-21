@@ -90,14 +90,25 @@ schema load_schema(const std::string &filepath) {
     std::fprintf(stderr, "schema: JSON parse error: %s\n", e.what());
     std::exit(1);
   }
+
   schema s;
   s.client_version = j.value("client-version", "0.0.0");
+
   if (j.contains("options") && j["options"].contains("cpp98")) {
     const auto &o = j["options"]["cpp98"];
     s.cpp98.namespace_ = o.value("namespace", "");
     s.cpp98.output_dir = o.value("output-dir", "");
     if (s.cpp98.namespace_.empty() || s.cpp98.output_dir.empty()) {
       std::fprintf(stderr, "schema: options.cpp98 requires namespace and output-dir\n");
+      std::exit(1);
+    }
+  }
+  if (j.contains("options") && j["options"].contains("cpp11")) {
+    const auto &o = j["options"]["cpp11"];
+    s.cpp11.namespace_ = o.value("namespace", "");
+    s.cpp11.output_dir = o.value("output-dir", "");
+    if (s.cpp11.namespace_.empty() || s.cpp11.output_dir.empty()) {
+      std::fprintf(stderr, "schema: options.cpp11 requires namespace and output-dir\n");
       std::exit(1);
     }
   }

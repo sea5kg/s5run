@@ -32,7 +32,7 @@ static const char *kScript =
     "    };\n"
     "}\n";
 
-class MyFile : public s5run_cli_cpp98::File {
+class MyFile : public s5run_cli_cpp98::base_context_class_File {
 public:
     explicit MyFile(s5run_cli_cpp98::i64 size) : m_size(size) {}
 
@@ -49,11 +49,12 @@ private:
     s5run_cli_cpp98::i64 m_size;
 };
 
-class MyGetFile : public s5run_cli_cpp98::GlobalFunction_GetFile {
+
+class MyGetFile : public s5run_cli_cpp98::base_context_function_GetFile {
 public:
     static std::string last_path;
 
-    virtual s5run_cli_cpp98::File *execute(const std::string &filepath) {
+    virtual s5run_cli_cpp98::base_context_class_File *execute(const std::string &filepath) {
         last_path = filepath;
         return new MyFile(1024);
     }
@@ -61,29 +62,29 @@ public:
 
 std::string MyGetFile::last_path;
 
-class MyGetFileSize : public s5run_cli_cpp98::GlobalFunction_GetFileSize {
+class MyGetFileSize : public s5run_cli_cpp98::base_context_function_GetFileSize {
 public:
-    virtual s5run_cli_cpp98::i64 execute(s5run_cli_cpp98::File *file) {
+    virtual s5run_cli_cpp98::i64 execute(s5run_cli_cpp98::base_context_class_File *file) {
         return file->GetSize();
     }
 };
 
-class MyGetTimeNow : public s5run_cli_cpp98::GlobalFunction_GetTimeNow {
+class MyGetTimeNow : public s5run_cli_cpp98::base_context_function_GetTimeNow {
 public:
     virtual s5run_cli_cpp98::i64 execute() { return 1737000000LL; }
 };
 
-class MyHasFile : public s5run_cli_cpp98::GlobalFunction_HasFile {
+class MyHasFile : public s5run_cli_cpp98::base_context_function_HasFile {
 public:
     virtual bool execute(const std::string &filepath) {
         throw std::runtime_error("boom-hasfile");
     }
 };
 
-class MyGetOpenedFiles : public s5run_cli_cpp98::GlobalFunction_GetOpenedFiles {
+class MyGetOpenedFiles : public s5run_cli_cpp98::base_context_function_GetOpenedFiles {
 public:
-    virtual std::vector<s5run_cli_cpp98::File *> execute() {
-        std::vector<s5run_cli_cpp98::File *> out;
+    virtual std::vector<s5run_cli_cpp98::base_context_class_File *> execute() {
+        std::vector<s5run_cli_cpp98::base_context_class_File *> out;
         out.push_back(new MyFile(100));
         out.push_back(new MyFile(200));
         return out;
@@ -92,27 +93,27 @@ public:
 
 static std::vector<s5run_cli_cpp98::i64> g_closed_sizes;
 
-class MyCloseFiles : public s5run_cli_cpp98::GlobalFunction_CloseFiles {
+class MyCloseFiles : public s5run_cli_cpp98::base_context_function_CloseFiles {
 public:
-    virtual void execute(const std::vector<s5run_cli_cpp98::File *> &files) {
+    virtual void execute(const std::vector<s5run_cli_cpp98::base_context_class_File *> &files) {
         for (std::size_t i = 0; i < files.size(); ++i)
             g_closed_sizes.push_back(files[i]->GetSize());
     }
 };
 
-class MyGetPi : public s5run_cli_cpp98::GlobalFunction_GetPi {
+class MyGetPi : public s5run_cli_cpp98::base_context_function_GetPi {
 public:
     virtual double execute() { return 3.14; }
 };
 
-class MyGetServerPort : public s5run_cli_cpp98::GlobalFunction_GetServerPort {
+class MyGetServerPort : public s5run_cli_cpp98::base_context_function_GetServerPort {
 public:
     virtual s5run_cli_cpp98::i64 execute() { return 8080; }
 };
 
 static std::vector<std::string> g_logs;
 
-class MyConsole : public s5run_cli_cpp98::console {
+class MyConsole : public s5run_cli_cpp98::base_context_class_console {
 public:
     virtual void log(const std::vector<std::string> &args) {
         std::string line;
@@ -130,7 +131,7 @@ public:
 
 static std::string g_fs_last_path;
 
-class MyFileSystem : public s5run_cli_cpp98::FileSystem {
+class MyFileSystem : public s5run_cli_cpp98::base_context_class_FileSystem {
 public:
     virtual std::vector<std::string> GetList(const std::string &filepath) {
         g_fs_last_path = filepath;

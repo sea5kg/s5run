@@ -18,6 +18,7 @@
         "quickjs",
         "runcli",
         "runcligen",
+        "runcontextprovider",
         "rungen",
         "Sopov",
         "sprintf",

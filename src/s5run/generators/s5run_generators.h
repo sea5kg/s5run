@@ -38,12 +38,23 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include <memory>
 
-#include "s5run_igenerator.h"
+#include "s5run_schema.h"
 
 namespace s5run {
 namespace generators {
+
+class IGenerator {
+public:
+  virtual ~IGenerator() = default;
+
+  virtual std::vector<std::string> generate(const schema &s, const std::string &output_dir) = 0;
+};
+
+std::shared_ptr<IGenerator> make_cpp98_generator();
+std::shared_ptr<IGenerator> make_cpp11_generator();
 
 std::map<std::string, std::shared_ptr<IGenerator>> all();
 

@@ -38,7 +38,7 @@
 """Language-agnostic type system: parsing and wire tags only.
 
 Per-language type resolving lives in the generators:
-s5run_cpp11_generator.type_to_cpp, s5run_py_generator.type_to_py,
+s5run_py_generator.type_to_py,
 s5run_java21_generator.type_to_java.
 """
 

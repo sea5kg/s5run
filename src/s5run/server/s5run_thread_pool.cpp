@@ -34,31 +34,57 @@
  *
  ***********************************************************************************/
 
-#pragma once
-
-#include "wire.h"
-
-#include <cstdint>
-#include <optional>
-#include <string>
-#include <sys/socket.h>
+#include "s5run_thread_pool.h"
 
 namespace s5run {
 
-constexpr uint32_t kMaxFrame = 8 * 1024 * 1024;
+thread_pool::thread_pool(size_t n) {
+  for (size_t i = 0; i < n; ++i)
+    workers_.emplace_back([this] {
+      worker_loop();
+    });
+}
 
-bool read_exact(int fd, void *buf, size_t n);
-bool write_all(int fd, const void *buf, size_t n);
+thread_pool::~thread_pool() {
+  {
+    std::lock_guard lk(m_);
+    stop_ = true;
+  }
+  cv_.notify_all();
+  for (auto &t : workers_)
+    t.join();
+}
 
-std::optional<std::string> read_frame(int fd);
-bool write_frame(int fd, const std::string &data);
+void thread_pool::submit(std::shared_ptr<thread_pool_task> task) {
+  {
+    std::lock_guard lk(m_);
+    tasks_.push(std::move(task));
+  }
+  m_queued.fetch_add(1);
+  cv_.notify_one();
+}
 
-bool set_recv_timeout(int fd, int ms);
-
-// Write a message: frame_len + msg_type + body.
-bool write_message(int fd, uint8_t msg_type, const std::vector<uint8_t> &body);
-
-// Read a message: returns (msg_type, body). nullopt on EOF/error.
-bool read_message(int fd, uint8_t &msg_type, std::vector<uint8_t> &body);
+void thread_pool::worker_loop() {
+  while (true) {
+    std::shared_ptr<thread_pool_task> task;
+    {
+      std::unique_lock lk(m_);
+      cv_.wait(lk, [this] {
+        return stop_ || !tasks_.empty();
+      });
+      if (stop_ && tasks_.empty())
+        return;
+      task = std::move(tasks_.front());
+      tasks_.pop();
+      m_queued.fetch_sub(1);
+    }
+    m_busy.fetch_add(1);
+    try {
+      task->handle();
+    } catch (...) { /* log */
+    }
+    m_busy.fetch_sub(1);
+  }
+}
 
 } // namespace s5run

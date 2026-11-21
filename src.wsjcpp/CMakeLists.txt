@@ -22,4 +22,9 @@ list (APPEND WSJCPP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/./src.wsjcpp/wsjcpp_core/"
 list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/./src.wsjcpp/wsjcpp_core/wsjcpp_core.cpp")
 list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/./src.wsjcpp/wsjcpp_core/wsjcpp_core.h")
 
+# resources.wsjcpp
+list (APPEND WSJCPP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/")
+list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/__data_config_yml_path8aca03.h")
+list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/__data_config_yml_path8aca03.cpp")
+
 
