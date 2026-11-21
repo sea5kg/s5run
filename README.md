@@ -37,7 +37,7 @@ $ ./s5run help
 s5run v0.2.0 - remote script execution server
 
 Usage:
-  s5run <command> [options]
+  ./s5run <command> [options]
 
 Commands:
   server     Start the script server
@@ -46,17 +46,74 @@ Commands:
   version    Print version
   help       Show this help
 
-Run 's5run help <command>' for command details.
+Run './s5run help <command>' for command details.
 ```
 
-Where, usage examples:
+### s5run server
+
+```sh
+$ ./s5run help server
+s5run server - start the script server
+
+Usage:
+  ./s5run server --listen [host:]port [--threads N] [--queue] [--db PATH] [--ttl SECONDS]
+
+Options:
+  --listen [host:]port  listen address (default 0.0.0.0, e.g. --listen 7777 or --listen 0.0.0.0:7777)
+  --threads N           worker threads (default: hardware concurrency)
+  --queue               enable job queue (results stored in sqlite)
+  --db PATH             job queue database (default s5run-queue.sqlite3)
+  --ttl SECONDS         how long to keep job results (default 3600)
+```
+
+Usage examples:
 - `./s5run server --listen 0.0.0.0:7777` - Start the script server on 7777 port
 - `./s5run server --listen 0.0.0.0:7777 --threads 8` - Start the script server on 7777 port and 8 threads
-- `./s5runs generate --list` - Show supported languages for generate client or provider code
-- `./s5run generate client --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli`  -  Generate client code base on cpp98
-- `./s5run generate provider --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli`  -  Generate client code base on cpp98
-- `./s5run run localhost:7777 [args...]`  -  Run local script file
-- `cat script.js | ./s5run run localhost:7777 [args...]`  -  Run local script file
+- `./s5run server --listen 7777 --queue --db /var/lib/s5run/queue.sqlite3 --ttl 7200` - Start the server with a persistent job queue
+
+### s5run generate
+
+```sh
+$ ./s5run help generate
+s5run generate - generate client or provider code
+
+Usage:
+  ./s5run generate client   --language LANG --output-dir DIR [--schema FILE]
+  ./s5run generate provider --language LANG --output-dir DIR [--schema FILE]
+  ./s5run generate --list
+
+Options:
+  --language LANG  target language (cpp98, cpp11)
+  --output-dir DIR where to write generated files
+  --schema FILE    schema file (default s5run-client.json)
+  --list           list available generators
+```
+
+Usage examples:
+- `./s5run generate --list` - Show supported languages for generate client or provider code
+- `./s5run generate client --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli` - Generate client code based on cpp98
+- `./s5run generate provider --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli` - Generate provider code based on cpp98 (*not implemented yet*)
+
+### s5run run
+
+```sh
+$ ./s5run help run
+s5run run - run a script against a server
+
+Usage:
+  ./s5run run <host:port> [--script FILE] [--provider SPEC] [--api-key KEY] [args...]
+  cat script.js | ./s5run run <host:port> [args...]
+
+Options:
+  --script FILE     script file to execute (default: stdin)
+  --provider SPEC   remote context provider: "host:port,name1,name2"
+  --api-key KEY     api key for authentication (stub)
+  args...           arguments passed to the script entry point
+```
+
+Usage examples:
+- `./s5run run localhost:7777 --script script.js arg1 arg2` - Run script file (*not implemented yet*)
+- `cat script.js | ./s5run run localhost:7777 [args...]` - Run script from stdin (*not implemented yet*)
 
 
 
