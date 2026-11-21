@@ -118,7 +118,7 @@ def ensure_generated():
     for _lang in _langs:
         LOG.get_logger().info(" ... generate-cli for %s", _lang)
         UtilsShell.run_command(
-            [SERVER_BIN, "--generate", _lang, "--output-dir", _todo_generate[_lang]],
+            [SERVER_BIN, "generate", "client", "--language", _lang, "--output-dir", _todo_generate[_lang]],
             _log=LOG.get_logger(),
             print_output_on_exit=True
         )
@@ -299,7 +299,7 @@ def start_server(port):
             os.remove(queue_db + suffix)
         except OSError:
             pass
-    proc = subprocess.Popen([SERVER_BIN, "--listen", "127.0.0.1:" + str(port),
+    proc = subprocess.Popen([SERVER_BIN, "server", "--listen", "127.0.0.1:" + str(port),
                              "--threads", "2", "--queue", "--db", queue_db,
                              "--ttl", "60"], cwd=ROOT,
                             stdout=log, stderr=subprocess.STDOUT)

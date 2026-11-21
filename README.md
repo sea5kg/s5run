@@ -19,6 +19,47 @@ Not implemented yet:
 - `add_context_provider`
 
 
+
+
+## Command line
+
+```sh
+$ ./s5run help
+
+           ░░░░░░░
+          ░██▓▓▓▓▒
+ ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
+ ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
+  ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+ ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
+  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
+
+s5run v0.2.0 - remote script execution server
+
+Usage:
+  s5run <command> [options]
+
+Commands:
+  server     Start the script server
+  generate   Generate client or provider code
+  run        Run a script against a server
+  version    Print version
+  help       Show this help
+
+Run 's5run help <command>' for command details.
+```
+
+Where, usage examples:
+- `./s5run server --listen 0.0.0.0:7777` - Start the script server on 7777 port
+- `./s5run server --listen 0.0.0.0:7777 --threads 8` - Start the script server on 7777 port and 8 threads
+- `./s5runs generate --list` - Show supported languages for generate client or provider code
+- `./s5run generate client --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli`  -  Generate client code base on cpp98
+- `./s5run generate provider --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli`  -  Generate client code base on cpp98
+- `./s5run run localhost:7777 [args...]`  -  Run local script file
+- `cat script.js | ./s5run run localhost:7777 [args...]`  -  Run local script file
+
+
+
 ## Generation client code library (context-provider)
 
 Hardcoded file `s5run-client.json`
@@ -164,7 +205,6 @@ For regenerate client libraries:
 
 ```sh
 $ python3 -m pys5rungen all     # all configured languages
-$ python3 -m pys5rungen cpp11   # only C++11
 $ python3 -m pys5rungen java    # only Java
 $ python3 -m pys5rungen py      # only Python
 $ python3 -m pys5rungen init    # create a default example s5run-client.json
@@ -231,7 +271,7 @@ $ docker run --rm -p 7777:7777 sea5kg/s5run:v0.1.0
 ## Example run server
 
 ```sh
-$ ./s5run --listen "0.0.0.0:7777" --threads 8
+$ ./s5run server --listen "0.0.0.0:7777" --threads 8
 s5run listening on 0.0.0.0:7777, threads=8
 client 127.0.0.1:53421 connected
 ```
