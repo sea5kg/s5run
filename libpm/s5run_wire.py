@@ -93,18 +93,23 @@ class Writer:
         self.b = bytearray()
 
     def u8(self, v):
+        """unsigned int 8 bits"""
         self.b.append(v & 0xFF)
 
     def u16(self, v):
+        """unsigned int 16 bits"""
         self.b += struct.pack('<H', v & 0xFFFF)
 
     def u32(self, v):
+        """unsigned int 32 bits"""
         self.b += struct.pack('<I', v & 0xFFFFFFFF)
 
     def i32(self, v):
+        """signed int 32 bits"""
         self.b += struct.pack('<i', v)
 
     def s(self, v):
+        """ string """
         raw = v.encode()
         if len(raw) <= 0xFF:
             self.b.append(S_LEN_1)
@@ -118,6 +123,7 @@ class Writer:
         self.b += raw
 
     def val(self, v):
+        """ set value """
         if v is None:
             self.b.append(T_UNDEF)
         elif isinstance(v, bool):
@@ -146,44 +152,51 @@ class Writer:
             self.i32(v.this_id)
             self.s(v.type)
         else:
-            raise WireError("cannot encode: %r" % (v,))
+            raise WireError(f"cannot encode: {v!r}")
 
 
 class Ref:
-    def __init__(self, this_id, type):
+    """ Ref """
+    def __init__(self, this_id, _type):
         self.this_id = this_id
-        self.type = type
+        self.type = _type
 
     def __repr__(self):
-        return "Ref(%d, %r)" % (self.this_id, self.type)
+        return f"Ref({self.this_id}, {self.type!r})"
 
 
 class Reader:
+    """ Reader """
     def __init__(self, data):
         self.d = data
         self.p = 0
 
     def u8(self):
+        """ unsigned int 8 bits """
         v = self.d[self.p]
         self.p += 1
         return v
 
     def u16(self):
+        """ unsigned int 16 bits """
         v = struct.unpack_from('<H', self.d, self.p)[0]
         self.p += 2
         return v
 
     def u32(self):
+        """ unsigned int 32 bits """
         v = struct.unpack_from('<I', self.d, self.p)[0]
         self.p += 4
         return v
 
     def i32(self):
+        """ signed int 32 bits """
         v = struct.unpack_from('<i', self.d, self.p)[0]
         self.p += 4
         return v
 
     def s(self):
+        """ string """
         sz = self.u8()
         if sz == S_LEN_1:
             n = self.u8()
@@ -192,12 +205,13 @@ class Reader:
         elif sz == S_LEN_4:
             n = self.u32()
         else:
-            raise WireError("bad string length size %02X" % sz)
+            raise WireError(f"bad string length size {sz:02X}")
         v = self.d[self.p:self.p + n].decode()
         self.p += n
         return v
 
     def val(self):
+        """ read value """
         t = self.u8()
         if t == T_UNDEF:
             return None
@@ -244,14 +258,14 @@ class Reader:
             for _ in range(self.u32()):
                 kt = self.u8()
                 if kt != T_STRING:
-                    raise WireError("bad object key tag %02X" % kt)
+                    raise WireError(f"bad object key tag {kt:02X}")
                 k = self.s()
                 out[k] = self.val()
             return out
         if t == T_REF:
             this_id = self.i32()
             return Ref(this_id, self.s())
-        raise WireError("bad value tag %02X" % t)
+        raise WireError(f"bad value tag {t:02X}")
 
 
 def connect(host, port):
@@ -267,24 +281,25 @@ def read_hello(sock):
     Returns (server_version, protocol_version); raises on mismatch."""
     t, r = recv_msg(sock)
     if t != M_SERVER_HELLO:
-        raise WireError("expected server hello, got msg type %d" % t)
+        raise WireError(f"expected server hello, got msg type {t}")
     text = r.d[r.p:].decode("utf-8")
     parts = text.split(" ")
     if len(parts) != 3 or parts[0] != "s5run":
-        raise WireError("bad server hello: %r" % text)
+        raise WireError(f"bad server hello: {text!r}")
     protocol = int(parts[2])
     if protocol != SUPPORTED_PROTOCOL_VERSION:
-        raise WireError("server protocol %d, client supports %d"
-                        % (protocol, SUPPORTED_PROTOCOL_VERSION))
+        raise WireError(f"server protocol {protocol}, client supports {SUPPORTED_PROTOCOL_VERSION}")
     return parts[1], protocol
 
 
 def send_msg(sock, msg_type, body):
+    """ send_msg """
     frame = bytes([msg_type]) + bytes(body)
     sock.sendall(struct.pack('>I', len(frame)) + frame)
 
 
 def recv_msg(sock):
+    """ recv_msg """
     raw = b''
     while len(raw) < 4:
         c = sock.recv(4 - len(raw))
@@ -306,7 +321,7 @@ def request_stats(sock):
     send_msg(sock, M_STATS_REQ, [])
     t, r = recv_msg(sock)
     if t != M_STATS_RESP:
-        raise WireError("expected stats response, got msg type %d" % t)
+        raise WireError(f"expected stats response, got msg type {t}")
     return r.u32(), r.u32(), r.u32(), r.u32()
 
 
@@ -321,7 +336,7 @@ def submit_job(sock, script, entry, args):
     send_msg(sock, M_JOB_SUBMIT, w.b)
     t, r = recv_msg(sock)
     if t != M_JOB_SUBMIT_RESP:
-        raise WireError("expected job submit response, got %d" % t)
+        raise WireError(f"expected job submit response, got {t}")
     if r.u8() != 1:
         raise WireError("job submit failed: " + r.s())
     return r.s()
@@ -334,7 +349,7 @@ def get_job_result(sock, uuid):
     send_msg(sock, M_JOB_RESULT_REQ, w.b)
     t, r = recv_msg(sock)
     if t != M_JOB_RESULT_RESP:
-        raise WireError("expected job result response, got %d" % t)
+        raise WireError(f"expected job result response, got {t}")
     status = r.u8()
     if status in (2, 3):
         ok = r.u8()
@@ -343,33 +358,37 @@ def get_job_result(sock, uuid):
 
 
 def _expect_register_resp(sock, what):
+    """ _expect_register_resp """
     t, r = recv_msg(sock)
     if t != M_REGISTER_RESP:
-        raise WireError("%s: unexpected msg type %d" % (what, t))
+        raise WireError(f"{what}: unexpected msg type {t}")
     ok = r.u8()
     err = r.s()
     if not ok:
-        raise WireError("%s failed: %s" % (what, err))
+        raise WireError(f"{what} failed: {err}")
 
 
 def register_func(sock, name):
+    """ register_func """
     w = Writer()
     w.s(name)
     send_msg(sock, M_REGISTER_FUNC, w.b)
-    _expect_register_resp(sock, "register_func(%r)" % name)
+    _expect_register_resp(sock, f"register_func({name!r})")
 
 
 def register_object_type(sock, name, methods):
+    """ register_object_type """
     w = Writer()
     w.s(name)
     w.u32(len(methods))
     for m in methods:
         w.s(m)
     send_msg(sock, M_REGISTER_TYPE, w.b)
-    _expect_register_resp(sock, "register_object_type(%r)" % name)
+    _expect_register_resp(sock, f"register_object_type({name!r})")
 
 
 def register_object(sock, name, this_id, type_name, methods):
+    """ register_object """
     w = Writer()
     w.s(name)
     w.i32(this_id)
@@ -378,10 +397,11 @@ def register_object(sock, name, this_id, type_name, methods):
     for m in methods:
         w.s(m)
     send_msg(sock, M_REGISTER_OBJ, w.b)
-    _expect_register_resp(sock, "register_object(%r)" % name)
+    _expect_register_resp(sock, f"register_object({name!r})")
 
 
 def exec_script(sock, script, entry, args):
+    """ exec_script """
     w = Writer()
     w.s(script)
     w.s(entry)
@@ -392,6 +412,7 @@ def exec_script(sock, script, entry, args):
 
 
 def recv_callback(sock):
+    """ recv_callback """
     t, r = recv_msg(sock)
     if t != M_CALLBACK_REQ:
         raise WireError(f"expected callback, got msg type {t}")
@@ -402,6 +423,7 @@ def recv_callback(sock):
 
 
 def send_callback_result(sock, cid, value):
+    """ send_callback_result """
     w = Writer()
     w.i32(cid)
     w.u8(1)

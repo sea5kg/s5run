@@ -41,6 +41,7 @@ import os
 import sys
 import subprocess
 
+
 class UtilsShellOutput:
     """ helper UtilsShellOutput """
     def __init__(self, _log=None):
@@ -63,6 +64,7 @@ class UtilsShellOutput:
     def get_output(self):
         """ return output """
         return "\n".join(self.__collect_output)
+
 
 class UtilsShell:
     """ UtilsShell """

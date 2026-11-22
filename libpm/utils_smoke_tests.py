@@ -49,6 +49,7 @@ ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 ROOT_DIR = os.path.join(ROOT_DIR, "..")
 ROOT_DIR = os.path.normpath(ROOT_DIR)
 
+
 class UtilsSmokeTests:
     """ UtilsSmokeTests """
 

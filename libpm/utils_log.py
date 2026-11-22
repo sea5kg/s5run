@@ -79,4 +79,4 @@ class UtilsLog:
     def set_level(self, level):
         """ set level """
         self.__log.setLevel(level)
-        self.__stdout.setLevel(level)
+        self.__stdout_handler.setLevel(level)
