@@ -45,6 +45,9 @@ std::map<std::string, std::shared_ptr<IGenerator>> all() {
     ret["cpp11"] = make_generator_cpp11();
     ret["go"] = make_generator_golang();
     ret["py"] = make_generator_python();
+    ret["java11"] = make_generator_java11();
+    ret["java17"] = make_generator_java17();
+    ret["java21"] = make_generator_java21();
     return ret;
 };
 

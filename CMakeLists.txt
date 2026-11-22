@@ -106,6 +106,7 @@ list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_ge
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generator_cpp11.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generator_golang.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generator_python.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generator_java.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generators.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_schema.cpp")
 

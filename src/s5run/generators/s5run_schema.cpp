@@ -297,6 +297,21 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
     s.py.module_ = o.value("module", "");
     s.py.output_dir = o.value("output-dir", "");
   }
+  if (j.contains("options") && j["options"].contains("java")) {
+    const auto &o = j["options"]["java"];
+    s.java.package_ = o.value("package", "");
+    s.java.output_dir = o.value("output-dir", "");
+  }
+  if (j.contains("options") && j["options"].contains("java17")) {
+    const auto &o = j["options"]["java17"];
+    s.java17.package_ = o.value("package", "");
+    s.java17.output_dir = o.value("output-dir", "");
+  }
+  if (j.contains("options") && j["options"].contains("java11")) {
+    const auto &o = j["options"]["java11"];
+    s.java11.package_ = o.value("package", "");
+    s.java11.output_dir = o.value("output-dir", "");
+  }
   if (j.contains("functions")) {
     for (const auto &fj : j["functions"]) {
       if (!check_unknown_fields(fj, {"name", "return", "arguments"}, "functions[]", error))

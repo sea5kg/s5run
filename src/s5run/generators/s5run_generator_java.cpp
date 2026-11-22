@@ -1,0 +1,1613 @@
+/**********************************************************************************
+ *
+ *            ░░░░░░░
+ *           ░██▓▓▓▓▒
+ *  ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
+ *  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
+ *   ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+ *  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
+ *   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
+ *
+ * MIT License
+ *
+ * Copyright (c) 2026 Evgenii Sopov
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * Original repository: https://github.com/sea5kg/s5run
+ *
+ ***********************************************************************************/
+
+#include "s5run_generators.h"
+#include "s5run_schema.h"
+
+#include <sys/stat.h>
+
+#include <fstream>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+namespace s5run {
+namespace generators {
+
+// -----------------------------------------------------------------------
+// Java dialect: 21 (switch patterns), 17 (instanceof binding),
+// 11 (classic casts) share everything except localized snippets.
+// -----------------------------------------------------------------------
+
+enum java_flavor {
+  JAVA_11,
+  JAVA_17,
+  JAVA_21,
+};
+
+static bool j_is_scalar(const std::string &t) {
+  return t == "bool" || t == "int" || t == "uint" || t == "float" ||
+         t == "double" || t == "string" || t == "byte";
+}
+
+static bool j_is_void(const std::string &t) {
+  return t == "void";
+}
+
+static bool j_is_array(const std::string &t) {
+  return t.size() > 7 && t.substr(0, 6) == "array<" && t[t.size() - 1] == '>';
+}
+
+static std::string j_array_inner(const std::string &t) {
+  return t.substr(6, t.size() - 7);
+}
+
+static bool j_is_ref(const std::string &t) {
+  return !j_is_scalar(t) && !j_is_void(t) && !j_is_array(t);
+}
+
+static bool j_has_convert(const std::vector<schema_argument> &args) {
+  return args.size() == 1 && !args[0].convert_from.empty();
+}
+
+static std::string j_scalar(const std::string &t) {
+  if (t == "bool") return "boolean";
+  if (t == "int" || t == "uint") return "long";
+  if (t == "float" || t == "double") return "double";
+  if (t == "string") return "String";
+  if (t == "byte") return "byte";
+  return t;
+}
+
+static std::string j_boxed(const std::string &t) {
+  if (t == "long") return "Long";
+  if (t == "boolean") return "Boolean";
+  if (t == "double") return "Double";
+  if (t == "byte") return "Byte";
+  return t;
+}
+
+static std::string type_to_java(const std::string &t) {
+  if (j_is_array(t)) {
+    std::string inner = type_to_java(j_array_inner(t));
+    return "List<" + j_boxed(inner) + ">";
+  }
+  return j_scalar(t);
+}
+
+static std::string j_read_expr(const std::string &t);
+
+static std::string j_suffix(const std::string &t) {
+  if (j_is_scalar(t)) {
+    if (t == "bool") return "Bool";
+    if (t == "int" || t == "uint") return "Long";
+    if (t == "float" || t == "double") return "Double";
+    if (t == "string") return "Str";
+    if (t == "byte") return "Byte";
+  }
+  return "Of" + j_suffix(j_array_inner(t));
+}
+
+static std::string j_read_expr(const std::string &t) {
+  if (j_is_scalar(t)) {
+    if (t == "int" || t == "uint") return "r.readLongInt()";
+    if (t == "bool") return "r.readBool()";
+    if (t == "float" || t == "double") return "r.readDouble()";
+    if (t == "string") return "r.strValue()";
+    if (t == "byte") return "r.readByteNum()";
+  }
+  return "Wire.readList" + j_suffix(t) + "(r)";
+}
+
+static std::string j_write_stmt(const std::string &t, const std::string &expr) {
+  if (j_is_scalar(t)) {
+    if (t == "int" || t == "uint") return "w.int64(" + expr + ");";
+    if (t == "bool") return "w.boolValue(" + expr + ");";
+    if (t == "float" || t == "double") return "w.f64Value(" + expr + ");";
+    if (t == "string") return "w.strValue(" + expr + ");";
+    if (t == "byte") return "w.byteValue((int) " + expr + ");";
+  }
+  return "Wire.writeList" + j_suffix(t) + "(w, " + expr + ");";
+}
+
+// -----------------------------------------------------------------------
+// Shared runtime interface (methods/functions)
+// -----------------------------------------------------------------------
+
+struct j_method_like {
+  std::string name;
+  std::string return_type;
+  std::vector<schema_argument> arguments;
+};
+
+static std::vector<j_method_like> all_functions(const schema &s) {
+  std::vector<j_method_like> out;
+  for (const auto &f : s.functions)
+    out.push_back({f.name, f.return_type, f.arguments});
+  return out;
+}
+
+static std::vector<j_method_like> all_methods(const schema &s) {
+  std::vector<j_method_like> out;
+  for (const auto &c : s.classes)
+    for (const auto &m : c.methods)
+      out.push_back({c.name + "::" + m.name, m.return_type, m.arguments});
+  return out;
+}
+
+static std::vector<std::string> list_helpers_needed(const schema &s) {
+  std::vector<std::string> out;
+  std::set<std::string> seen;
+  std::vector<j_method_like> all = all_methods(s);
+  for (const auto &fn : all_functions(s))
+    all.push_back(fn);
+  for (const auto &fm : all) {
+    for (const auto &a : fm.arguments) {
+      if (!a.convert_from.empty())
+        continue;
+      if (j_is_array(a.type) && !j_is_ref(j_array_inner(a.type))) {
+        if (seen.count(a.type) == 0) {
+          seen.insert(a.type);
+          out.push_back(a.type);
+        }
+      }
+    }
+    if (!j_is_void(fm.return_type)) {
+      if (j_is_array(fm.return_type) && !j_is_ref(j_array_inner(fm.return_type))) {
+        if (seen.count(fm.return_type) == 0) {
+          seen.insert(fm.return_type);
+          out.push_back(fm.return_type);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+static bool type_uses_refs(const std::string &t) {
+  return j_is_ref(t) || (j_is_array(t) && j_is_ref(j_array_inner(t)));
+}
+
+static bool needs_refs(const schema &s) {
+  std::vector<j_method_like> all = all_methods(s);
+  for (const auto &fn : all_functions(s))
+    all.push_back(fn);
+  for (const auto &fm : all) {
+    for (const auto &a : fm.arguments) {
+      if (!a.convert_from.empty())
+        continue;
+      if (type_uses_refs(a.type))
+        return true;
+    }
+    if (type_uses_refs(fm.return_type))
+      return true;
+  }
+  return false;
+}
+
+static std::string j_replace_all(std::string s, const std::string &from,
+                                 const std::string &to) {
+  size_t pos = 0;
+  while ((pos = s.find(from, pos)) != std::string::npos) {
+    s.replace(pos, from.size(), to);
+    pos += to.size();
+  }
+  return s;
+}
+
+// -----------------------------------------------------------------------
+// Context decode/encode blocks (per-schema, shared by all flavors)
+// -----------------------------------------------------------------------
+
+static std::string decode_args(const j_method_like &fm) {
+  std::vector<std::string> lines;
+  if (j_has_convert(fm.arguments)) {
+    const schema_argument &a = fm.arguments[0];
+    lines.push_back("            long n_" + a.name + " = r.u32();");
+    lines.push_back("            List<String> " + a.name + " = new ArrayList<>((int) n_" + a.name + ");");
+    lines.push_back("            for (long i = 0; i < n_" + a.name + "; i++)");
+    lines.push_back("                " + a.name + ".add(valueToString(Wire.decodeValue(r)));");
+    std::string out;
+    for (size_t i = 0; i < lines.size(); ++i) {
+      if (i > 0)
+        out += "\n";
+      out += lines[i];
+    }
+    return out;
+  }
+  for (const auto &a : fm.arguments) {
+    const std::string &t = a.type;
+    if (j_is_array(t) && j_is_ref(j_array_inner(t))) {
+      std::string cls = j_array_inner(t);
+      lines.push_back("            if (r.u8() != Wire.T_ARRAY) throw new RuntimeException(\"wire: expected array\");");
+      lines.push_back("            int cnt_" + a.name + " = (int) r.u32();");
+      lines.push_back("            List<" + cls + "> " + a.name + " = new ArrayList<>(cnt_" + a.name + ");");
+      lines.push_back("            for (int i = 0; i < cnt_" + a.name + "; i++) {");
+      lines.push_back("                int refId = readRefId(r);");
+      lines.push_back("                " + cls + " obj = instanceById(\"" + cls + "\", refId);");
+      lines.push_back("                " + a.name + ".add(obj);");
+      lines.push_back("            }");
+    } else if (j_is_ref(t)) {
+      lines.push_back("            int refId_" + a.name + " = readRefId(r);");
+      lines.push_back("            " + t + " " + a.name + " = instanceById(\"" + t + "\", refId_" + a.name + ");");
+    } else {
+      lines.push_back("            " + type_to_java(t) + " " + a.name + " = " + j_read_expr(t) + ";");
+    }
+  }
+  std::string out;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    if (i > 0)
+      out += "\n";
+    out += lines[i];
+  }
+  return out;
+}
+
+static std::string call_args(const j_method_like &fm) {
+  std::string out;
+  for (const auto &a : fm.arguments) {
+    if (!out.empty())
+      out += ", ";
+    out += a.name;
+  }
+  return out;
+}
+
+static std::string encode_result(const j_method_like &fm) {
+  if (j_is_void(fm.return_type))
+    return "            w.u8(Wire.T_UNDEFINED);";
+  const std::string &t = fm.return_type;
+  if (j_is_array(t) && j_is_ref(j_array_inner(t))) {
+    std::string cls = j_array_inner(t);
+    std::string out = "            w.u8(Wire.T_ARRAY);\n";
+    out += "            w.u32(res.size());\n";
+    out += "            for (" + cls + " item : res) {\n";
+    out += "                int id = registerInstance(item);\n";
+    out += "                w.u8(Wire.T_REF);\n";
+    out += "                w.i32(id);\n";
+    out += "                w.str(\"" + cls + "\");\n";
+    out += "            }";
+    return out;
+  }
+  if (j_is_ref(t)) {
+    std::string out = "            int objId = registerInstance(res);\n";
+    out += "            w.u8(Wire.T_REF);\n";
+    out += "            w.i32(objId);\n";
+    out += "            w.str(\"" + t + "\");";
+    return out;
+  }
+  return "            " + j_write_stmt(t, "res");
+}
+
+// -----------------------------------------------------------------------
+// Dialect snippets
+// -----------------------------------------------------------------------
+
+static std::string encode_value_snippet(java_flavor f);
+static std::string value_to_string_snippet(java_flavor f);
+static std::string decode_value_snippet(java_flavor f);
+static std::string read_long_int_snippet(java_flavor f);
+static std::string str_switch_snippet(java_flavor f);
+static std::string value_file_snippet(java_flavor f);
+static std::string run_result_file_snippet(java_flavor f);
+static std::string dispatch_case(java_flavor f, const std::string &name);
+static std::string dispatch_default(java_flavor f);
+static std::string pending_decls(java_flavor f);
+static std::string flush_pending_body(java_flavor f);
+static std::string frame_decl(java_flavor f);
+
+static std::string encode_value_snippet(java_flavor f) {
+  if (f == JAVA_21) {
+    return R"JAVA(
+    public static void encodeValue(Writer w, Value v) {
+        switch (v) {
+            case Value.Null n -> w.u8(T_UNDEFINED);
+            case Value.Bool b -> { w.u8(T_BOOL); w.bool(b.v()); }
+            case Value.Int i -> w.int64(i.v());
+            case Value.Dbl d -> { w.u8(T_FLOAT64); w.f64(d.v()); }
+            case Value.Str s -> w.strValue(s.v());
+            case Value.Arr a -> {
+                w.u8(T_ARRAY);
+                w.u32(a.v().size());
+                for (Value e : a.v()) encodeValue(w, e);
+            }
+            case Value.Obj o -> {
+                w.u8(T_OBJECT);
+                w.u32(o.v().size());
+                for (var en : o.v().entrySet()) {
+                    w.strValue(en.getKey());
+                    encodeValue(w, en.getValue());
+                }
+            }
+            case Value.Ref rf -> {
+                w.u8(T_REF);
+                w.i32(rf.thisId());
+                w.str(rf.type());
+            }
+        }
+    })JAVA";
+  }
+  if (f == JAVA_17) {
+    return R"JAVA(
+    public static void encodeValue(Writer w, Value v) {
+        if (v instanceof Value.Null) {
+            w.u8(T_UNDEFINED);
+        } else if (v instanceof Value.Bool b) {
+            w.u8(T_BOOL); w.bool(b.v());
+        } else if (v instanceof Value.Int i) {
+            w.int64(i.v());
+        } else if (v instanceof Value.Dbl d) {
+            w.u8(T_FLOAT64); w.f64(d.v());
+        } else if (v instanceof Value.Str s) {
+            w.strValue(s.v());
+        } else if (v instanceof Value.Arr a) {
+            w.u8(T_ARRAY);
+            w.u32(a.v().size());
+            for (Value e : a.v()) encodeValue(w, e);
+        } else if (v instanceof Value.Obj o) {
+            w.u8(T_OBJECT);
+            w.u32(o.v().size());
+            for (var en : o.v().entrySet()) {
+                w.strValue(en.getKey());
+                encodeValue(w, en.getValue());
+            }
+        } else if (v instanceof Value.Ref rf) {
+            w.u8(T_REF);
+            w.i32(rf.thisId());
+            w.str(rf.type());
+        }
+    })JAVA";
+  }
+  return R"JAVA(
+    public static void encodeValue(Writer w, Value v) {
+        if (v instanceof Value.Null) {
+            w.u8(T_UNDEFINED);
+        } else if (v instanceof Value.Bool) {
+            w.u8(T_BOOL); w.bool(((Value.Bool) v).v());
+        } else if (v instanceof Value.Int) {
+            w.int64(((Value.Int) v).v());
+        } else if (v instanceof Value.Dbl) {
+            w.u8(T_FLOAT64); w.f64(((Value.Dbl) v).v());
+        } else if (v instanceof Value.Str) {
+            w.strValue(((Value.Str) v).v());
+        } else if (v instanceof Value.Arr) {
+            Value.Arr a = (Value.Arr) v;
+            w.u8(T_ARRAY);
+            w.u32(a.v().size());
+            for (Value e : a.v()) encodeValue(w, e);
+        } else if (v instanceof Value.Obj) {
+            Value.Obj o = (Value.Obj) v;
+            w.u8(T_OBJECT);
+            w.u32(o.v().size());
+            for (Map.Entry<String, Value> en : o.v().entrySet()) {
+                w.strValue(en.getKey());
+                encodeValue(w, en.getValue());
+            }
+        } else if (v instanceof Value.Ref) {
+            Value.Ref rf = (Value.Ref) v;
+            w.u8(T_REF);
+            w.i32(rf.thisId());
+            w.str(rf.type());
+        }
+    })JAVA";
+}
+
+static std::string value_to_string_snippet(java_flavor f) {
+  if (f == JAVA_21) {
+    return R"JAVA(
+    public static String valueToString(Value v) {
+        return switch (v) {
+            case Value.Null n -> "null";
+            case Value.Bool b -> Boolean.toString(b.v());
+            case Value.Int i -> Long.toString(i.v());
+            case Value.Dbl d -> Double.toString(d.v());
+            case Value.Str s -> s.v();
+            default -> throw new RuntimeException("wire: expected a scalar argument");
+        };
+    })JAVA";
+  }
+  if (f == JAVA_17) {
+    return R"JAVA(
+    public static String valueToString(Value v) {
+        if (v instanceof Value.Null) return "null";
+        if (v instanceof Value.Bool b) return Boolean.toString(b.v());
+        if (v instanceof Value.Int i) return Long.toString(i.v());
+        if (v instanceof Value.Dbl d) return Double.toString(d.v());
+        if (v instanceof Value.Str s) return s.v();
+        throw new RuntimeException("wire: expected a scalar argument");
+    })JAVA";
+  }
+  return R"JAVA(
+    public static String valueToString(Value v) {
+        if (v instanceof Value.Null) return "null";
+        if (v instanceof Value.Bool) return Boolean.toString(((Value.Bool) v).v());
+        if (v instanceof Value.Int) return Long.toString(((Value.Int) v).v());
+        if (v instanceof Value.Dbl) return Double.toString(((Value.Dbl) v).v());
+        if (v instanceof Value.Str) return ((Value.Str) v).v();
+        throw new RuntimeException("wire: expected a scalar argument");
+    })JAVA";
+}
+
+static std::string decode_value_snippet(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17) {
+    return R"JAVA(    public static Value decodeValue(Reader r) {
+        int tag = r.u8();
+        return switch (tag) {
+            case T_UNDEFINED -> new Value.Null();
+            case T_BOOL -> new Value.Bool(r.readBoolRaw());
+            case T_INT8 -> new Value.Int(r.readI8());
+            case T_INT16 -> new Value.Int(r.readI16());
+            case T_INT32, T_UINT32 -> new Value.Int(r.i32());
+            case T_INT64, T_UINT64 -> new Value.Int(r.i64());
+            case T_UINT8 -> new Value.Int(r.u8());
+            case T_UINT16 -> new Value.Int(r.u16());
+            case T_FLOAT32 -> new Value.Dbl(r.f32());
+            case T_FLOAT64 -> new Value.Dbl(r.f64());
+            case T_STRING -> new Value.Str(r.str());
+            case T_ARRAY -> {
+                int n = (int) r.u32();
+                List<Value> a = new ArrayList<>(n);
+                for (int i = 0; i < n; i++) a.add(decodeValue(r));
+                yield new Value.Arr(a);
+            }
+            case T_OBJECT -> {
+                int n = (int) r.u32();
+                Map<String, Value> o = new LinkedHashMap<>();
+                for (int i = 0; i < n; i++) o.put(r.strValue(), decodeValue(r));
+                yield new Value.Obj(o);
+            }
+            case T_REF -> new Value.Ref(r.i32(), r.str());
+            default -> throw new RuntimeException("wire: unknown value tag " + tag);
+        };
+    })JAVA";
+  }
+  return R"JAVA(    public static Value decodeValue(Reader r) {
+        int tag = r.u8();
+        switch (tag) {
+            case T_UNDEFINED: return Value.Null.INSTANCE;
+            case T_BOOL: return new Value.Bool(r.readBoolRaw());
+            case T_INT8: return new Value.Int(r.readI8());
+            case T_INT16: return new Value.Int(r.readI16());
+            case T_INT32: case T_UINT32: return new Value.Int(r.i32());
+            case T_INT64: case T_UINT64: return new Value.Int(r.i64());
+            case T_UINT8: return new Value.Int(r.u8());
+            case T_UINT16: return new Value.Int(r.u16());
+            case T_FLOAT32: return new Value.Dbl(r.f32());
+            case T_FLOAT64: return new Value.Dbl(r.f64());
+            case T_STRING: return new Value.Str(r.str());
+            case T_ARRAY: {
+                int n = (int) r.u32();
+                List<Value> a = new ArrayList<>(n);
+                for (int i = 0; i < n; i++) a.add(decodeValue(r));
+                return new Value.Arr(a);
+            }
+            case T_OBJECT: {
+                int n = (int) r.u32();
+                Map<String, Value> o = new LinkedHashMap<>();
+                for (int i = 0; i < n; i++) o.put(r.strValue(), decodeValue(r));
+                return new Value.Obj(o);
+            }
+            case T_REF: return new Value.Ref(r.i32(), r.str());
+            default: throw new RuntimeException("wire: unknown value tag " + tag);
+        }
+    })JAVA";
+}
+
+static std::string read_long_int_snippet(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17) {
+    return R"JAVA(        public long readLongInt() {
+            int tag = u8();
+            return switch (tag) {
+                case T_INT8 -> (byte) u8();
+                case T_INT16 -> (short) u16();
+                case T_INT32, T_UINT32 -> (long) i32();
+                case T_INT64, T_UINT64 -> i64();
+                case T_UINT8 -> u8();
+                case T_UINT16 -> u16();
+                default -> throw new RuntimeException("wire: expected an integer");
+            };
+        })JAVA";
+  }
+  return R"JAVA(        public long readLongInt() {
+            int tag = u8();
+            switch (tag) {
+                case T_INT8: return (byte) u8();
+                case T_INT16: return (short) u16();
+                case T_INT32: case T_UINT32: return (long) i32();
+                case T_INT64: case T_UINT64: return i64();
+                case T_UINT8: return u8();
+                case T_UINT16: return u16();
+                default: throw new RuntimeException("wire: expected an integer");
+            }
+        })JAVA";
+}
+
+static std::string str_switch_snippet(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17) {
+    return R"JAVA(        public String str() {
+            int lenSize = u8();
+            int n = switch (lenSize) {
+                case 0x00 -> u8();
+                case 0x01 -> u16();
+                case 0x02 -> (int) u32();
+                default -> throw new RuntimeException("wire: bad string length size");
+            };
+            byte[] b = new byte[n];
+            buf.get(b);
+            return new String(b, StandardCharsets.UTF_8);
+        })JAVA";
+  }
+  return R"JAVA(        public String str() {
+            int lenSize = u8();
+            int n;
+            switch (lenSize) {
+                case 0x00: n = u8(); break;
+                case 0x01: n = u16(); break;
+                case 0x02: n = (int) u32(); break;
+                default: throw new RuntimeException("wire: bad string length size");
+            }
+            byte[] b = new byte[n];
+            buf.get(b);
+            return new String(b, StandardCharsets.UTF_8);
+        })JAVA";
+}
+
+static std::string value_file_snippet(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17) {
+    return R"JAVA(
+public sealed interface Value {
+    record Null() implements Value {}
+    record Bool(boolean v) implements Value {}
+    record Int(long v) implements Value {}
+    record Dbl(double v) implements Value {}
+    record Str(String v) implements Value {}
+    record Arr(List<Value> v) implements Value {}
+    record Obj(Map<String, Value> v) implements Value {}
+    record Ref(int thisId, String type) implements Value {}
+}
+)JAVA";
+  }
+  return R"JAVA(
+public interface Value {
+    final class Null implements Value {
+        public static final Null INSTANCE = new Null();
+        private Null() {}
+    }
+    final class Bool implements Value {
+        final boolean val;
+        public Bool(boolean v) { this.val = v; }
+        public boolean v() { return val; }
+    }
+    final class Int implements Value {
+        final long val;
+        public Int(long v) { this.val = v; }
+        public long v() { return val; }
+    }
+    final class Dbl implements Value {
+        final double val;
+        public Dbl(double v) { this.val = v; }
+        public double v() { return val; }
+    }
+    final class Str implements Value {
+        final String val;
+        public Str(String v) { this.val = v; }
+        public String v() { return val; }
+    }
+    final class Arr implements Value {
+        final List<Value> val;
+        public Arr(List<Value> v) { this.val = v; }
+        public List<Value> v() { return val; }
+    }
+    final class Obj implements Value {
+        final Map<String, Value> val;
+        public Obj(Map<String, Value> v) { this.val = v; }
+        public Map<String, Value> v() { return val; }
+    }
+    final class Ref implements Value {
+        final int thisId;
+        final String type;
+        public Ref(int thisId, String type) { this.thisId = thisId; this.type = type; }
+        public int thisId() { return thisId; }
+        public String type() { return type; }
+    }
+}
+)JAVA";
+}
+
+static std::string run_result_file_snippet(java_flavor f) {
+  std::string head, fail_line, tail;
+  if (f == JAVA_21 || f == JAVA_17) {
+    head =
+      "public record RunResult(\n"
+      "        boolean hasError,\n"
+      "        String error,\n"
+      "        int errorLine,\n"
+      "        long durationMs,\n"
+      "        Value value) {\n";
+    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new Value.Null());";
+    tail = "}\n";
+  } else {
+    head =
+      "public final class RunResult {\n"
+      "    private final boolean hasError;\n"
+      "    private final String error;\n"
+      "    private final int errorLine;\n"
+      "    private final long durationMs;\n"
+      "    private final Value value;\n"
+      "\n"
+      "    public RunResult(boolean hasError, String error, int errorLine, long durationMs, Value value) {\n"
+      "        this.hasError = hasError;\n"
+      "        this.error = error;\n"
+      "        this.errorLine = errorLine;\n"
+      "        this.durationMs = durationMs;\n"
+      "        this.value = value;\n"
+      "    }\n"
+      "\n"
+      "    public boolean hasError() { return hasError; }\n"
+      "    public String error() { return error; }\n"
+      "    public int errorLine() { return errorLine; }\n"
+      "    public long durationMs() { return durationMs; }\n"
+      "    public Value value() { return value; }\n";
+    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, Value.Null.INSTANCE);";
+    tail = "}\n";
+  }
+  return "\n" + head + "\n"
+    "    public static RunResult ok(Value value, long durationMs) {\n"
+    "        return new RunResult(false, \"\", 0, durationMs, value);\n"
+    "    }\n"
+    "\n"
+    "    public static RunResult fail(String error, long durationMs) {\n"
+    "        String msg = error == null ? \"unknown error\" : error;\n"
+    + fail_line + "\n"
+    "    }\n"
+    "\n"
+    "    static int parseErrorLine(String error) {\n"
+    "        if (error == null) return 0;\n"
+    "        int pos = 0;\n"
+    "        while (pos < error.length()) {\n"
+    "            int colon = error.indexOf(':', pos);\n"
+    "            if (colon < 0) return 0;\n"
+    "            int p1 = colon + 1;\n"
+    "            if (p1 >= error.length() || !Character.isDigit(error.charAt(p1))) {\n"
+    "                pos = p1;\n"
+    "                continue;\n"
+    "            }\n"
+    "            int p2 = p1;\n"
+    "            while (p2 < error.length() && Character.isDigit(error.charAt(p2))) p2++;\n"
+    "            if (p2 + 1 < error.length() && error.charAt(p2) == ':' && Character.isDigit(error.charAt(p2 + 1))) {\n"
+    "                return Integer.parseInt(error.substring(p1, p2));\n"
+    "            }\n"
+    "            pos = p2;\n"
+    "        }\n"
+    "        return 0;\n"
+    "    }\n"
+    + tail;
+}
+
+static std::string dispatch_case(java_flavor f, const std::string &name) {
+  if (f == JAVA_11)
+    return "            case \"" + name + "\": cb_" + name + "(cbId, r); return;";
+  return "            case \"" + name + "\" -> cb_" + name + "(cbId, r);";
+}
+
+static std::string dispatch_default(java_flavor f) {
+  if (f == JAVA_11)
+    return "            default: throw new RuntimeException(\"unknown function: \" + name);";
+  return "            default -> throw new RuntimeException(\"unknown function: \" + name);";
+}
+
+static std::string pending_decls(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17) {
+    return "    private record PendingType(String name, List<String> methods) {}\n"
+           "    private record PendingObject(String name, int thisId, List<String> methods) {}";
+  }
+  return "    private static final class PendingType {\n"
+         "        final String name;\n"
+         "        final List<String> methods;\n"
+         "        PendingType(String name, List<String> methods) { this.name = name; this.methods = methods; }\n"
+         "    }\n"
+         "\n"
+         "    private static final class PendingObject {\n"
+         "        final String name;\n"
+         "        final int thisId;\n"
+         "        final List<String> methods;\n"
+         "        PendingObject(String name, int thisId, List<String> methods) { this.name = name; this.thisId = thisId; this.methods = methods; }\n"
+         "    }";
+}
+
+static std::string flush_pending_body(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17) {
+    return "        for (PendingType t : new ArrayList<>(pendingTypes)) {\n"
+           "            sendRegisterType(t.name(), t.methods());\n"
+           "        }\n"
+           "        pendingTypes.clear();\n"
+           "        for (PendingObject o : new ArrayList<>(pendingObjects)) {\n"
+           "            sendRegisterObject(o.name(), o.thisId(), o.methods());\n"
+           "        }";
+  }
+  return "        for (PendingType t : new ArrayList<>(pendingTypes)) {\n"
+         "            sendRegisterType(t.name, t.methods);\n"
+         "        }\n"
+         "        pendingTypes.clear();\n"
+         "        for (PendingObject o : new ArrayList<>(pendingObjects)) {\n"
+         "            sendRegisterObject(o.name, o.thisId, o.methods);\n"
+         "        }";
+}
+
+static std::string frame_decl(java_flavor f) {
+  if (f == JAVA_21 || f == JAVA_17)
+    return "    private record Frame(int msgType, byte[] body) {}";
+  return "    private static final class Frame {\n"
+         "        final int msgType;\n"
+         "        final byte[] body;\n"
+         "        Frame(int msgType, byte[] body) { this.msgType = msgType; this.body = body; }\n"
+         "    }";
+}
+
+// -----------------------------------------------------------------------
+// File generators
+// -----------------------------------------------------------------------
+
+static std::string generate_wire(java_flavor f, const schema &s) {
+  std::string list_helpers;
+  for (const auto &type_str : list_helpers_needed(s)) {
+    std::string inner = j_array_inner(type_str);
+    std::string sfx = j_suffix(type_str);
+    std::string inner_t = j_boxed(type_to_java(inner));
+    list_helpers += "\n    public static List<" + inner_t + "> readList" + sfx + "(Reader r) {\n"
+      "        if (r.u8() != T_ARRAY) throw new RuntimeException(\"wire: expected array\");\n"
+      "        int n = (int) r.u32();\n"
+      "        List<" + inner_t + "> out = new ArrayList<>(n);\n"
+      "        for (int i = 0; i < n; i++) {\n"
+      "            out.add(" + j_read_expr(inner) + ");\n"
+      "        }\n"
+      "        return out;\n"
+      "    }\n"
+      "\n"
+      "    public static void writeList" + sfx + "(Writer w, List<" + inner_t + "> v) {\n"
+      "        w.u8(T_ARRAY);\n"
+      "        w.u32(v.size());\n"
+      "        for (" + type_to_java(inner) + " e : v) {\n"
+      "            " + j_write_stmt(inner, "e") + "\n"
+      "        }\n"
+      "    }";
+  }
+
+  return R"JAVA(import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+public final class Wire {
+    public static final int
+        T_UNDEFINED = 0x00, T_BOOL = 0x01, T_INT8 = 0x02, T_INT16 = 0x03,
+        T_INT32 = 0x04, T_INT64 = 0x05, T_UINT8 = 0x06, T_UINT16 = 0x07,
+        T_UINT32 = 0x08, T_UINT64 = 0x09, T_FLOAT32 = 0x0A, T_FLOAT64 = 0x0B,
+        T_STRING = 0x0C, T_ARRAY = 0x0D, T_OBJECT = 0x0E, T_REF = 0x0F;
+
+    public static final int
+        M_EXEC_REQ = 0x01, M_EXEC_RESP = 0x02, M_CALLBACK_REQ = 0x03,
+        M_CALLBACK_RESP = 0x04, M_REGISTER_FUNC = 0x05, M_REGISTER_OBJ = 0x06,
+        M_REGISTER_TYPE = 0x07, M_REGISTER_RESP = 0x08,
+        M_STATS_REQ = 0x09, M_STATS_RESP = 0x0A, M_SERVER_HELLO = 0x0F;
+
+    public static final class Writer {
+        private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+
+        public byte[] toByteArray() { return buf.toByteArray(); }
+
+        public void u8(int v) { buf.write(v & 0xFF); }
+
+        public void u32(long v) {
+            for (int i = 0; i < 4; i++) buf.write((int) ((v >>> (8 * i)) & 0xFF));
+        }
+
+        public void u64(long v) {
+            for (int i = 0; i < 8; i++) buf.write((int) ((v >>> (8 * i)) & 0xFF));
+        }
+
+        public void i32(int v) { u32(v & 0xFFFFFFFFL); }
+        public void int64(long v) {
+            if (v >= Byte.MIN_VALUE && v <= Byte.MAX_VALUE) { u8(T_INT8); u8((int) v); }
+            else if (v >= Short.MIN_VALUE && v <= Short.MAX_VALUE) { u8(T_INT16); u16((int) v); }
+            else if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) { u8(T_INT32); u32(v); }
+            else { u8(T_INT64); u64(v); }
+        }
+
+        public void u16(int v) {
+            buf.write(v & 0xFF);
+            buf.write((v >> 8) & 0xFF);
+        }
+
+        public void f64(double v) { u64(Double.doubleToLongBits(v)); }
+        public void f32(float v) { u32(Float.floatToIntBits(v) & 0xFFFFFFFFL); }
+
+        public void bool(boolean v) { u8(v ? 1 : 0); }
+
+        public void strValue(String s) {
+            u8(T_STRING);
+            str(s);
+        }
+
+        public void boolValue(boolean v) {
+            u8(T_BOOL);
+            bool(v);
+        }
+
+        public void byteValue(int v) {
+            u8(T_UINT8);
+            u8(v);
+        }
+
+        public void f64Value(double v) {
+            u8(T_FLOAT64);
+            f64(v);
+        }
+
+        public void str(String s) {
+            byte[] b = s.getBytes(StandardCharsets.UTF_8);
+            if (b.length <= 0xFF) { u8(0x00); u8(b.length); }
+            else if (b.length <= 0xFFFF) { u8(0x01); u16(b.length); }
+            else { u8(0x02); u32(b.length); }
+            buf.write(b, 0, b.length);
+        }
+    }
+
+    public static final class Reader {
+        private final ByteBuffer buf;
+
+        public Reader(byte[] data) { buf = ByteBuffer.wrap(data); }
+
+        public int u8() { return buf.get() & 0xFF; }
+        public int u16() { return (buf.get() & 0xFF) | ((buf.get() & 0xFF) << 8); }
+        public long u32() {
+            long v = 0;
+            for (int i = 0; i < 4; i++) v |= (buf.get() & 0xFFL) << (8 * i);
+            return v;
+        }
+        public long u64() {
+            long v = 0;
+            for (int i = 0; i < 8; i++) v |= (buf.get() & 0xFFL) << (8 * i);
+            return v;
+        }
+        public int i32() { return (int) u32(); }
+        public long i64() { return u64(); }
+        public int readI8() { return (byte) u8(); }
+        public int readI16() { return (short) u16(); }
+)JAVA" + read_long_int_snippet(f) + R"JAVA(
+        public byte readByteNum() {
+            if (u8() != T_UINT8) throw new RuntimeException("wire: expected a byte");
+            return (byte) u8();
+        }
+        public boolean readBool() {
+            if (u8() != T_BOOL) throw new RuntimeException("wire: expected a bool");
+            return u8() != 0;
+        }
+        public boolean readBoolRaw() { return u8() != 0; }
+        public double f32() { return Float.intBitsToFloat(i32()); }
+        public double f64() { return Double.longBitsToDouble(u64()); }
+
+        public String strValue() {
+            if (u8() != T_STRING) throw new RuntimeException("wire: expected a string");
+            return str();
+        }
+
+)JAVA" + str_switch_snippet(f) + R"JAVA(
+    }
+)JAVA" + encode_value_snippet(f) + "\n\n" + decode_value_snippet(f) + "\n" + value_to_string_snippet(f) + "\n" +
+  list_helpers + R"JAVA(
+    private Wire() {}
+}
+)JAVA";
+}
+
+static std::string generate_schema_class(const schema_class &c) {
+  std::string methods;
+  for (const auto &m : c.methods) {
+    std::string ret = j_is_void(m.return_type) ? "void" : type_to_java(m.return_type);
+    std::string args;
+    for (const auto &a : m.arguments) {
+      if (!args.empty())
+        args += ", ";
+      args += type_to_java(a.type) + " " + a.name;
+    }
+    methods += "    " + ret + " " + m.name + "(" + args + ");\n";
+  }
+  std::string names;
+  for (const auto &m : c.methods) {
+    if (!names.empty())
+      names += ", ";
+    names += "\"" + m.name + "\"";
+  }
+  return "\npublic interface " + c.name + " extends S5RunObject {\n"
+         "    @Override\n"
+         "    default String s5runClassName() { return \"" + c.name + "\"; }\n"
+         "\n"
+         "    @Override\n"
+         "    default List<String> s5runMethodNames() { return List.of(" + names + "); }\n"
+         "\n"
+         + methods + "}\n";
+}
+
+static std::string generate_schema_function(const schema_function &f) {
+  std::string ret = j_is_void(f.return_type) ? "void" : type_to_java(f.return_type);
+  std::string args;
+  for (const auto &a : f.arguments) {
+    if (!args.empty())
+      args += ", ";
+    args += type_to_java(a.type) + " " + a.name;
+  }
+  return "\npublic interface GlobalFunction_" + f.name + " extends S5RunFunction {\n"
+         "    @Override\n"
+         "    default String s5runFunctionName() { return \"" + f.name + "\"; }\n"
+         "\n"
+         "    " + ret + " execute(" + args + ");\n"
+         "}\n";
+}
+
+static std::string generate_context(java_flavor f, const schema &s) {
+  std::string method_handlers;
+  for (const auto &c : s.classes) {
+    for (const auto &m : c.methods) {
+      if (!method_handlers.empty())
+        method_handlers += "\n";
+      method_handlers += "                handlers.put(\"" + m.name + "\", (cbId, r) -> cbm_" + c.name +
+                         "_" + m.name + "(cbId, r));";
+    }
+  }
+
+  std::string fn_callbacks;
+  bool first_cb = true;
+  for (const auto &f : s.functions) {
+    j_method_like fm{f.name, f.return_type, f.arguments};
+    std::string decode = decode_args(fm);
+    std::string call = call_args(fm);
+    std::string call_res, encode, head;
+    if (j_is_void(fm.return_type)) {
+      call_res = "as" + f.name + "().execute(" + call + ");";
+      encode = "            w.u8(Wire.T_UNDEFINED);";
+    } else {
+      call_res = "var res = as" + f.name + "().execute(" + call + ");";
+      encode = encode_result(fm);
+    }
+    if (j_has_convert(f.arguments)) {
+      head = "";
+    } else {
+      head = "            if (r.u32() != " + std::to_string(f.arguments.size()) +
+             ") throw new RuntimeException(\"" + f.name + ": wrong argument count\");";
+    }
+    fn_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cb_" + f.name + "(int cbId, Wire.Reader r) throws Exception {\n"
+      "        " + head + "\n"
+      "        " + decode + "\n"
+      "        " + call_res + "\n"
+      "        Wire.Writer w = new Wire.Writer();\n"
+      "        w.i32(cbId);\n"
+      "        w.u8(1);\n"
+      + encode + "\n"
+      "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
+      "    }";
+    first_cb = false;
+  }
+
+  std::string m_callbacks;
+  for (const auto &c : s.classes) {
+    for (const auto &m : c.methods) {
+      j_method_like fm{c.name + "::" + m.name, m.return_type, m.arguments};
+      std::string decode = decode_args(fm);
+      std::string call = call_args(fm);
+      bool conv = j_has_convert(m.arguments);
+      std::string head;
+      if (conv) {
+        head = "            long n = r.u32();\n            n -= 1;";
+      } else {
+        head = "            if (r.u32() != " + std::to_string(1 + m.arguments.size()) +
+               ") throw new RuntimeException(\"" + c.name + "." + m.name + ": wrong argument count\");";
+      }
+      std::string call_res, encode;
+      if (j_is_void(m.return_type)) {
+        call_res = "obj." + m.name + "(" + call + ");";
+        encode = "            w.u8(Wire.T_UNDEFINED);";
+      } else {
+        call_res = "var res = obj." + m.name + "(" + call + ");";
+        encode = encode_result(fm);
+      }
+      if (conv) {
+        const std::string &arg0 = m.arguments[0].name;
+        decode = j_replace_all(decode, "long n_" + arg0 + " = r.u32();", "long n_ignored = 0;");
+        // rewrite remaining n_<arg> references line by line
+        std::string line, rewritten;
+        for (size_t i = 0; i <= decode.size(); ++i) {
+          if (i == decode.size() || decode[i] == '\n') {
+            rewritten += j_replace_all(line, "n_" + arg0, "n") + "\n";
+            line.clear();
+          } else {
+            line += decode[i];
+          }
+        }
+        if (!rewritten.empty())
+          rewritten.erase(rewritten.size() - 1);
+        decode = rewritten;
+      }
+      m_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cbm_" + c.name + "_" + m.name +
+                     "(int cbId, Wire.Reader r) throws Exception {\n"
+        "        " + head + "\n"
+        "        int thisId = (int) r.readLongInt();\n"
+        "        " + c.name + " obj = instanceById(\"" + c.name + "\", thisId);\n"
+        + decode + "\n"
+        "        " + call_res + "\n"
+        "        Wire.Writer w = new Wire.Writer();\n"
+        "        w.i32(cbId);\n"
+        "        w.u8(1);\n"
+        + encode + "\n"
+        "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
+        "    }";
+      first_cb = false;
+    }
+  }
+
+  std::string as_helpers;
+  for (const auto &f : s.functions) {
+    if (!as_helpers.empty())
+      as_helpers += "\n";
+    as_helpers += "    private GlobalFunction_" + f.name + " as" + f.name + "() {\n"
+                  "        return (GlobalFunction_" + f.name + ") functions.get(\"" + f.name + "\");\n"
+                  "    }";
+  }
+
+  std::string cases;
+  for (const auto &fn : s.functions) {
+    if (!cases.empty())
+      cases += "\n";
+    cases += dispatch_case(f, fn.name);
+  }
+
+  std::string out = R"JAVA(import java.io.*;
+import java.net.Socket;
+import java.util.*;
+
+public final class Context implements AutoCloseable {
+    @FunctionalInterface
+    interface ThrowingHandler {
+        void handle(int cbId, Wire.Reader r) throws Exception;
+    }
+
+    private final Map<String, ThrowingHandler> handlers = new HashMap<>();
+    private final Map<String, S5RunFunction> functions = new HashMap<>();
+    private final Map<String, Map<Integer, S5RunObject>> instances = new HashMap<>();
+    private final Map<String, List<String>> knownClasses = new HashMap<>();
+    private final List<RemoteServerInfo> servers = new ArrayList<>();
+    private final List<PendingType> pendingTypes = new ArrayList<>();
+    private final List<PendingObject> pendingObjects = new ArrayList<>();
+    private final List<String> pendingFunctions = new ArrayList<>();
+    private String script = "";
+    private int nextThisId = 0;
+    private Socket socket;
+    private InputStream in;
+    private OutputStream out;
+
+)JAVA";
+  out += pending_decls(f) + R"JAVA(
+
+    public Context() {
+)JAVA";
+  out += method_handlers + R"JAVA(
+    }
+
+    public static String clientVersion() {
+        return ClientVersion.VERSION;
+    }
+
+    public Context setScript(String script) {
+        this.script = script;
+        return this;
+    }
+
+    public Context addServer(RemoteServerInfo server) {
+        Objects.requireNonNull(server, "server");
+        servers.add(server);
+        return this;
+    }
+
+    public Context addClass(S5RunObject sample) {
+        return addClass(sample.s5runClassName(), sample.s5runMethodNames());
+    }
+
+    private Context addClass(String name, List<String> methods) {
+        if (socket != null) {
+            try {
+                sendRegisterType(name, methods);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            pendingTypes.add(new PendingType(name, methods));
+        }
+        return this;
+    }
+
+    public Context addObject(S5RunObject obj) {
+        String cls = obj.s5runClassName();
+        int id = ++nextThisId;
+        instances.computeIfAbsent(cls, k -> new HashMap<>()).put(id, obj);
+        if (socket != null) {
+            try {
+                sendRegisterObject(cls, id, obj.s5runMethodNames());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            pendingObjects.add(new PendingObject(cls, id, obj.s5runMethodNames()));
+        }
+        return this;
+    }
+
+    public Context addFunction(S5RunFunction fn) {
+        functions.put(fn.s5runFunctionName(), fn);
+        String name = fn.s5runFunctionName();
+        handlers.put(name, (cbId, r) -> dispatchByName(name, cbId, r));
+        if (socket != null) {
+            try {
+                sendRegisterFunction(fn.s5runFunctionName());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            pendingFunctions.add(fn.s5runFunctionName());
+        }
+        return this;
+    }
+
+    // ------------------------------------------------------------------
+    // public entry point
+    // ------------------------------------------------------------------
+
+    public static RunResult runScript(Context ctx, String entry, List<Value> args) {
+        long started = System.currentTimeMillis();
+        try {
+            ctx.connect();
+            ctx.flushPending();
+            Wire.Writer w = new Wire.Writer();
+            w.str(ctx.script);
+            w.str(entry);
+            w.u32(args.size());
+            for (Value a : args) Wire.encodeValue(w, a);
+            ctx.sendMessage(Wire.M_EXEC_REQ, w.toByteArray());
+            while (true) {
+                Frame f = ctx.readFrame();
+                if (f.msgType == Wire.M_CALLBACK_REQ) {
+                    ctx.dispatchCallback(f.body);
+                    continue;
+                }
+                if (f.msgType == Wire.M_EXEC_RESP) {
+                    Wire.Reader r = new Wire.Reader(f.body);
+                    if (r.u8() == 0) {
+                        throw new RuntimeException(r.str());
+                    }
+                    return RunResult.ok(Wire.decodeValue(r), System.currentTimeMillis() - started);
+                }
+                throw new RuntimeException("s5run: unexpected message type");
+            }
+        } catch (Exception e) {
+            return RunResult.fail(e.getMessage(), System.currentTimeMillis() - started);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // callbacks
+    // ------------------------------------------------------------------
+
+)JAVA";
+  out += fn_callbacks;
+  out += "\n";
+  out += m_callbacks;
+  out += "\n\n";
+  out += as_helpers;
+  out += R"JAVA(
+
+    private void dispatchByName(String name, int cbId, Wire.Reader r) throws Exception {
+        switch (name) {
+)JAVA";
+  out += cases + "\n";
+  out += dispatch_default(f) + R"JAVA(
+        }
+    }
+
+    private void dispatchCallback(byte[] body) throws Exception {
+        Wire.Reader r = new Wire.Reader(body);
+        int cbId = r.i32();
+        String method = r.str();
+        ThrowingHandler handler = handlers.get(method);
+        if (handler == null) {
+            Wire.Writer w = new Wire.Writer();
+            w.i32(cbId);
+            w.u8(0);
+            w.str("unknown method: " + method);
+            sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            return;
+        }
+        try {
+            handler.handle(cbId, r);
+        } catch (Exception e) {
+            Wire.Writer w = new Wire.Writer();
+            w.i32(cbId);
+            w.u8(0);
+            w.str(String.valueOf(e.getMessage()));
+            sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T extends S5RunObject> T instanceById(String cls, int thisId) {
+        T obj = (T) instances.getOrDefault(cls, Map.of()).get(thisId);
+        if (obj == null) {
+            throw new RuntimeException(cls + ": unknown this_id " + thisId);
+        }
+        return obj;
+    }
+
+    private int registerInstance(S5RunObject obj) {
+        int id = ++nextThisId;
+        instances.computeIfAbsent(obj.s5runClassName(), k -> new HashMap<>()).put(id, obj);
+        return id;
+    }
+
+    private int readRefId(Wire.Reader r) {
+        if (r.u8() != Wire.T_REF) throw new RuntimeException("wire: expected an object reference");
+        int id = r.i32();
+        r.str(); // skip the type name
+        return id;
+    }
+
+    private static String valueToString(Value v) {
+        return Wire.valueToString(v);
+    }
+
+    // ------------------------------------------------------------------
+    // connection
+    // ------------------------------------------------------------------
+
+    private void connect() throws Exception {
+        if (socket != null) return;
+        if (servers.isEmpty()) {
+            throw new RuntimeException("s5run: no server added (addServer)");
+        }
+        int best = 0;
+        if (servers.size() > 1) {
+            long bestLoad = -1;
+            for (int i = 0; i < servers.size(); i++) {
+                long load = probeServerLoad(servers.get(i));
+                if (load < 0) continue;
+                if (bestLoad < 0 || load < bestLoad) {
+                    bestLoad = load;
+                    best = i;
+                }
+            }
+            if (bestLoad < 0) throw new RuntimeException("s5run: all servers are unreachable");
+        }
+        RemoteServerInfo srv = servers.get(best);
+        socket = new Socket(srv.getHost(), srv.getPort());
+        socket.setTcpNoDelay(true);
+        socket.setSoTimeout(10000);
+        in = socket.getInputStream();
+        out = socket.getOutputStream();
+        readHello(in, out);
+    }
+
+    private static void readHello(InputStream in, OutputStream out) throws Exception {
+        byte[] head = in.readNBytes(5);
+        if (head.length < 5) throw new RuntimeException("s5run: expected server hello");
+        int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
+        int msgType = head[4] & 0xFF;
+        byte[] body = in.readNBytes(len - 1);
+        if (msgType != Wire.M_SERVER_HELLO || body.length < len - 1)
+            throw new RuntimeException("s5run: expected server hello");
+        String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        String[] parts = text.split(" ");
+        if (parts.length != 3 || !parts[0].equals("s5run"))
+            throw new RuntimeException("s5run: bad server hello: " + text);
+        int protocol = Integer.parseInt(parts[2]);
+        if (protocol != 2)
+            throw new RuntimeException("s5run: server protocol version " + protocol
+                    + " is not supported (client supports 2)");
+    }
+
+    private static long probeServerLoad(RemoteServerInfo server) {
+        try (Socket probe = new Socket()) {
+            probe.connect(new java.net.InetSocketAddress(server.getHost(), server.getPort()), 2000);
+            probe.setTcpNoDelay(true);
+            probe.setSoTimeout(2000);
+            OutputStream po = probe.getOutputStream();
+            InputStream pi = probe.getInputStream();
+            readHello(pi, po);
+            writeFrame(po, Wire.M_STATS_REQ, new byte[0]);
+            byte[] head = pi.readNBytes(5);
+            if (head.length < 5) return -1;
+            int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
+            int msgType = head[4] & 0xFF;
+            byte[] body = pi.readNBytes(len - 1);
+            if (msgType != Wire.M_STATS_RESP || body.length < 16) return -1;
+            Wire.Reader r = new Wire.Reader(body);
+            r.u32(); // threads
+            long busy = r.u32();
+            long queued = r.u32();
+            return busy + queued;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private void flushPending() throws Exception {
+)JAVA";
+  out += flush_pending_body(f) + R"JAVA(
+        pendingObjects.clear();
+        for (String name : new ArrayList<>(pendingFunctions)) {
+            sendRegisterFunction(name);
+        }
+        pendingFunctions.clear();
+    }
+
+    private void sendRegisterType(String name, List<String> methods) throws Exception {
+        Wire.Writer w = new Wire.Writer();
+        w.str(name);
+        w.u32(methods.size());
+        for (String m : methods) w.str(m);
+        sendMessage(Wire.M_REGISTER_TYPE, w.toByteArray());
+        expectRegisterResp("register_type(" + name + ")");
+    }
+
+    private void sendRegisterObject(String name, int thisId, List<String> methods) throws Exception {
+        Wire.Writer w = new Wire.Writer();
+        w.str(name);
+        w.i32(thisId);
+        w.str(name);
+        w.u32(methods.size());
+        for (String m : methods) w.str(m);
+        sendMessage(Wire.M_REGISTER_OBJ, w.toByteArray());
+        expectRegisterResp("register_object(" + name + ")");
+    }
+
+    private void sendRegisterFunction(String name) throws Exception {
+        Wire.Writer w = new Wire.Writer();
+        w.str(name);
+        sendMessage(Wire.M_REGISTER_FUNC, w.toByteArray());
+        expectRegisterResp("register_function(" + name + ")");
+    }
+
+    private void expectRegisterResp(String what) throws Exception {
+        Frame f = readFrame();
+        if (f.msgType != Wire.M_REGISTER_RESP) {
+            throw new RuntimeException("s5run: " + what + " failed");
+        }
+        Wire.Reader r = new Wire.Reader(f.body);
+        if (r.u8() == 0) {
+            throw new RuntimeException("s5run: " + what + " error: " + r.str());
+        }
+    }
+
+    /** Closes the connection; the context can be reused afterwards. */
+    @Override
+    public void close() {
+        if (socket != null) {
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+            }
+            socket = null;
+            in = null;
+            out = null;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // framing
+    // ------------------------------------------------------------------
+
+)JAVA";
+  out += frame_decl(f) + R"JAVA(
+
+    private void sendMessage(int msgType, byte[] body) throws Exception {
+        writeFrame(out, msgType, body);
+    }
+
+    private static void writeFrame(OutputStream os, int msgType, byte[] body) throws Exception {
+        int len = 1 + body.length;
+        os.write((len >> 24) & 0xFF);
+        os.write((len >> 16) & 0xFF);
+        os.write((len >> 8) & 0xFF);
+        os.write(len & 0xFF);
+        os.write(msgType);
+        os.write(body);
+        os.flush();
+    }
+
+    private Frame readFrame() throws Exception {
+        byte[] head = in.readNBytes(5);
+        if (head.length < 5) throw new RuntimeException("s5run: connection closed");
+        int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
+        if (len <= 0 || len > 64 * 1024 * 1024) throw new RuntimeException("s5run: bad frame length");
+        int msgType = head[4] & 0xFF;
+        byte[] body = in.readNBytes(len - 1);
+        if (body.length < len - 1) throw new RuntimeException("s5run: connection closed");
+        return new Frame(msgType, body);
+    }
+}
+)JAVA";
+  return out;
+}
+
+// -----------------------------------------------------------------------
+// Generator
+// -----------------------------------------------------------------------
+
+class generator_java : public IGenerator {
+public:
+  generator_java(java_flavor flavor) : m_flavor(flavor) {
+  }
+
+  std::vector<std::string> generate(const schema &s,
+                                     const std::string &output_dir) override;
+
+private:
+  java_flavor m_flavor;
+};
+
+static std::string trim(const std::string &s) {
+  size_t b = s.find_first_not_of(" \t\r\n");
+  if (b == std::string::npos)
+    return "";
+  size_t e = s.find_last_not_of(" \t\r\n");
+  return s.substr(b, e - b + 1);
+}
+
+static void mkdir_p(const std::string &path) {
+  std::string cur;
+  for (size_t i = 0; i < path.size(); ++i) {
+    cur += path[i];
+    if (path[i] == '/' && i > 0)
+      ::mkdir(cur.substr(0, i).c_str(), 0755);
+  }
+  ::mkdir(path.c_str(), 0755);
+}
+
+static void write_java_file(const std::string &pkg_dir, const std::string &pkg,
+                            const std::string &name, const std::string &body,
+                            std::vector<std::string> &written) {
+  std::string path = pkg_dir + "/" + name + ".java";
+  std::ofstream f(path.c_str());
+  f << "// AUTO-GENERATED. DO NOT EDIT.\n";
+  f << "package " << pkg << ";\n\n";
+  if (body.find("List<") != std::string::npos || body.find("Map<") != std::string::npos)
+    f << "import java.util.*;\n\n";
+  f << trim(body) << "\n";
+  f.close();
+  written.push_back(path);
+}
+
+std::vector<std::string> generator_java::generate(const schema &s,
+                                                  const std::string &output_dir) {
+  std::vector<std::string> written;
+  std::string pkg = (m_flavor == JAVA_21) ? s.java.package_
+                   : (m_flavor == JAVA_17) ? s.java17.package_
+                   : s.java11.package_;
+
+  std::string pkg_dir = output_dir;
+  if (!pkg.empty()) {
+    std::string rel = pkg;
+    for (auto &c : rel)
+      if (c == '.')
+        c = '/';
+    pkg_dir += "/" + rel;
+  }
+  mkdir_p(pkg_dir);
+
+  write_java_file(pkg_dir, pkg, "Wire", generate_wire(m_flavor, s), written);
+  write_java_file(pkg_dir, pkg, "Value", value_file_snippet(m_flavor), written);
+  write_java_file(pkg_dir, pkg, "S5RunObject",
+                  "\npublic interface S5RunObject {\n"
+                  "    String s5runClassName();\n"
+                  "    List<String> s5runMethodNames();\n"
+                  "}\n", written);
+  write_java_file(pkg_dir, pkg, "S5RunFunction",
+                  "\npublic interface S5RunFunction {\n"
+                  "    String s5runFunctionName();\n"
+                  "}\n", written);
+  for (const auto &c : s.classes)
+    write_java_file(pkg_dir, pkg, c.name, generate_schema_class(c), written);
+  for (const auto &f : s.functions)
+    write_java_file(pkg_dir, pkg, "GlobalFunction_" + f.name,
+                    generate_schema_function(f), written);
+  write_java_file(pkg_dir, pkg, "RemoteServerInfo",
+                  "\npublic final class RemoteServerInfo {\n"
+                  "    private String address = \"\";\n"
+                  "    private String apiKey = \"\";\n"
+                  "    private String host = \"\";\n"
+                  "    private int port;\n"
+                  "\n"
+                  "    public RemoteServerInfo address(String address) {\n"
+                  "        final String prefix = \"s5run://\";\n"
+                  "        if (!address.startsWith(prefix)) {\n"
+                  "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
+                  "        }\n"
+                  "        String rest = address.substring(prefix.length());\n"
+                  "        int colon = rest.lastIndexOf(':');\n"
+                  "        if (colon <= 0 || colon + 1 >= rest.length()) {\n"
+                  "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
+                  "        }\n"
+                  "        this.address = address;\n"
+                  "        this.host = rest.substring(0, colon);\n"
+                  "        this.port = Integer.parseInt(rest.substring(colon + 1));\n"
+                  "        return this;\n"
+                  "    }\n"
+                  "\n"
+                  "    public RemoteServerInfo apiKey(String apiKey) {\n"
+                  "        this.apiKey = apiKey;\n"
+                  "        return this;\n"
+                  "    }\n"
+                  "\n"
+                  "    public String getAddress() { return address; }\n"
+                  "    public String getApiKey() { return apiKey; }\n"
+                  "    public String getHost() { return host; }\n"
+                  "    public int getPort() { return port; }\n"
+                  "}\n", written);
+  write_java_file(pkg_dir, pkg, "RunResult", run_result_file_snippet(m_flavor), written);
+  write_java_file(pkg_dir, pkg, "Context", generate_context(m_flavor, s), written);
+  write_java_file(pkg_dir, pkg, "ClientVersion",
+                  "\npublic final class ClientVersion {\n"
+                  "    public static final String VERSION = \"" + s.client_version + "\";\n"
+                  "\n"
+                  "    public static String get() {\n"
+                  "        return VERSION;\n"
+                  "    }\n"
+                  "    private ClientVersion() {}\n"
+                  "}\n", written);
+  return written;
+}
+
+std::shared_ptr<IGenerator> make_generator_java11() {
+  return std::make_shared<generator_java>(JAVA_11);
+}
+
+std::shared_ptr<IGenerator> make_generator_java17() {
+  return std::make_shared<generator_java>(JAVA_17);
+}
+
+std::shared_ptr<IGenerator> make_generator_java21() {
+  return std::make_shared<generator_java>(JAVA_21);
+}
+
+} // namespace generators
+} // namespace s5run

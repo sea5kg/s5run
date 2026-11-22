@@ -125,10 +125,10 @@ Hardcoded file `s5run-schema.json`
 
 Supported:
 
-- cpp98 - generate client library code for C++ 98 standard (built into the s5run binary)
-- cpp11 - generate client library code for C++ 11 standard (built into the s5run binary)
-- go - generate client library code for Go (built into the s5run binary)
-- py - generate client library code for Python (built into the s5run binary)
+- cpp98 - generate client library code for C++ 98 standard (include support old bcc compiler)
+- cpp11 - generate client library code for C++ 11 standard
+- go - generate client library code for Go
+- py - generate client library code for Python
 - java11 - generate client library for java11
 - java17 - generate client library for java17
 - java21 - generate client library for java21

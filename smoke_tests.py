@@ -114,6 +114,9 @@ def ensure_generated():
         "cpp11": os.path.join(ROOT, "tests", "cpp11-client", "s5run_cli_example"),
         "go": os.path.join(ROOT, "tests", "go-client", "s5runcli"),
         "py": os.path.join(ROOT, "tests", "py-client"),
+        "java21": os.path.join(ROOT, "tests", "java21-client", "src"),
+        "java17": os.path.join(ROOT, "tests", "java17-client", "src"),
+        "java11": os.path.join(ROOT, "tests", "java11-client", "src"),
     }
     _langs = _todo_generate.keys()
     _langs = sorted(_langs)
@@ -125,20 +128,6 @@ def ensure_generated():
             print_output_on_exit=True
         )
 
-    # other languages via pys5rungen
-    _todo_generate2 = [
-        "java21",
-        "java17",
-        "java11",
-    ]
-
-    for _lang in _todo_generate2:
-        LOG.get_logger().info(" ... generate-cli for %s", _lang)
-        UtilsShell.run_command(
-            [sys.executable, "-m", "pys5rungen", _lang],
-            _log=LOG.get_logger(),
-            print_output_on_exit=True
-        )
     LOG.get_logger().info("-> Generating client's libs done. [PASS]")
 
 def ensure_cpp_client():

@@ -94,12 +94,20 @@ struct schema_py_options {
   std::string output_dir;
 };
 
+struct schema_java_options {
+  std::string package_;
+  std::string output_dir;
+};
+
 struct schema {
   std::string client_version = "0.0.0";
   schema_cpp_options cpp98;
   schema_cpp_options cpp11;
   schema_go_options golang;
   schema_py_options py;
+  schema_java_options java;     // options.java (used by java21)
+  schema_java_options java17;
+  schema_java_options java11;
   std::vector<schema_function> functions;
   std::vector<schema_class> classes;
 };

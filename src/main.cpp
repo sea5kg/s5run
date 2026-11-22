@@ -107,7 +107,7 @@ static void print_generate_usage() {
     "  %s generate --list\n"
     "\n"
     "Options:\n"
-    "  --language LANG  target language (cpp98, cpp11, go, py)\n"
+    "  --language LANG  target language (cpp98, cpp11, go, py, java11, java17, java21)\n"
     "  --output-dir DIR where to write generated files (default: options.<lang>.output-dir from schema)\n"
     "  --schema FILE    schema file (default s5run-schema.json)\n"
     "  --list           list available generators\n",
@@ -249,6 +249,12 @@ static int cmd_generate(int argc, char **argv) {
       output_dir = schema.golang.output_dir;
     else if (language == "py")
       output_dir = schema.py.output_dir;
+    else if (language == "java21")
+      output_dir = schema.java.output_dir;
+    else if (language == "java17")
+      output_dir = schema.java17.output_dir;
+    else if (language == "java11")
+      output_dir = schema.java11.output_dir;
   }
   if (output_dir.empty()) {
     std::fprintf(stderr, "output-dir is not specified: "
