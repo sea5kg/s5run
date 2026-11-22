@@ -43,6 +43,9 @@
 
 #include "server/s5run_server.h"
 #include "generators/s5run_generators.h"
+#include "client/s5run_client.h"
+
+static std::string g_bin = "s5run";
 
 static void print_banner() {
   std::cout << std::endl;
@@ -61,7 +64,7 @@ static void print_usage() {
     "s5run v0.2.0 - remote script execution server\n"
     "\n"
     "Usage:\n"
-    "  s5run <command> [options]\n"
+    "  %s <command> [options]\n"
     "\n"
     "Commands:\n"
     "  server     Start the script server\n"
@@ -70,7 +73,8 @@ static void print_usage() {
     "  version    Print version\n"
     "  help       Show this help\n"
     "\n"
-    "Run 's5run help <command>' for command details.\n"
+    "Run '%s help <command>' for command details.\n",
+    g_bin.c_str(), g_bin.c_str()
   );
 }
 
@@ -79,14 +83,15 @@ static void print_server_usage() {
     "s5run server - start the script server\n"
     "\n"
     "Usage:\n"
-    "  s5run server --listen [host:]port [--threads N] [--queue] [--db PATH] [--ttl SECONDS]\n"
+    "  %s server --listen [host:]port [--threads N] [--queue] [--db PATH] [--ttl SECONDS]\n"
     "\n"
     "Options:\n"
     "  --listen [host:]port  listen address (default 0.0.0.0, e.g. --listen 7777 or --listen 0.0.0.0:7777)\n"
     "  --threads N           worker threads (default: hardware concurrency)\n"
     "  --queue               enable job queue (results stored in sqlite)\n"
     "  --db PATH             job queue database (default s5run-queue.sqlite3)\n"
-    "  --ttl SECONDS         how long to keep job results (default 3600)\n"
+    "  --ttl SECONDS         how long to keep job results (default 3600)\n",
+    g_bin.c_str()
   );
 }
 
@@ -95,15 +100,16 @@ static void print_generate_usage() {
     "s5run generate - generate client or provider code\n"
     "\n"
     "Usage:\n"
-    "  s5run generate client   --language LANG --output-dir DIR [--schema FILE]\n"
-    "  s5run generate provider --language LANG --output-dir DIR [--schema FILE]\n"
-    "  s5run generate --list\n"
+    "  %s generate client   --language LANG --output-dir DIR [--schema FILE]\n"
+    "  %s generate provider --language LANG --output-dir DIR [--schema FILE]\n"
+    "  %s generate --list\n"
     "\n"
     "Options:\n"
     "  --language LANG  target language (cpp98, cpp11)\n"
     "  --output-dir DIR where to write generated files\n"
     "  --schema FILE    schema file (default s5run-client.json)\n"
-    "  --list           list available generators\n"
+    "  --list           list available generators\n",
+    g_bin.c_str(), g_bin.c_str(), g_bin.c_str()
   );
 }
 
@@ -112,14 +118,15 @@ static void print_run_usage() {
     "s5run run - run a script against a server\n"
     "\n"
     "Usage:\n"
-    "  s5run run <host:port> [--script FILE] [--provider SPEC] [--api-key KEY] [args...]\n"
-    "  cat script.js | s5run run <host:port> [args...]\n"
+    "  %s run <host:port> [--script FILE] [--provider SPEC] [--api-key KEY] [args...]\n"
+    "  cat script.js | %s run <host:port> [args...]\n"
     "\n"
     "Options:\n"
     "  --script FILE     script file to execute (default: stdin)\n"
     "  --provider SPEC   remote context provider: \"host:port,name1,name2\"\n"
     "  --api-key KEY     api key for authentication (stub)\n"
-    "  args...           arguments passed to the script entry point\n"
+    "  args...           arguments passed to the script entry point\n",
+    g_bin.c_str(), g_bin.c_str()
   );
 }
 
@@ -218,7 +225,7 @@ static int cmd_generate(int argc, char **argv) {
 
   if (all_generators.count(language) == 0) {
     std::fprintf(stderr, "unknown generator: %s\n", language.c_str());
-    std::fprintf(stderr, "run 's5run generate --list' for available generators\n");
+    std::fprintf(stderr, "run '%s generate --list' for available generators\n", g_bin.c_str());
     return 1;
   }
 
@@ -234,6 +241,29 @@ static int cmd_generate(int argc, char **argv) {
   return 0;
 }
 
+static s5run::Value parse_script_arg(const std::string &raw) {
+  // int?
+  if (!raw.empty()) {
+    char *end = nullptr;
+    long long v = std::strtoll(raw.c_str(), &end, 10);
+    if (end && *end == '\0')
+      return s5run::Value((int64_t)v);
+  }
+  // bool?
+  if (raw == "true")
+    return s5run::Value(true);
+  if (raw == "false")
+    return s5run::Value(false);
+  // double?
+  if (!raw.empty()) {
+    char *end = nullptr;
+    double d = std::strtod(raw.c_str(), &end);
+    if (end && *end == '\0')
+      return s5run::Value(d);
+  }
+  return s5run::Value(raw);
+}
+
 static int cmd_run(int argc, char **argv) {
   if (argc < 3) {
     print_run_usage();
@@ -244,7 +274,7 @@ static int cmd_run(int argc, char **argv) {
   std::string script_file;
   std::string api_key;
   std::vector<std::string> providers;
-  std::vector<std::string> script_args;
+  std::vector<s5run::Value> script_args;
 
   for (int i = 3; i < argc; ++i) {
     std::string arg = argv[i];
@@ -258,7 +288,7 @@ static int cmd_run(int argc, char **argv) {
       print_run_usage();
       return 0;
     } else {
-      script_args.push_back(arg);
+      script_args.push_back(parse_script_arg(arg));
     }
   }
 
@@ -269,7 +299,7 @@ static int cmd_run(int argc, char **argv) {
   // Read script from file or stdin
   std::string script;
   if (!script_file.empty()) {
-    FILE *f = std::fopen(script_file.c_str(), "r");
+    FILE *f = std::fopen(script_file.c_str(), "rb");
     if (!f) {
       std::fprintf(stderr, "run: cannot open script file: %s\n", script_file.c_str());
       return 1;
@@ -280,8 +310,8 @@ static int cmd_run(int argc, char **argv) {
     std::fclose(f);
   } else {
     char buf[4096];
-    while (std::fgets(buf, sizeof(buf), stdin))
-      script += buf;
+    while (size_t n = std::fread(buf, 1, sizeof(buf), stdin))
+      script.append(buf, n);
   }
 
   if (script.empty()) {
@@ -295,13 +325,44 @@ static int cmd_run(int argc, char **argv) {
       std::fprintf(stderr, "  provider: %s\n", p.c_str());
   }
 
-  std::fprintf(stderr, "run: not implemented yet\n");
-  std::fprintf(stderr, "  script: %zu bytes, %zu args\n", script.size(), script_args.size());
-  (void)host_port;
-  return 1;
+  // host:port
+  std::string host = host_port;
+  uint16_t port = 7777;
+  size_t colon = host_port.rfind(':');
+  if (colon != std::string::npos) {
+    host = host_port.substr(0, colon);
+    port = (uint16_t)std::atoi(host_port.substr(colon + 1).c_str());
+  }
+  if (host.empty() || port == 0) {
+    std::fprintf(stderr, "run: invalid server address: %s\n", host_port.c_str());
+    return 1;
+  }
+
+  s5run::client_context ctx;
+  try {
+    ctx.connect(host, port);
+    ctx.register_console(nullptr);
+  } catch (const std::exception &e) {
+    std::fprintf(stderr, "run: %s\n", e.what());
+    return 1;
+  }
+
+  s5run::run_result result = ctx.run(script, "main", script_args);
+
+  if (!result.ok) {
+    std::fprintf(stderr, "run error: %s\n", result.error.c_str());
+    std::fprintf(stderr, "  duration: %.1f ms\n", result.duration_ms);
+    return 1;
+  }
+
+  std::printf("%s\n", s5run::value_to_display_string(result.value).c_str());
+  std::fprintf(stderr, "  duration: %.1f ms\n", result.duration_ms);
+  return 0;
 }
 
 int main(int argc, char **argv) {
+  if (argc > 0 && argv[0] && argv[0][0] != '\0')
+    g_bin = argv[0];
   if (argc < 2) {
     print_banner();
     print_usage();

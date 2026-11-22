@@ -109,6 +109,10 @@ list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_sc
 
 # protocol
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/protocol/s5run_protocol.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/protocol/s5run_channel.cpp")
+
+# client
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/client/s5run_client.cpp")
 
 # engine
 # list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/engine/s5run_engine_lua.cpp")

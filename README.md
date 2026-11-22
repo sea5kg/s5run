@@ -112,8 +112,9 @@ Options:
 ```
 
 Usage examples:
-- `./s5run run localhost:7777 --script script.js arg1 arg2` - Run script file (*not implemented yet*)
-- `cat script.js | ./s5run run localhost:7777 [args...]` - Run script from stdin (*not implemented yet*)
+- `./s5run run localhost:7777 --script test_script.js 21 21` - Run script file
+- `cat script.js | ./s5run run localhost:7777 [args...]` - Run script from stdin
+- The built-in `console` object (log/warning/error) is registered automatically and served client-side
 
 
 
