@@ -47,6 +47,15 @@ class MyFile(m.File):
     def ReadBytes(self, readBytes: int) -> list[int]:
         return [97, 98, 99][:readBytes]
 
+    def GetName(self) -> str:
+        return "example.txt"
+
+    def GetBufferSize(self) -> int:
+        return 4096
+
+    def SetBufferSize(self, bufferSize: int) -> None:
+        pass
+
 
 class MyGetFile(m.GlobalFunction_GetFile):
     last_path = ""

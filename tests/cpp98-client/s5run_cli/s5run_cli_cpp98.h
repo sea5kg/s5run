@@ -79,10 +79,16 @@ public:
         std::vector<std::string> out;
         out.push_back("GetSize");
         out.push_back("ReadBytes");
+        out.push_back("GetName");
+        out.push_back("GetBufferSize");
+        out.push_back("SetBufferSize");
         return out;
     }
     virtual i64 GetSize() = 0;
     virtual std::vector<u8> ReadBytes(i64 readBytes) = 0;
+    virtual std::string GetName() = 0;
+    virtual i64 GetBufferSize() = 0;
+    virtual void SetBufferSize(i64 bufferSize) = 0;
 };
 
 class base_context_class_FileSystem : public s5run_object {

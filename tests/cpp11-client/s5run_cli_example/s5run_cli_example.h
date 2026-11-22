@@ -95,11 +95,17 @@ public:
         std::vector<std::string> out_;
         out_.push_back("GetSize");
         out_.push_back("ReadBytes");
+        out_.push_back("GetName");
+        out_.push_back("GetBufferSize");
+        out_.push_back("SetBufferSize");
         return out_;
     }
     virtual ~File() {}
     virtual int64_t GetSize() = 0;
     virtual std::vector<uint8_t> ReadBytes(int64_t readBytes) = 0;
+    virtual std::string GetName() = 0;
+    virtual int64_t GetBufferSize() = 0;
+    virtual void SetBufferSize(int64_t bufferSize) = 0;
 };
 
 class FileSystem : public s5run_object {

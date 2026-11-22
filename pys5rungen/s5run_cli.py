@@ -44,7 +44,7 @@ import sys
 from .s5run_generator import S5RunCliGenerator
 from .s5run_schema import S5RunCliSchema
 
-SCHEMA_FILE = "s5run-client.json"
+SCHEMA_FILE = "s5run-schema.json"
 
 DEFAULT_SCHEMA = {
     "options": {

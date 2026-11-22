@@ -2,7 +2,7 @@
 
 Generated Go client for the s5run binary protocol.
 
-- Source schema: `s5run-client.json` (`options.go`)
+- Source schema: `s5run-schema.json` (`options.go`)
 - Regenerate: `python3 -m pys5rungen go`
 - Package: `s5runcli`
 

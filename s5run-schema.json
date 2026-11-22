@@ -121,6 +121,36 @@
               "name": "readBytes"
             }
           ]
+        },
+        {
+          "name": "GetName",
+          "return": "string"
+        },
+        {
+          "name": "GetBufferSize",
+          "return": "int"
+        },
+        {
+          "name": "SetBufferSize",
+          "arguments": [
+            {
+              "type": "int",
+              "name": "bufferSize"
+            }
+          ]
+        }
+      ],
+      "properties": [
+        {
+          "name": "Name",
+          "type": "string",
+          "getter": "GetFileName"
+        },
+        {
+          "name": "BufferSize",
+          "type": "int",
+          "getter": "GetBufferSize",
+          "setter": "SetBufferSize"
         }
       ]
     },

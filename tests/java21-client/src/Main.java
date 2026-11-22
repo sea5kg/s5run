@@ -20,6 +20,20 @@ public class Main {
         public List<Byte> ReadBytes(long readBytes) {
             return List.of();
         }
+
+        @Override
+        public String GetName() {
+            return "example.txt";
+        }
+
+        @Override
+        public long GetBufferSize() {
+            return 4096;
+        }
+
+        @Override
+        public void SetBufferSize(long bufferSize) {
+        }
     }
 
     static final class MyGetFile implements GlobalFunction_GetFile {

@@ -37,7 +37,7 @@
 
 """Code generator for the run-scripts-server client protocol.
 
-Reads s5run-client.json and emits typed stubs
+Reads s5run-schema.json and emits typed stubs
 for C++, Python and Java.
 """
 from .s5run_generator import S5RunCliGenerator

@@ -28,6 +28,22 @@ public:
       out.push_back((uint8_t)('a' + i % 26));
     return out;
   }
+
+  std::string GetName() override {
+    return "example.txt";
+  }
+
+  int64_t GetBufferSize() override {
+    return m_buffer_size;
+  }
+
+  void SetBufferSize(int64_t bufferSize) override {
+    m_buffer_size = bufferSize;
+  }
+
+private:
+  int64_t m_buffer_size = 4096;
+public:
 };
 
 class MyGetFile : public s5run_cli_example::GlobalFunction_GetFile {

@@ -44,7 +44,7 @@ namespace s5run {
 namespace generators {
 
 // -----------------------------------------------------------------------
-// schema model (parsed from s5run-client.json)
+// schema model (parsed from s5run-schema.json)
 // -----------------------------------------------------------------------
 
 struct schema_argument {

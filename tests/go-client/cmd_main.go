@@ -47,6 +47,9 @@ func (f *MyFile) ReadBytes(readBytes int64) []byte {
 	}
 	return out
 }
+func (f *MyFile) GetName() string       { return "example.txt" }
+func (f *MyFile) GetBufferSize() int64  { return 4096 }
+func (f *MyFile) SetBufferSize(int64)   {}
 
 var lastGetFilePath string
 

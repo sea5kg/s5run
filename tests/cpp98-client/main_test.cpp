@@ -45,8 +45,19 @@ public:
         return out;
     }
 
+    virtual std::string GetName() { return "example.txt"; }
+
+    virtual s5run_cli_cpp98::i64 GetBufferSize() { return m_buffer_size; }
+
+    virtual void SetBufferSize(s5run_cli_cpp98::i64 bufferSize) {
+        m_buffer_size = bufferSize;
+    }
+
 private:
     s5run_cli_cpp98::i64 m_size;
+    s5run_cli_cpp98::i64 m_buffer_size;
+public:
+    MyFile() : m_buffer_size(4096) {}
 };
 
 

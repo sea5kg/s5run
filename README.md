@@ -85,7 +85,7 @@ Usage:
 Options:
   --language LANG  target language (cpp98, cpp11)
   --output-dir DIR where to write generated files
-  --schema FILE    schema file (default s5run-client.json)
+  --schema FILE    schema file (default s5run-schema.json)
   --list           list available generators
 ```
 
@@ -120,7 +120,7 @@ Usage examples:
 
 ## Generation client code library (context-provider)
 
-Hardcoded file `s5run-client.json`
+Hardcoded file `s5run-schema.json`
 
 Supported:
 
@@ -265,7 +265,7 @@ For regenerate client libraries:
 $ python3 -m pys5rungen all     # all configured languages
 $ python3 -m pys5rungen java    # only Java
 $ python3 -m pys5rungen py      # only Python
-$ python3 -m pys5rungen init    # create a default example s5run-client.json
+$ python3 -m pys5rungen init    # create a default example s5run-schema.json
 $ python3 -m pys5rungen help    # show help
 ```
 

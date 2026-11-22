@@ -48,6 +48,9 @@ func NewContext() *Context {
 	for k, v := range map[string]throwingHandler{
 		"GetSize": ctx.callbackmFileGetSize,
 		"ReadBytes": ctx.callbackmFileReadBytes,
+		"GetName": ctx.callbackmFileGetName,
+		"GetBufferSize": ctx.callbackmFileGetBufferSize,
+		"SetBufferSize": ctx.callbackmFileSetBufferSize,
 		"GetList": ctx.callbackmFileSystemGetList,
 		"log": ctx.callbackmconsoleLog,
 		"warning": ctx.callbackmconsoleWarning,
@@ -292,6 +295,52 @@ func (ctx *Context) callbackmFileReadBytes(cbID int32, r *reader) {
 		readBytes := readInt(r)
 		res := obj.ReadBytes(readBytes)
 		writeArrayOf(w, res, func(e byte) { writeByte(w, e) })
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) callbackmFileGetName(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+		if r.u32() != 1 {
+			panic("File.GetName: wrong argument count")
+		}
+		thisID := readInt(r)
+		obj := ctx.instanceByID("File", int(thisID)).(File)
+		res := obj.GetName()
+		writeStrValue(w, res)
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) callbackmFileGetBufferSize(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+		if r.u32() != 1 {
+			panic("File.GetBufferSize: wrong argument count")
+		}
+		thisID := readInt(r)
+		obj := ctx.instanceByID("File", int(thisID)).(File)
+		res := obj.GetBufferSize()
+		writeInt(w, res)
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) callbackmFileSetBufferSize(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+		if r.u32() != 2 {
+			panic("File.SetBufferSize: wrong argument count")
+		}
+		thisID := readInt(r)
+		obj := ctx.instanceByID("File", int(thisID)).(File)
+		bufferSize := readInt(r)
+		obj.SetBufferSize(bufferSize)
+		w.u8(tagUndefined)
 	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
 }
 

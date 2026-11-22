@@ -33,6 +33,9 @@ public final class Context implements AutoCloseable {
     public Context() {
                 handlers.put("GetSize", (cbId, r) -> cbm_File_GetSize(cbId, r));
                 handlers.put("ReadBytes", (cbId, r) -> cbm_File_ReadBytes(cbId, r));
+                handlers.put("GetName", (cbId, r) -> cbm_File_GetName(cbId, r));
+                handlers.put("GetBufferSize", (cbId, r) -> cbm_File_GetBufferSize(cbId, r));
+                handlers.put("SetBufferSize", (cbId, r) -> cbm_File_SetBufferSize(cbId, r));
                 handlers.put("GetList", (cbId, r) -> cbm_FileSystem_GetList(cbId, r));
                 handlers.put("log", (cbId, r) -> cbm_console_log(cbId, r));
                 handlers.put("warning", (cbId, r) -> cbm_console_warning(cbId, r));
@@ -284,6 +287,45 @@ public final class Context implements AutoCloseable {
         w.i32(cbId);
         w.u8(1);
             Wire.writeListOfByte(w, res);
+        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void cbm_File_GetName(int cbId, Wire.Reader r) throws Exception {
+                    if (r.u32() != 1) throw new RuntimeException("File.GetName: wrong argument count");
+        int thisId = (int) r.readLongInt();
+        File obj = instanceById("File", thisId);
+
+        var res = obj.GetName();
+        Wire.Writer w = new Wire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+            w.strValue(res);
+        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void cbm_File_GetBufferSize(int cbId, Wire.Reader r) throws Exception {
+                    if (r.u32() != 1) throw new RuntimeException("File.GetBufferSize: wrong argument count");
+        int thisId = (int) r.readLongInt();
+        File obj = instanceById("File", thisId);
+
+        var res = obj.GetBufferSize();
+        Wire.Writer w = new Wire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+            w.int64(res);
+        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void cbm_File_SetBufferSize(int cbId, Wire.Reader r) throws Exception {
+                    if (r.u32() != 2) throw new RuntimeException("File.SetBufferSize: wrong argument count");
+        int thisId = (int) r.readLongInt();
+        File obj = instanceById("File", thisId);
+            long bufferSize = r.readLongInt();
+        obj.SetBufferSize(bufferSize);
+        Wire.Writer w = new Wire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+            w.u8(Wire.T_UNDEFINED);
         sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
     }
 

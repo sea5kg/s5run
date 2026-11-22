@@ -83,13 +83,16 @@ type File interface {
 	S5RunObject
 	GetSize() int64
 	ReadBytes(readBytes int64) []byte
+	GetName() string
+	GetBufferSize() int64
+	SetBufferSize(bufferSize int64)
 }
 
 type FileBase struct{}
 
 func (FileBase) S5RunClassName() string { return "File" }
 func (FileBase) S5RunMethodNames() []string {
-	return []string{"GetSize", "ReadBytes"}
+	return []string{"GetSize", "ReadBytes", "GetName", "GetBufferSize", "SetBufferSize"}
 }
 
 

@@ -487,6 +487,9 @@ private:
     void cb_GetServerPort(i32 cb_id, Reader &r);
     void cbm_File_GetSize(i32 cb_id, Reader &r);
     void cbm_File_ReadBytes(i32 cb_id, Reader &r);
+    void cbm_File_GetName(i32 cb_id, Reader &r);
+    void cbm_File_GetBufferSize(i32 cb_id, Reader &r);
+    void cbm_File_SetBufferSize(i32 cb_id, Reader &r);
     void cbm_FileSystem_GetList(i32 cb_id, Reader &r);
     void cbm_console_log(i32 cb_id, Reader &r);
     void cbm_console_warning(i32 cb_id, Reader &r);
@@ -772,6 +775,46 @@ void context::context_impl::cbm_File_ReadBytes(i32 cb_id, Reader &r) {
 }
 
 
+void context::context_impl::cbm_File_GetName(i32 cb_id, Reader &r) {
+    u32 n = r.get_u32();
+    if (n != 1) throw std::runtime_error("File.GetName: wrong argument count");
+    i32 this_id = (i32)read_int(r);
+    std::map<i32, base_context_class_File *>::const_iterator it = m_instances_File.find(this_id);
+    if (it == m_instances_File.end()) throw std::runtime_error("File: unknown this_id");
+    std::string res = it->second->GetName();
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+    w.put_u8(T_STRING); w.put_string(res);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
+void context::context_impl::cbm_File_GetBufferSize(i32 cb_id, Reader &r) {
+    u32 n = r.get_u32();
+    if (n != 1) throw std::runtime_error("File.GetBufferSize: wrong argument count");
+    i32 this_id = (i32)read_int(r);
+    std::map<i32, base_context_class_File *>::const_iterator it = m_instances_File.find(this_id);
+    if (it == m_instances_File.end()) throw std::runtime_error("File: unknown this_id");
+    i64 res = it->second->GetBufferSize();
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+    write_int(w, res);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
+void context::context_impl::cbm_File_SetBufferSize(i32 cb_id, Reader &r) {
+    u32 n = r.get_u32();
+    if (n != 2) throw std::runtime_error("File.SetBufferSize: wrong argument count");
+    i32 this_id = (i32)read_int(r);
+    std::map<i32, base_context_class_File *>::const_iterator it = m_instances_File.find(this_id);
+    if (it == m_instances_File.end()) throw std::runtime_error("File: unknown this_id");
+    i64 a_bufferSize = read_int(r);
+    it->second->SetBufferSize(a_bufferSize);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+    w.put_u8(T_UNDEFINED);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
 void context::context_impl::cbm_FileSystem_GetList(i32 cb_id, Reader &r) {
     u32 n = r.get_u32();
     if (n != 2) throw std::runtime_error("FileSystem.GetList: wrong argument count");
@@ -859,6 +902,9 @@ void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
         if (method == "GetServerPort") { cb_GetServerPort(cb_id, r); return; }
         if (method == "GetSize") { cbm_File_GetSize(cb_id, r); return; }
         if (method == "ReadBytes") { cbm_File_ReadBytes(cb_id, r); return; }
+        if (method == "GetName") { cbm_File_GetName(cb_id, r); return; }
+        if (method == "GetBufferSize") { cbm_File_GetBufferSize(cb_id, r); return; }
+        if (method == "SetBufferSize") { cbm_File_SetBufferSize(cb_id, r); return; }
         if (method == "GetList") { cbm_FileSystem_GetList(cb_id, r); return; }
         if (method == "log") { cbm_console_log(cb_id, r); return; }
         if (method == "warning") { cbm_console_warning(cb_id, r); return; }

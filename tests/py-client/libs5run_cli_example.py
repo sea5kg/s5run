@@ -366,12 +366,18 @@ class File(S5RunObject):
         return "File"
 
     def s5run_method_names(self) -> list[str]:
-        return ["GetSize", "ReadBytes"]
+        return ["GetSize", "ReadBytes", "GetName", "GetBufferSize", "SetBufferSize"]
 
     @abstractmethod
     def GetSize(self) -> int: ...
     @abstractmethod
     def ReadBytes(self, readBytes: int) -> list[int]: ...
+    @abstractmethod
+    def GetName(self) -> str: ...
+    @abstractmethod
+    def GetBufferSize(self) -> int: ...
+    @abstractmethod
+    def SetBufferSize(self, bufferSize: int): ...
 
 
 
@@ -575,6 +581,9 @@ class Context:
         self._handlers: dict[str, Callable] = {
             "GetSize": self._cbm_File_GetSize,
             "ReadBytes": self._cbm_File_ReadBytes,
+            "GetName": self._cbm_File_GetName,
+            "GetBufferSize": self._cbm_File_GetBufferSize,
+            "SetBufferSize": self._cbm_File_SetBufferSize,
             "GetList": self._cbm_FileSystem_GetList,
             "log": self._cbm_console_log,
             "warning": self._cbm_console_warning,
@@ -780,6 +789,46 @@ class Context:
         readBytes = _read_int(buf)
         res = obj.ReadBytes(readBytes)
         _write_array(out, res, lambda e: _write_byte(out, e))
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _cbm_File_GetName(self, cb_id: int, buf: _Reader) -> None:
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        n_count = _read_count(buf)
+        if n_count != 1:
+            raise RuntimeError("File.GetName: wrong argument count")
+        obj = _instance_by_id('File', _read_int(buf))
+        res = obj.GetName()
+        _write_str_value(out, res)
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _cbm_File_GetBufferSize(self, cb_id: int, buf: _Reader) -> None:
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        n_count = _read_count(buf)
+        if n_count != 1:
+            raise RuntimeError("File.GetBufferSize: wrong argument count")
+        obj = _instance_by_id('File', _read_int(buf))
+        res = obj.GetBufferSize()
+        _write_int(out, res)
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _cbm_File_SetBufferSize(self, cb_id: int, buf: _Reader) -> None:
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        n_count = _read_count(buf)
+        if n_count != 2:
+            raise RuntimeError("File.SetBufferSize: wrong argument count")
+        obj = _instance_by_id('File', _read_int(buf))
+        bufferSize = _read_int(buf)
+        obj.SetBufferSize(bufferSize)
+        _write_undefined(out)
         self._send(_Msg.CALLBACK_RESP, out)
 
 

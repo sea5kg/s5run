@@ -109,7 +109,7 @@ static void print_generate_usage() {
     "Options:\n"
     "  --language LANG  target language (cpp98, cpp11)\n"
     "  --output-dir DIR where to write generated files\n"
-    "  --schema FILE    schema file (default s5run-client.json)\n"
+    "  --schema FILE    schema file (default s5run-schema.json)\n"
     "  --list           list available generators\n",
     g_bin.c_str(),
     g_bin.c_str(),
@@ -185,7 +185,7 @@ static int cmd_generate(int argc, char **argv) {
   std::string subcommand = argv[2];
   std::string language;
   std::string output_dir;
-  std::string schema_file = "s5run-client.json";
+  std::string schema_file = "s5run-schema.json";
 
   if (subcommand == "--list" || subcommand == "list") {
     auto all = s5run::generators::all();
