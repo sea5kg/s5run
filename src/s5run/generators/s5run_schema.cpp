@@ -136,6 +136,17 @@ static bool validate_schema(const schema &s, std::string &error) {
   }
 
   for (const auto &c : s.classes) {
+    std::set<std::string> props;
+    for (const auto &p : c.properties) {
+      if (props.count(p.name) != 0) {
+        error = "duplicate property name: " + p.name + " in class " + c.name;
+        return false;
+      }
+      props.insert(p.name);
+      if (!validate_type(p.type, false, classes,
+                         "class " + c.name + " property '" + p.name + "'", error))
+        return false;
+    }
     std::set<std::string> methods;
     for (const auto &m : c.methods) {
       if (methods.count(m.name) != 0) {
@@ -157,12 +168,45 @@ static bool validate_schema(const schema &s, std::string &error) {
 // Parsing
 // -----------------------------------------------------------------------
 
+// Checks that a json object contains only known fields; on an unknown
+// field reports what is allowed in this section.
+static bool check_unknown_fields(const nlohmann::json &j,
+                                 std::initializer_list<const char *> allowed,
+                                 const std::string &where, std::string &error) {
+  if (!j.is_object())
+    return true;
+  for (const auto &kv : j.items()) {
+    bool known = false;
+    for (const auto *a : allowed) {
+      if (kv.key() == a) {
+        known = true;
+        break;
+      }
+    }
+    if (!known) {
+      std::string list;
+      for (const auto *a : allowed) {
+        if (!list.empty())
+          list += ", ";
+        list += a;
+      }
+      error = "unknown field '" + kv.key() + "' in " + where + " (allowed: " + list + ")";
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool parse_arguments(const nlohmann::json &j, const std::string &owner,
                             std::vector<schema_argument> &out, std::string &error) {
   if (!j.contains("arguments"))
     return true;
+  if (!check_unknown_fields(j, {"name", "return", "arguments"}, owner, error))
+    return false;
   if (j["arguments"].is_object()) {
     const auto &a = j["arguments"];
+    if (!check_unknown_fields(a, {"name", "type", "convert-from"}, owner + " arguments", error))
+      return false;
     schema_argument arg;
     arg.name = a.value("name", "");
     arg.type = a.value("type", "");
@@ -175,6 +219,8 @@ static bool parse_arguments(const nlohmann::json &j, const std::string &owner,
     return true;
   }
   for (const auto &a : j["arguments"]) {
+    if (!check_unknown_fields(a, {"name", "type"}, owner + " arguments", error))
+      return false;
     schema_argument arg;
     arg.name = a.value("name", "");
     arg.type = a.value("type", "");
@@ -188,8 +234,39 @@ static bool parse_arguments(const nlohmann::json &j, const std::string &owner,
 }
 
 static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &error) {
+  if (!check_unknown_fields(j, {"client-version", "version", "options", "functions", "classes"},
+                            "schema root", error))
+    return false;
   s.client_version = j.value("client-version", "0.0.0");
 
+  if (j.contains("options")) {
+    const auto &opts = j["options"];
+    static const std::set<std::string> k_known_langs = {
+      "cpp98", "cpp11", "go", "py", "java", "java11", "java17", "java21"};
+    for (const auto &kv : opts.items()) {
+      if (k_known_langs.count(kv.key()) == 0) {
+        error = "unknown options section '" + kv.key()
+                + "' (allowed: cpp98, cpp11, go, py, java, java11, java17, java21)";
+        return false;
+      }
+      bool cpp_like = kv.key() == "cpp98" || kv.key() == "cpp11";
+      bool java_like = kv.key() == "java" || kv.key() == "java11"
+                       || kv.key() == "java17" || kv.key() == "java21";
+      bool ok_fields = cpp_like
+        ? check_unknown_fields(kv.value(), {"namespace", "output-dir", "prefix-filename"},
+                               "options." + kv.key(), error)
+        : java_like
+          ? check_unknown_fields(kv.value(), {"output-dir", "package"},
+                                 "options." + kv.key(), error)
+          : kv.key() == "go"
+            ? check_unknown_fields(kv.value(), {"output-dir", "package"},
+                                   "options." + kv.key(), error)
+            : check_unknown_fields(kv.value(), {"output-dir", "module"},
+                                   "options." + kv.key(), error);
+      if (!ok_fields)
+        return false;
+    }
+  }
   if (j.contains("options") && j["options"].contains("cpp98")) {
     const auto &o = j["options"]["cpp98"];
     s.cpp98.namespace_ = o.value("namespace", "");
@@ -222,6 +299,8 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
   }
   if (j.contains("functions")) {
     for (const auto &fj : j["functions"]) {
+      if (!check_unknown_fields(fj, {"name", "return", "arguments"}, "functions[]", error))
+        return false;
       schema_function fn;
       fn.name = fj.value("name", "");
       fn.return_type = fj.value("return", "void");
@@ -236,14 +315,36 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
   }
   if (j.contains("classes")) {
     for (const auto &cj : j["classes"]) {
+      if (!check_unknown_fields(cj, {"name", "methods", "properties"}, "classes[]", error))
+        return false;
       schema_class cls;
       cls.name = cj.value("name", "");
       if (cls.name.empty()) {
         error = "class missing name";
         return false;
       }
+      if (cj.contains("properties")) {
+        for (const auto &pj : cj["properties"]) {
+          std::string where = "class " + cls.name + " properties[]";
+          if (!check_unknown_fields(pj, {"name", "type", "getter", "setter"}, where, error))
+            return false;
+          schema_property prop;
+          prop.name = pj.value("name", "");
+          prop.type = pj.value("type", "");
+          if (prop.name.empty() || prop.type.empty()) {
+            error = where + ": missing name/type";
+            return false;
+          }
+          prop.getter = pj.value("getter", "");
+          prop.setter = pj.value("setter", "");
+          cls.properties.push_back(prop);
+        }
+      }
       if (cj.contains("methods")) {
         for (const auto &mj : cj["methods"]) {
+          if (!check_unknown_fields(mj, {"name", "return", "arguments"},
+                                    "class " + cls.name + " methods[]", error))
+            return false;
           schema_method m;
           m.name = mj.value("name", "");
           m.return_type = mj.value("return", "void");

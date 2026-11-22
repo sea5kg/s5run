@@ -241,6 +241,11 @@ void test_parse_errors() {
     "functions": 42
   })JSON", "JSON structure error");
 
+  // wrong type of a field (functions is not an array)
+  expect_fail("extra_field", R"JSON({
+    "extra_some_field": 111
+  })JSON", "JSON structure error");
+
   // load_schema_from_file: cannot open
   {
     schema s;
@@ -248,6 +253,86 @@ void test_parse_errors() {
     CHECK(!load_schema_from_file("/tmp/opencode/no-such-schema-file.json", s, error));
     CHECK(error.find("cannot open") != std::string::npos);
   }
+
+  std::fprintf(stderr, "  PASS\n");
+}
+
+void test_unknown_fields() {
+  std::fprintf(stderr, "== schema: unknown fields\n");
+
+  expect_fail("root_extra", R"JSON({"functions": [], "some-field": 1})JSON",
+              "unknown field 'some-field' in schema root");
+
+  expect_fail("opt_lang", R"JSON({"options": {"rust": {"output-dir": "/tmp"}}})JSON",
+              "unknown options section 'rust'");
+
+  expect_fail("opt_cpp_field", R"JSON({
+    "options": {"cpp98": {"namespace": "n", "output-dir": "/tmp", "module": "m"}}
+  })JSON", "unknown field 'module' in options.cpp98");
+
+  expect_fail("opt_go_field", R"JSON({
+    "options": {"go": {"output-dir": "/tmp", "namespace": "n"}}
+  })JSON", "unknown field 'namespace' in options.go");
+
+  expect_fail("opt_py_field", R"JSON({
+    "options": {"py": {"output-dir": "/tmp", "package": "p"}}
+  })JSON", "unknown field 'package' in options.py");
+
+  expect_ok("opt_java_ok", R"JSON({
+    "options": {"java21": {"output-dir": "/tmp", "package": "p"}}
+  })JSON");
+
+  expect_fail("fn_extra", R"JSON({
+    "functions": [{"name": "F", "returns": "int"}]
+  })JSON", "unknown field 'returns' in functions[]");
+
+  expect_fail("cls_extra", R"JSON({
+    "classes": [{"name": "A", "methodz": []}]
+  })JSON", "unknown field 'methodz' in classes[]");
+
+  expect_fail("m_extra", R"JSON({
+    "classes": [{"name": "A", "methods": [{"name": "m", "extra": 1}]}]
+  })JSON", "unknown field 'extra' in class A methods[]");
+
+  expect_fail("arg_extra", R"JSON({
+    "functions": [{"name": "F", "arguments": [{"name": "x", "type": "int", "flag": 1}]}]
+  })JSON", "unknown field 'flag' in function F arguments");
+
+  expect_fail("conv_extra", R"JSON({
+    "classes": [{"name": "console", "methods": [{"name": "log",
+      "arguments": {"convert-from": "...", "type": "array<string>", "name": "a", "x": 1}}]}]
+  })JSON", "unknown field 'x' in class console method log arguments");
+
+  std::fprintf(stderr, "  PASS\n");
+}
+
+void test_properties() {
+  std::fprintf(stderr, "== schema: properties\n");
+
+  expect_ok("prop_ok", R"JSON({
+    "classes": [{"name": "A", "methods": [], "properties": [
+      {"name": "P", "type": "int", "getter": "GetP", "setter": "SetP"},
+      {"name": "Name", "type": "string", "getter": "GetName"}
+    ]}]
+  })JSON");
+
+  expect_fail("prop_extra", R"JSON({
+    "classes": [{"name": "A", "properties": [{"name": "P", "type": "int", "value": 1}]}]
+  })JSON", "unknown field 'value' in class A properties[]");
+
+  expect_fail("prop_missing", R"JSON({
+    "classes": [{"name": "A", "properties": [{"name": "P"}]}]
+  })JSON", "missing name/type");
+
+  expect_fail("prop_bad_type", R"JSON({
+    "classes": [{"name": "A", "properties": [{"name": "P", "type": "Widget"}]}]
+  })JSON", "class A property 'P': unknown type 'Widget'");
+
+  expect_fail("prop_dup", R"JSON({
+    "classes": [{"name": "A", "properties": [
+      {"name": "P", "type": "int"}, {"name": "P", "type": "int"}
+    ]}]
+  })JSON", "duplicate property name: P in class A");
 
   std::fprintf(stderr, "  PASS\n");
 }
@@ -264,6 +349,8 @@ int main() {
     test_builtin_shadowing();
     test_bad_array_syntax();
     test_parse_errors();
+    test_unknown_fields();
+    test_properties();
   } catch (const std::exception &e) {
     std::fprintf(stderr, "!!! FAIL: %s\n", e.what());
     return 1;

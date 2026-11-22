@@ -65,9 +65,17 @@ struct schema_function {
   std::vector<schema_argument> arguments;
 };
 
+struct schema_property {
+  std::string name;
+  std::string type;
+  std::string getter; // "" if none
+  std::string setter; // "" if none
+};
+
 struct schema_class {
   std::string name;
   std::vector<schema_method> methods;
+  std::vector<schema_property> properties;
 };
 
 struct schema_cpp_options {

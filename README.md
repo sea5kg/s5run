@@ -265,6 +265,19 @@ It's schema share classes, global functions and global objects.
 Optional `prefix-filename` (cpp98/cpp11) prepends a prefix to the generated
 file names, e.g. `MyLib_` -> `MyLib_s5run_cli_cpp98.h`.
 
+Unknown fields are rejected with a hint, e.g.
+`schema: unknown field 'module' in options.cpp98 (allowed: namespace, output-dir, prefix-filename)`.
+
+Allowed fields per section:
+- root: `client-version`, `version`, `options`, `functions`, `classes`
+- `options.cpp98` / `options.cpp11`: `namespace`, `output-dir`, `prefix-filename`
+- `options.go`: `output-dir`, `package`; `options.py`: `output-dir`, `module`
+- `options.java` / `java11` / `java17` / `java21`: `output-dir`, `package`
+- `functions[]` / `methods[]`: `name`, `return`, `arguments`
+- `classes[]`: `name`, `methods`, `properties`
+- `properties[]`: `name`, `type`, `getter`, `setter`
+- `arguments[]`: `name`, `type`; convert-args object: `name`, `type`, `convert-from`
+
 For regenerate client libraries:
 
 ```sh
