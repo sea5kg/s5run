@@ -102,13 +102,13 @@ static void print_generate_usage() {
     "s5run generate - generate client or provider code\n"
     "\n"
     "Usage:\n"
-    "  %s generate client   --language LANG --output-dir DIR [--schema FILE]\n"
-    "  %s generate provider --language LANG --output-dir DIR [--schema FILE]\n"
+    "  %s generate client   --language LANG [--output-dir DIR] [--schema FILE]\n"
+    "  %s generate provider --language LANG [--output-dir DIR] [--schema FILE]\n"
     "  %s generate --list\n"
     "\n"
     "Options:\n"
     "  --language LANG  target language (cpp98, cpp11)\n"
-    "  --output-dir DIR where to write generated files\n"
+    "  --output-dir DIR where to write generated files (default: options.<lang>.output-dir from schema)\n"
     "  --schema FILE    schema file (default s5run-schema.json)\n"
     "  --list           list available generators\n",
     g_bin.c_str(),
@@ -219,8 +219,8 @@ static int cmd_generate(int argc, char **argv) {
     }
   }
 
-  if (language.empty() || output_dir.empty()) {
-    std::fprintf(stderr, "--language and --output-dir are required\n\n");
+  if (language.empty()) {
+    std::fprintf(stderr, "--language is required\n\n");
     print_generate_usage();
     return 1;
   }
@@ -236,6 +236,21 @@ static int cmd_generate(int argc, char **argv) {
   if (all_generators.count(language) == 0) {
     std::fprintf(stderr, "unknown generator: %s\n", language.c_str());
     std::fprintf(stderr, "run '%s generate --list' for available generators\n", g_bin.c_str());
+    return 1;
+  }
+
+  // output-dir: CLI option overrides the schema; fall back to options.<lang>
+  if (output_dir.empty()) {
+    if (language == "cpp98")
+      output_dir = schema.cpp98.output_dir;
+    else if (language == "cpp11")
+      output_dir = schema.cpp11.output_dir;
+  }
+  if (output_dir.empty()) {
+    std::fprintf(stderr, "output-dir is not specified: "
+                         "use --output-dir or options.%s.output-dir in the schema\n\n",
+                 language.c_str());
+    print_generate_usage();
     return 1;
   }
 

@@ -73,6 +73,7 @@ struct schema_class {
 struct schema_options {
   std::string namespace_;
   std::string output_dir;
+  std::string prefix_filename; // optional, prepended to generated file names
 };
 
 struct schema {

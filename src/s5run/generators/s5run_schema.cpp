@@ -194,6 +194,7 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
     const auto &o = j["options"]["cpp98"];
     s.cpp98.namespace_ = o.value("namespace", "");
     s.cpp98.output_dir = o.value("output-dir", "");
+    s.cpp98.prefix_filename = o.value("prefix-filename", "");
     if (s.cpp98.namespace_.empty() || s.cpp98.output_dir.empty()) {
       error = "options.cpp98 requires namespace and output-dir";
       return false;
@@ -203,6 +204,7 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
     const auto &o = j["options"]["cpp11"];
     s.cpp11.namespace_ = o.value("namespace", "");
     s.cpp11.output_dir = o.value("output-dir", "");
+    s.cpp11.prefix_filename = o.value("prefix-filename", "");
     if (s.cpp11.namespace_.empty() || s.cpp11.output_dir.empty()) {
       error = "options.cpp11 requires namespace and output-dir";
       return false;

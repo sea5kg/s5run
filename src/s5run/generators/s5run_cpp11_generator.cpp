@@ -1156,7 +1156,7 @@ std::string cpp11_generator::generate_impl(const schema &s) const {
   std::string out;
 
   out += "// AUTO-GENERATED. DO NOT EDIT.\n";
-  out += "#include \"" + ns + ".h\"\n\n";
+  out += "#include \"" + s.cpp11.prefix_filename + ns + ".h\"\n\n";
   out += "#include <arpa/inet.h>\n#include <netinet/in.h>\n#include <netinet/tcp.h>\n";
   out += "#include <sys/socket.h>\n#include <sys/time.h>\n#include <unistd.h>\n\n";
   out += "#include <cerrno>\n#include <cstdio>\n#include <cstdlib>\n#include <cstring>\n";
@@ -1381,11 +1381,11 @@ std::vector<std::string> cpp11_generator::generate(const schema &s,
   std::vector<std::string> written;
   ::mkdir(output_dir.c_str(), 0755);
 
-  std::string header_path = output_dir + "/" + ns + ".h";
+  std::string header_path = output_dir + "/" + s.cpp11.prefix_filename + ns + ".h";
   { std::ofstream f(header_path.c_str()); f << generate_header(s); }
   written.push_back(header_path);
 
-  std::string impl_path = output_dir + "/" + ns + ".cpp";
+  std::string impl_path = output_dir + "/" + s.cpp11.prefix_filename + ns + ".cpp";
   { std::ofstream f(impl_path.c_str()); f << generate_impl(s); }
   written.push_back(impl_path);
 

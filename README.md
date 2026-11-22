@@ -84,7 +84,7 @@ Usage:
 
 Options:
   --language LANG  target language (cpp98, cpp11)
-  --output-dir DIR where to write generated files
+  --output-dir DIR where to write generated files (default: options.<lang>.output-dir from schema)
   --schema FILE    schema file (default s5run-schema.json)
   --list           list available generators
 ```
@@ -92,6 +92,7 @@ Options:
 Usage examples:
 - `./s5run generate --list` - Show supported languages for generate client or provider code
 - `./s5run generate client --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli` - Generate client code based on cpp98
+- `./s5run generate client --language cpp98 --schema s5run-schema.json` - Same, but output-dir is taken from `options.cpp98.output-dir` in the schema
 - `./s5run generate provider --language cpp98 --output-dir ./tests/cpp98-client/s5run_cli` - Generate provider code based on cpp98 (*not implemented yet*)
 
 ### s5run run
@@ -138,7 +139,8 @@ For example json:
   "options": {
     "cpp11": {
       "output-dir": "tests/cpp11-client/s5run_cli_example/",
-      "namespace": "s5run_cli_example"
+      "namespace": "s5run_cli_example",
+      "prefix-filename": "MyLib_"
     },
     "java": {
       "output-dir": "tests/java-client/src/",
@@ -258,6 +260,9 @@ For example json:
 ```
 
 It's schema share classes, global functions and global objects.
+
+Optional `prefix-filename` (cpp98/cpp11) prepends a prefix to the generated
+file names, e.g. `MyLib_` -> `MyLib_s5run_cli_cpp98.h`.
 
 For regenerate client libraries:
 
