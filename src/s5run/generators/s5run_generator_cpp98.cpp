@@ -367,6 +367,34 @@ i32 read_ref(Reader &r) {
 // Header generation
 // -----------------------------------------------------------------------
 
+// Win32 API macros (windows.h) rename common method names, e.g.
+// #define SetProp SetPropW - that breaks generated declarations/calls.
+static const char *UNDEF_WIN32_MACROS =
+  "// Prevent Win32 API macros (windows.h) from renaming schema methods\n"
+  "// (e.g. #define SetProp SetPropW breaks method declarations/calls).\n"
+  "#undef SetProp\n"
+  "#undef GetProp\n"
+  "#undef RemoveProp\n"
+  "#undef CreateFile\n"
+  "#undef DeleteFile\n"
+  "#undef CopyFile\n"
+  "#undef MoveFile\n"
+  "#undef GetObject\n"
+  "#undef LoadLibrary\n"
+  "#undef FreeLibrary\n"
+  "#undef DrawText\n"
+  "#undef LoadIcon\n"
+  "#undef LoadCursor\n"
+  "#undef MessageBox\n"
+  "#undef SendMessage\n"
+  "#undef PostMessage\n"
+  "#undef SetFocus\n"
+  "#undef GetFocus\n"
+  "#undef ShowWindow\n"
+  "#undef UpdateWindow\n"
+  "#undef FindWindow\n"
+  "#undef GetTickCount\n";
+
 static std::string include_guard(const std::string &ns) {
   std::string out;
   for (size_t i = 0; i < ns.size(); ++i) {
@@ -387,6 +415,8 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   std::string guard = include_guard(s.cpp98.prefix_filename + ns);
   out += "#ifndef " + guard + "\n#define " + guard + "\n\n";
   out += "#include <map>\n#include <string>\n#include <vector>\n\n";
+  out += UNDEF_WIN32_MACROS;
+  out += "\n";
   out += "namespace " + ns + " {\n\n";
   out += "typedef unsigned char u8;\ntypedef unsigned short u16;\ntypedef unsigned int u32;\n";
   out += "#ifdef _MSC_VER\ntypedef __int64 i64;\ntypedef unsigned __int64 u64;\n#else\n";
@@ -408,7 +438,7 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    int ref_this_id() const; const std::string &ref_type() const;\n";
   out += "private:\n    void destroy(); void copy_from(const value &other);\n";
   out += "    kind m_kind; bool m_b; i64 m_i; double m_d;\n";
-  out += "    std::string m_s; std::vector<value> m_a; std::map<std::string, value> m_o;\n";
+  out += "    std::string m_s; std::vector<value> *m_a; std::map<std::string, value> *m_o;\n";
   out += "};\n\n";
 
   out += "class remote_server_info {\npublic:\n    remote_server_info();\n";
@@ -670,6 +700,8 @@ std::string generator_cpp98::generate_impl(const schema &s) const {
   out += "#include <winsock2.h>\n#include <ws2tcpip.h>\n#pragma comment(lib, \"ws2_32.lib\")\n";
   out += "#else\n#include <arpa/inet.h>\n#include <netinet/in.h>\n#include <netinet/tcp.h>\n";
   out += "#include <sys/socket.h>\n#include <sys/time.h>\n#include <unistd.h>\n#endif\n\n";
+  out += UNDEF_WIN32_MACROS;
+  out += "\n";
   out += "#include <cerrno>\n#include <cstdio>\n#include <cstring>\n#include <ctime>\n#include <stdexcept>\n\n";
   out += "namespace " + ns + " {\n\n";
 
@@ -814,15 +846,15 @@ static std::string _value_to_string(const value &v) {
 
   // Value implementation
   out += R"CODE(
-value::value() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0) {}
-value::value(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0) {}
-value::value(i64 i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
-value::value(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d) {}
-value::value(const char *s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s) {}
-value::value(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s) {}
-value::value(const std::vector<value> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(a) {}
-value::value(const std::map<std::string, value> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_o(o) {}
-value::value(const value &other) : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0) { copy_from(other); }
+value::value() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
+value::value(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
+value::value(i64 i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0), m_a(0), m_o(0) {}
+value::value(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d), m_a(0), m_o(0) {}
+value::value(const char *s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
+value::value(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
+value::value(const std::vector<value> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(new std::vector<value>(a)), m_o(0) {}
+value::value(const std::map<std::string, value> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(new std::map<std::string, value>(o)) {}
+value::value(const value &other) : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) { copy_from(other); }
 value &value::operator=(const value &other) {
     if (this != &other) { destroy(); copy_from(other); }
     return *this;
@@ -837,14 +869,20 @@ bool value::as_bool() const { return m_b; }
 i64 value::as_int() const { return m_i; }
 double value::as_double() const { return m_d; }
 const std::string &value::as_string() const { return m_s; }
-const std::vector<value> &value::as_array() const { return m_a; }
-const std::map<std::string, value> &value::as_object() const { return m_o; }
+const std::vector<value> &value::as_array() const { return *m_a; }
+const std::map<std::string, value> &value::as_object() const { return *m_o; }
 int value::ref_this_id() const { return (int)m_i; }
 const std::string &value::ref_type() const { return m_s; }
-void value::destroy() { m_kind = K_NULL; }
+void value::destroy() {
+    delete m_a; m_a = 0;
+    delete m_o; m_o = 0;
+    m_kind = K_NULL;
+}
 void value::copy_from(const value &other) {
     m_kind = other.m_kind; m_b = other.m_b; m_i = other.m_i; m_d = other.m_d;
-    m_s = other.m_s; m_a = other.m_a; m_o = other.m_o;
+    m_s = other.m_s;
+    m_a = other.m_a ? new std::vector<value>(*other.m_a) : 0;
+    m_o = other.m_o ? new std::map<std::string, value>(*other.m_o) : 0;
 }
 
 run_result::run_result() : m_has_error(false), m_error_line(0), m_duration_ms(0) {}
@@ -1055,7 +1093,9 @@ void context::context_impl::read_hello(sock_t s) {
     std::vector<u8> body;
     if (!read_frame(s, msg_type, body) || msg_type != M_SERVER_HELLO)
         throw std::runtime_error("s5run: expected server hello");
-    std::string text(body.empty() ? "" : std::string((const char *)&body[0], body.size()));
+    std::string text;
+    if (!body.empty())
+        text.assign((const char *)&body[0], body.size());
     if (text.compare(0, 6, "s5run ") != 0)
         throw std::runtime_error("s5run: bad server hello: " + text);
     std::size_t last_space = text.rfind(' ');

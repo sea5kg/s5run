@@ -241,10 +241,10 @@ void test_parse_errors() {
     "functions": 42
   })JSON", "JSON structure error");
 
-  // wrong type of a field (functions is not an array)
+  // extra field in the root is reported with a hint
   expect_fail("extra_field", R"JSON({
     "extra_some_field": 111
-  })JSON", "JSON structure error");
+  })JSON", "unknown field 'extra_some_field' in schema root");
 
   // load_schema_from_file: cannot open
   {

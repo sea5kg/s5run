@@ -7,6 +7,31 @@
 #include <string>
 #include <vector>
 
+// Prevent Win32 API macros (windows.h) from renaming schema methods
+// (e.g. #define SetProp SetPropW breaks method declarations/calls).
+#undef SetProp
+#undef GetProp
+#undef RemoveProp
+#undef CreateFile
+#undef DeleteFile
+#undef CopyFile
+#undef MoveFile
+#undef GetObject
+#undef LoadLibrary
+#undef FreeLibrary
+#undef DrawText
+#undef LoadIcon
+#undef LoadCursor
+#undef MessageBox
+#undef SendMessage
+#undef PostMessage
+#undef SetFocus
+#undef GetFocus
+#undef ShowWindow
+#undef UpdateWindow
+#undef FindWindow
+#undef GetTickCount
+
 namespace s5run_cli_cpp98 {
 
 typedef unsigned char u8;
@@ -44,7 +69,7 @@ public:
 private:
     void destroy(); void copy_from(const value &other);
     kind m_kind; bool m_b; i64 m_i; double m_d;
-    std::string m_s; std::vector<value> m_a; std::map<std::string, value> m_o;
+    std::string m_s; std::vector<value> *m_a; std::map<std::string, value> *m_o;
 };
 
 class remote_server_info {

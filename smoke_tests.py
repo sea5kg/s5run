@@ -139,7 +139,7 @@ def ensure_generated():
             _log=LOG.get_logger(),
             print_output_on_exit=True
         )
-    LOG.get_logger().info("-> Generating client's libs done.")
+    LOG.get_logger().info("-> Generating client's libs done. [PASS]")
 
 def ensure_cpp_client():
     inputs = _iter_files(CPP11_CLIENT_DIR)
@@ -507,7 +507,7 @@ def main():
 
     LOG.get_logger().info("-> Start compiling...")
     UtilsSmokeTests.compile_s5run(LOG.get_logger())
-    LOG.get_logger().info("-> Compiling done.")
+    LOG.get_logger().info("-> Compiling done. [PASS]")
     ensure_generated()
     ensure_cpp_client()
     ensure_cpp98_client()
