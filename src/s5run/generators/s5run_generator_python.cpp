@@ -1,234 +1,243 @@
-#!/usr/bin/env python3
-##################################################################################
-#
-#            ░░░░░░░
-#           ░██▓▓▓▓▒
-#  ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
-#  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
-#   ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
-#  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
-#   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
-#
-# MIT License
-#
-# Copyright (c) 2026 Evgenii Sopov
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-#
-# Original repository: https://github.com/sea5kg/s5run
-#
-##################################################################################
+/**********************************************************************************
+ *
+ *            ░░░░░░░
+ *           ░██▓▓▓▓▒
+ *  ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
+ *  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
+ *   ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
+ *  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
+ *   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ▒▒░
+ *
+ * MIT License
+ *
+ * Copyright (c) 2026 Evgenii Sopov
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * Original repository: https://github.com/sea5kg/s5run
+ *
+ ***********************************************************************************/
 
-"""Modern Python client generator over the s5run binary protocol."""
+#include "s5run_generators.h"
+#include "s5run_schema.h"
 
-from .s5run_typeref import S5RunCliTypeRef, s5run_parse_type
+#include <sys/stat.h>
 
-_PY_TYPES = {
-    "bool": "bool",
-    "int": "int",
-    "uint": "int",
-    "float": "float",
-    "double": "float",
-    "string": "str",
-    "byte": "int",
+#include <fstream>
+#include <string>
+#include <vector>
+
+namespace s5run {
+namespace generators {
+
+// -----------------------------------------------------------------------
+// Type helpers
+// -----------------------------------------------------------------------
+
+static bool is_scalar_type(const std::string &t) {
+  return t == "bool" || t == "int" || t == "uint" || t == "float" ||
+         t == "double" || t == "string" || t == "byte";
 }
 
-# wire reader function per primitive
-_READERS = {
-    "bool": "_read_bool(buf)",
-    "int": "_read_int(buf)",
-    "uint": "_read_int(buf)",
-    "float": "_read_double(buf)",
-    "double": "_read_double(buf)",
-    "string": "_read_str_value(buf)",
-    "byte": "_read_byte(buf)",
+static bool is_void(const std::string &t) {
+  return t == "void";
 }
 
-# wire writer statement per primitive
-_WRITERS = {
-    "bool": "_write_bool(out, {expr})",
-    "int": "_write_int(out, {expr})",
-    "uint": "_write_int(out, {expr})",
-    "float": "_write_double(out, {expr})",
-    "double": "_write_double(out, {expr})",
-    "string": "_write_str_value(out, {expr})",
-    "byte": "_write_byte(out, {expr})",
+static bool is_array_type(const std::string &t) {
+  return t.size() > 7 && t.substr(0, 6) == "array<" && t[t.size() - 1] == '>';
 }
 
+static std::string array_inner(const std::string &t) {
+  return t.substr(6, t.size() - 7);
+}
 
-def _py_type(ref: S5RunCliTypeRef) -> str:
-    if ref.is_prim():
-        return _PY_TYPES[ref.name()]
-    if ref.is_array():
-        return f"list[{_py_type(s5run_parse_type(ref.inner()))}]"
-    return ref.name()
+static bool is_ref_type(const std::string &t) {
+  return !is_scalar_type(t) && !is_void(t) && !is_array_type(t);
+}
 
+static bool has_convert(const std::vector<schema_argument> &args) {
+  return args.size() == 1 && !args[0].convert_from.empty();
+}
 
-def _is_void(fm) -> bool:
-    return fm.return_type() == "void"
+static std::string py_scalar_type(const std::string &t) {
+  if (t == "bool") return "bool";
+  if (t == "int" || t == "uint" || t == "byte") return "int";
+  if (t == "float" || t == "double") return "float";
+  if (t == "string") return "str";
+  return t;
+}
 
+static std::string py_type(const std::string &t) {
+  if (is_array_type(t))
+    return "list[" + py_type(array_inner(t)) + "]";
+  return py_scalar_type(t);
+}
 
-def _has_convert(fm) -> bool:
-    args = fm.arguments()
-    return len(args) == 1 and bool(args[0].convert_from())
+static std::string py_reader(const std::string &t) {
+  if (t == "bool") return "_read_bool(buf)";
+  if (t == "int" || t == "uint") return "_read_int(buf)";
+  if (t == "float" || t == "double") return "_read_double(buf)";
+  if (t == "string") return "_read_str_value(buf)";
+  if (t == "byte") return "_read_byte(buf)";
+  return t;
+}
 
+static std::string py_writer_expr(const std::string &t, const std::string &expr) {
+  if (t == "bool") return "_write_bool(out, " + expr + ")";
+  if (t == "int" || t == "uint") return "_write_int(out, " + expr + ")";
+  if (t == "float" || t == "double") return "_write_double(out, " + expr + ")";
+  if (t == "string") return "_write_str_value(out, " + expr + ")";
+  if (t == "byte") return "_write_byte(out, " + expr + ")";
+  return expr;
+}
 
-def _read_stmt(ref, name: str) -> str:
-    if ref.is_prim():
-        return f"{name} = {_READERS[ref.name()]}"
-    inner = s5run_parse_type(ref.inner())
-    elem = _PY_TYPES[inner.name()] if inner.is_prim() else _PY_TYPES.get(inner.name(), inner.name())
-    return (f"{name} = _read_array(buf, lambda: "
-            f"{_READERS.get(inner.name(), 'None') if inner.is_prim() else 'None'})")
+static std::string read_stmt(const std::string &t, const std::string &name) {
+  if (is_scalar_type(t))
+    return name + " = " + py_reader(t);
+  std::string inner = array_inner(t);
+  std::string elem = is_scalar_type(inner) ? py_reader(inner) : "None";
+  return name + " = _read_array(buf, lambda: " + elem + ")";
+}
 
+static std::string write_stmt(const std::string &t, const std::string &expr) {
+  if (is_scalar_type(t))
+    return py_writer_expr(t, expr);
+  std::string inner = array_inner(t);
+  return "_write_array(out, " + expr + ", lambda e: " + py_writer_expr(inner, "e") + ")";
+}
 
-def _write_stmt(ref, expr: str) -> str:
-    if ref.is_prim():
-        return _WRITERS[ref.name()].format(expr=expr)
-    inner = s5run_parse_type(ref.inner())
-    inner_fn = _READERS[inner.name()] if inner.is_prim() else "None"
-    return f"_write_array(out, {expr}, lambda e: {_WRITERS[inner.name()].format(expr='e')})"
+// -----------------------------------------------------------------------
+// Callback bodies
+// -----------------------------------------------------------------------
 
+static void emit_decode_arg(std::vector<std::string> &L, const schema_argument &a) {
+  const std::string &t = a.type;
+  if (is_ref_type(t)) {
+    L.push_back(a.name + " = _instance_by_id('" + t + "', _read_ref(buf).this_id)");
+  } else if (is_array_type(t) && is_ref_type(array_inner(t))) {
+    L.push_back(a.name + " = _read_ref_array(buf, '" + array_inner(t) + "')");
+  } else {
+    L.push_back(read_stmt(t, a.name));
+  }
+}
 
-def _gen_function_cb(f, indent="    ") -> str:
-    """Callback body lines for a global function."""
-    L = []
-    conv = _has_convert(f)
-    if conv:
-        a = f.arguments()[0]
-        L.append("n = _read_count(buf)")
-        L.append(f"{a.name()} = [_value_to_string(_decode_value(buf)) for _ in range(n)]")
-    else:
-        L.append(f"if _read_count(buf) != {len(f.arguments())}:")
-        L.append(f"    raise RuntimeError(\"{f.name()}: wrong argument count\")")
-        for a in f.arguments():
-            ref = a.type_ref()
-            if ref.is_ref():
-                L.append(f"{a.name()} = _instance_by_id('{ref.name()}', _read_ref(buf).this_id)")
-            elif ref.is_array() and s5run_parse_type(ref.inner()).is_ref():
-                cls = s5run_parse_type(ref.inner()).name()
-                L.append(f"{a.name()} = _read_ref_array(buf, '{cls}')")
-            else:
-                L.append(_read_stmt(ref, a.name()))
-    call = ", ".join(a.name() for a in f.arguments())
-    if _is_void(f):
-        L.append(f"fn{f.name()}.execute({call})")
-        L.append("_write_undefined(out)")
-    else:
-        L.append(f"res = fn{f.name()}.execute({call})")
-        ref = f.return_ref()
-        if ref.is_ref():
-            L.append(f"_write_ref(out, _register_instance(res), '{ref.name()}')")
-        elif ref.is_array() and s5run_parse_type(ref.inner()).is_ref():
-            L.append("ids = [_register_instance(o) for o in res]")
-            L.append(f"_write_ref_array(out, ids, '{s5run_parse_type(ref.inner()).name()}')")
-        else:
-            L.append(_write_stmt(ref, "res"))
-    return "\n".join(indent + ln if ln else ln for ln in L)
+static void emit_encode_result(std::vector<std::string> &L, const std::string &t) {
+  if (is_ref_type(t)) {
+    L.push_back("_write_ref(out, _register_instance(res), '" + t + "')");
+  } else if (is_array_type(t) && is_ref_type(array_inner(t))) {
+    L.push_back("ids = [_register_instance(o) for o in res]");
+    L.push_back("_write_ref_array(out, ids, '" + array_inner(t) + "')");
+  } else {
+    L.push_back(write_stmt(t, "res"));
+  }
+}
 
+static std::string gen_function_cb(const schema_function &f, const std::string &indent) {
+  std::vector<std::string> L;
+  if (has_convert(f.arguments)) {
+    const schema_argument &a = f.arguments[0];
+    L.push_back("n = _read_count(buf)");
+    L.push_back(a.name + " = [_value_to_string(_decode_value(buf)) for _ in range(n)]");
+  } else {
+    L.push_back("if _read_count(buf) != " + std::to_string(f.arguments.size()) + ":");
+    L.push_back("    raise RuntimeError(\"" + f.name + ": wrong argument count\")");
+    for (const auto &a : f.arguments)
+      emit_decode_arg(L, a);
+  }
+  std::string call;
+  for (const auto &a : f.arguments) {
+    if (!call.empty())
+      call += ", ";
+    call += a.name;
+  }
+  if (is_void(f.return_type)) {
+    L.push_back("fn" + f.name + ".execute(" + call + ")");
+    L.push_back("_write_undefined(out)");
+  } else {
+    L.push_back("res = fn" + f.name + ".execute(" + call + ")");
+    emit_encode_result(L, f.return_type);
+  }
+  std::string out;
+  for (const auto &ln : L) {
+    if (!out.empty())
+      out += "\n";
+    if (ln.empty())
+      out += ln;
+    else
+      out += indent + ln;
+  }
+  return out;
+}
 
-def _gen_method_cb(c, m, indent="    ") -> str:
-    L = []
-    conv = _has_convert(m)
-    if conv:
-        a0 = m.arguments()[0]
-        L.append("n_count = _read_count(buf)")
-        L.append("if n_count < 1:")
-        L.append(f"    raise RuntimeError(\"{c.name()}.{m.name()}: expected this_id\")")
-        L.append("obj = _instance_by_id('%s', _read_int(buf))" % c.name())
-        L.append(f"{a0.name()} = []")
-        L.append("for _ in range(n_count - 1):")
-        L.append(f"    {a0.name()}.append(_value_to_string(_decode_value(buf)))")
-    else:
-        L.append(f"n_count = _read_count(buf)")
-        L.append(f"if n_count != {1 + len(m.arguments())}:")
-        L.append(f"    raise RuntimeError(\"{c.name()}.{m.name()}: wrong argument count\")")
-        L.append("obj = _instance_by_id('%s', _read_int(buf))" % c.name())
-    for a in (m.arguments() if not conv else []):
-        ref = a.type_ref()
-        if ref.is_ref():
-            L.append(f"{a.name()} = _instance_by_id('{ref.name()}', _read_ref(buf).this_id)")
-        elif ref.is_array() and s5run_parse_type(ref.inner()).is_ref():
-            cls = s5run_parse_type(ref.inner()).name()
-            L.append(f"{a.name()} = _read_ref_array(buf, '{cls}')")
-        else:
-            L.append(_read_stmt(ref, a.name()))
-    call = ", ".join(a.name() for a in m.arguments())
-    if _is_void(m):
-        L.append(f"obj.{m.name()}({call})")
-        L.append("_write_undefined(out)")
-    else:
-        L.append(f"res = obj.{m.name()}({call})")
-        ref = m.return_ref()
-        if ref.is_ref():
-            L.append(f"_write_ref(out, _register_instance(res), '{ref.name()}')")
-        elif ref.is_array() and s5run_parse_type(ref.inner()).is_ref():
-            L.append("ids = [_register_instance(o) for o in res]")
-            L.append(f"_write_ref_array(out, ids, '{s5run_parse_type(ref.inner()).name()}')")
-        else:
-            L.append(_write_stmt(ref, "res"))
-    return "\n".join(indent + ln if ln else ln for ln in L)
+static std::string gen_method_cb(const schema_class &c, const schema_method &m,
+                                 const std::string &indent) {
+  std::vector<std::string> L;
+  bool conv = has_convert(m.arguments);
+  if (conv) {
+    const schema_argument &a0 = m.arguments[0];
+    L.push_back("n_count = _read_count(buf)");
+    L.push_back("if n_count < 1:");
+    L.push_back("    raise RuntimeError(\"" + c.name + "." + m.name + ": expected this_id\")");
+    L.push_back("obj = _instance_by_id('" + c.name + "', _read_int(buf))");
+    L.push_back(a0.name + " = []");
+    L.push_back("for _ in range(n_count - 1):");
+    L.push_back("    " + a0.name + ".append(_value_to_string(_decode_value(buf)))");
+  } else {
+    L.push_back("n_count = _read_count(buf)");
+    L.push_back("if n_count != " + std::to_string(1 + m.arguments.size()) + ":");
+    L.push_back("    raise RuntimeError(\"" + c.name + "." + m.name + ": wrong argument count\")");
+    L.push_back("obj = _instance_by_id('" + c.name + "', _read_int(buf))");
+  }
+  if (!conv) {
+    for (const auto &a : m.arguments)
+      emit_decode_arg(L, a);
+  }
+  std::string call;
+  for (const auto &a : m.arguments) {
+    if (!call.empty())
+      call += ", ";
+    call += a.name;
+  }
+  if (is_void(m.return_type)) {
+    L.push_back("obj." + m.name + "(" + call + ")");
+    L.push_back("_write_undefined(out)");
+  } else {
+    L.push_back("res = obj." + m.name + "(" + call + ")");
+    emit_encode_result(L, m.return_type);
+  }
+  std::string out;
+  for (const auto &ln : L) {
+    if (!out.empty())
+      out += "\n";
+    if (ln.empty())
+      out += ln;
+    else
+      out += indent + ln;
+  }
+  return out;
+}
 
+// -----------------------------------------------------------------------
+// Static template blocks
+// -----------------------------------------------------------------------
 
-class _PyGenerator:
-
-    def __init__(self, schema):
-        self.schema = schema
-
-    # ------------------------------------------------------------------
-
-    def generate(self) -> str:
-        s = self.schema
-        L = [
-            '# AUTO-GENERATED. DO NOT EDIT.',
-            f'# module: {s.py_module}',
-            f'"""Generated s5run client ({s.client_version}). '
-            f'Inherit the base classes and register them on a Context."""',
-            '',
-            'from __future__ import annotations',
-            '',
-            'import socket',
-            'import struct',
-            'import time',
-            'from abc import ABC, abstractmethod',
-            'from dataclasses import dataclass, field',
-            'from enum import IntEnum',
-            'from typing import Any, Callable',
-            '',
-            f'CLIENT_VERSION = "{s.client_version}"',
-            '',
-        ]
-        L.append(self._codec())
-        L.append(self._roots())
-        for c in s.classes:
-            L.append(self._schema_class(c))
-        for f in s.functions:
-            L.append(self._schema_function(f))
-        L.append(self._remote_server_info())
-        L.append(self._run_result())
-        L.append(self._context())
-        return "\n".join(L)
-
-    # ------------------------------------------------------------------
-
-    def _codec(self) -> str:
-        return '''
+static const char *CODEC_TEMPLATE = R"PY(
 class _Tag(IntEnum):
     UNDEFINED = 0x00
     BOOL = 0x01
@@ -552,10 +561,10 @@ def _encode_value(out: _Writer, v: Any) -> None:
 
 def _read_count(buf: _Reader) -> int:
     return buf.u32()
-'''
+)PY";
 
-    def _roots(self) -> str:
-        return '''
+static const char *ROOTS_TEMPLATE = R"PY(
+
 
 class S5RunObject(ABC):
     """Root of all generated classes."""
@@ -572,46 +581,10 @@ class S5RunFunction(ABC):
 
     @abstractmethod
     def s5run_function_name(self) -> str: ...
-'''
+)PY";
 
-    def _schema_class(self, c) -> str:
-        methods = []
-        for m in c.methods():
-            ret = "" if _is_void(m) else f" -> {_py_type(m.return_ref())}"
-            args = "".join(f", {a.name()}: {_py_type(a.type_ref())}" for a in m.arguments())
-            methods.append(f"    @abstractmethod\n    def {m.name()}(self{args}){ret}: ...")
-        names = ", ".join(f'"{m.name()}"' for m in c.methods())
-        return f'''
+static const char *REMOTE_SERVER_TEMPLATE = R"PY(
 
-class {c.name()}(S5RunObject):
-    """Schema class '{c.name()}' — inherit and implement."""
-
-    def s5run_class_name(self) -> str:
-        return "{c.name()}"
-
-    def s5run_method_names(self) -> list[str]:
-        return [{names}]
-
-{chr(10).join(methods)}
-'''
-
-    def _schema_function(self, f) -> str:
-        ret = "" if _is_void(f) else f" -> {_py_type(f.return_ref())}"
-        args = "".join(f", {a.name()}: {_py_type(a.type_ref())}" for a in f.arguments())
-        return f'''
-
-class GlobalFunction_{f.name()}(S5RunFunction):
-    """Global function '{f.name()}' — inherit and implement execute()."""
-
-    def s5run_function_name(self) -> str:
-        return "{f.name()}"
-
-    @abstractmethod
-    def execute(self{args}){ret}: ...
-'''
-
-    def _remote_server_info(self) -> str:
-        return '''
 
 class RemoteServerInfo:
     """Settings of a remote s5run server (fluent)."""
@@ -646,10 +619,10 @@ class RemoteServerInfo:
     @property
     def port(self) -> int:
         return self._port
-'''
+)PY";
 
-    def _run_result(self) -> str:
-        return '''
+static const char *RUN_RESULT_TEMPLATE = R"PY(
+
 
 @dataclass(frozen=True, slots=True)
 class RunResult:
@@ -672,51 +645,101 @@ class RunResult:
 def _parse_error_line(error: str) -> int:
     """Extracts LINE from ':LINE:COL' positions in engine errors."""
     import re
-    m = re.search(r":(\\d+):\\d+", error)
+    m = re.search(r":(\d+):\d+", error)
     return int(m.group(1)) if m else 0
-'''
+)PY";
 
-    def _context(self) -> str:
-        s = self.schema
-        method_handlers = []
-        for c in s.classes:
-            for m in c.methods():
-                method_handlers.append(
-                    f'            "{m.name()}": self._cbm_{c.name()}_{m.name()},'
-                )
-        fn_defs = []
-        for f in s.functions:
-            fn_defs.append(f'''
-    def _cb_{f.name()}(self, cb_id: int, buf: _Reader) -> None:
-        fn{f.name()} = self._functions["{f.name()}"]
-        out = _Writer()
-        out.i32(cb_id)
-        out.u8(1)
-{_gen_function_cb(f, "        ")}
-        self._send(_Msg.CALLBACK_RESP, out)
-''')
-        for c in s.classes:
-            for m in c.methods():
-                fn_defs.append(f'''
-    def _cbm_{c.name()}_{m.name()}(self, cb_id: int, buf: _Reader) -> None:
-        out = _Writer()
-        out.i32(cb_id)
-        out.u8(1)
-{_gen_method_cb(c, m, "        ")}
-        self._send(_Msg.CALLBACK_RESP, out)
-''')
+// -----------------------------------------------------------------------
+// Schema-dependent blocks
+// -----------------------------------------------------------------------
 
-        return f'''
+static std::string generate_schema_class(const schema_class &c) {
+  std::string methods;
+  for (const auto &m : c.methods) {
+    std::string ret = is_void(m.return_type) ? "" : " -> " + py_type(m.return_type);
+    std::string args;
+    for (const auto &a : m.arguments)
+      args += ", " + a.name + ": " + py_type(a.type);
+    methods += "    @abstractmethod\n    def " + m.name + "(self" + args + ")" + ret + ": ...\n";
+  }
+  std::string names;
+  for (const auto &m : c.methods) {
+    if (!names.empty())
+      names += ", ";
+    names += "\"" + m.name + "\"";
+  }
+  return "\n\n\nclass " + c.name + "(S5RunObject):\n"
+         "    \"\"\"Schema class '" + c.name + "' — inherit and implement.\"\"\"\n\n"
+         "    def s5run_class_name(self) -> str:\n"
+         "        return \"" + c.name + "\"\n\n"
+         "    def s5run_method_names(self) -> list[str]:\n"
+         "        return [" + names + "]\n\n"
+         + methods;
+}
+
+static std::string generate_schema_function(const schema_function &f) {
+  std::string ret = is_void(f.return_type) ? "" : " -> " + py_type(f.return_type);
+  std::string args;
+  for (const auto &a : f.arguments)
+    args += ", " + a.name + ": " + py_type(a.type);
+  return "\n\n\nclass GlobalFunction_" + f.name + "(S5RunFunction):\n"
+         "    \"\"\"Global function '" + f.name + "' — inherit and implement execute().\"\"\"\n\n"
+         "    def s5run_function_name(self) -> str:\n"
+         "        return \"" + f.name + "\"\n\n"
+         "    @abstractmethod\n"
+         "    def execute(self" + args + ")" + ret + ": ...\n";
+}
+
+static std::string generate_context(const schema &s) {
+  std::string method_handlers;
+  for (const auto &c : s.classes) {
+    for (const auto &m : c.methods) {
+      if (!method_handlers.empty())
+        method_handlers += "\n";
+      method_handlers += "            \"" + m.name + "\": self._cbm_" + c.name + "_" + m.name + ",";
+    }
+  }
+
+  std::string fn_defs;
+  bool first_block = true;
+  for (const auto &f : s.functions) {
+    fn_defs += std::string(first_block ? "\n" : "\n\n")
+               + "    def _cb_" + f.name + "(self, cb_id: int, buf: _Reader) -> None:\n"
+               "        fn" + f.name + " = self._functions[\"" + f.name + "\"]\n"
+               "        out = _Writer()\n"
+               "        out.i32(cb_id)\n"
+               "        out.u8(1)\n"
+               + gen_function_cb(f, "        ") + "\n"
+               "        self._send(_Msg.CALLBACK_RESP, out)\n";
+    first_block = false;
+  }
+  for (const auto &c : s.classes) {
+    for (const auto &m : c.methods) {
+      fn_defs += std::string(first_block ? "\n" : "\n\n")
+                 + "    def _cbm_" + c.name + "_" + m.name + "(self, cb_id: int, buf: _Reader) -> None:\n"
+                 "        out = _Writer()\n"
+                 "        out.i32(cb_id)\n"
+                 "        out.u8(1)\n"
+                 + gen_method_cb(c, m, "        ") + "\n"
+                 "        self._send(_Msg.CALLBACK_RESP, out)\n";
+      first_block = false;
+    }
+  }
+
+  std::string out = R"PY(
+
 
 class Context:
     """Cacheable execution context: registrations, servers and the script."""
 
     def __init__(self) -> None:
-        self._handlers: dict[str, Callable] = {{
-{chr(10).join(method_handlers)}
-        }}
-        self._functions: dict[str, S5RunFunction] = {{}}
-        self._instances: dict[str, dict[int, S5RunObject]] = {{}}
+        self._handlers: dict[str, Callable] = {
+)PY";
+  out += method_handlers;
+  out += R"PY(
+        }
+        self._functions: dict[str, S5RunFunction] = {}
+        self._instances: dict[str, dict[int, S5RunObject]] = {}
         self._servers: list[RemoteServerInfo] = []
         self._pending_types: list[tuple[str, list[str]]] = []
         self._pending_objects: list[tuple[str, int, list[str]]] = []
@@ -746,7 +769,7 @@ class Context:
     def add_object(self, obj: S5RunObject) -> "Context":
         cls = obj.s5run_class_name()
         self._next_id += 1
-        self._instances.setdefault(cls, {{}})[self._next_id] = obj
+        self._instances.setdefault(cls, {})[self._next_id] = obj
         if self._sock is not None:
             self._send_register_object(cls, self._next_id, obj.s5run_method_names())
         else:
@@ -756,7 +779,7 @@ class Context:
     def add_function(self, fn: S5RunFunction) -> "Context":
         name = fn.s5run_function_name()
         self._functions[name] = fn
-        self._handlers[name] = getattr(self, f"_cb_{{name}}")
+        self._handlers[name] = getattr(self, f"_cb_{name}")
         if self._sock is not None:
             self._send_register_function(name)
         else:
@@ -766,17 +789,19 @@ class Context:
     # ---- internals ----
 
     def _instance_by_id(self, cls: str, this_id: int) -> Any:
-        obj = self._instances.get(cls, {{}}).get(this_id)
+        obj = self._instances.get(cls, {}).get(this_id)
         if obj is None:
-            raise RuntimeError(f"{{cls}}: unknown this_id {{this_id}}")
+            raise RuntimeError(f"{cls}: unknown this_id {this_id}")
         return obj
 
     def _register_instance(self, obj: S5RunObject) -> int:
         self._next_id += 1
-        self._instances.setdefault(obj.s5run_class_name(), {{}})[self._next_id] = obj
+        self._instances.setdefault(obj.s5run_class_name(), {})[self._next_id] = obj
         return self._next_id
 
-{chr(10).join(fn_defs)}
+)PY";
+  out += fn_defs;
+  out += R"PY(
 
     def _dispatch_callback(self, body: bytes) -> None:
         buf = _Reader(body)
@@ -924,10 +949,10 @@ def _read_hello(sock: socket.socket) -> None:
     text = body.decode("utf-8")
     parts = text.split(" ")
     if len(parts) != 3 or parts[0] != "s5run":
-        raise RuntimeError(f"s5run: bad server hello: {{text!r}}")
+        raise RuntimeError(f"s5run: bad server hello: {text!r}")
     if int(parts[2]) != 2:
         raise RuntimeError(
-            f"s5run: server protocol version {{parts[2]}} is not supported (client supports 2)")
+            f"s5run: server protocol version {parts[2]} is not supported (client supports 2)")
 
 
 def _probe_server_load(server: RemoteServerInfo) -> int:
@@ -1000,8 +1025,67 @@ def run_script(ctx: Context, entry: str, args: list[Any] | None = None) -> RunRe
             raise RuntimeError("s5run: unexpected message type")
     except Exception as e:  # noqa: BLE001
         return done(RunResult.fail(str(e), 0.0))
-'''
+)PY";
+  return out;
+}
 
+// -----------------------------------------------------------------------
+// Generator
+// -----------------------------------------------------------------------
 
-def generate(schema) -> str:
-    return _PyGenerator(schema).generate() + "\n"
+class generator_python : public IGenerator {
+public:
+  std::vector<std::string> generate(const schema &s,
+                                     const std::string &output_dir) override;
+};
+
+std::vector<std::string> generator_python::generate(const schema &s,
+                                                    const std::string &output_dir) {
+  std::vector<std::string> written;
+  ::mkdir(output_dir.c_str(), 0755);
+
+  std::string module = s.py.module_.empty() ? "s5run_cli" : s.py.module_;
+
+  std::string out;
+  out += "# AUTO-GENERATED. DO NOT EDIT.\n";
+  out += "# module: " + module + "\n";
+  out += "\"\"\"Generated s5run client (" + s.client_version + "). "
+         "Inherit the base classes and register them on a Context.\"\"\"\n";
+  out += "\n";
+  out += "from __future__ import annotations\n";
+  out += "\n";
+  out += "import socket\n";
+  out += "import struct\n";
+  out += "import time\n";
+  out += "from abc import ABC, abstractmethod\n";
+  out += "from dataclasses import dataclass, field\n";
+  out += "from enum import IntEnum\n";
+  out += "from typing import Any, Callable\n";
+  out += "\n";
+  out += "CLIENT_VERSION = \"" + s.client_version + "\"\n";
+  out += "\n";
+
+  out += CODEC_TEMPLATE;
+  out += ROOTS_TEMPLATE;
+  for (const auto &c : s.classes)
+    out += generate_schema_class(c);
+  for (const auto &f : s.functions)
+    out += generate_schema_function(f);
+  out += REMOTE_SERVER_TEMPLATE;
+  out += RUN_RESULT_TEMPLATE;
+  out += generate_context(s);
+
+  std::string path = output_dir + "/" + module + ".py";
+  std::ofstream f(path.c_str());
+  f << out << "\n";
+  f.close();
+  written.push_back(path);
+  return written;
+}
+
+std::shared_ptr<IGenerator> make_generator_python() {
+  return std::make_shared<generator_python>();
+}
+
+} // namespace generators
+} // namespace s5run

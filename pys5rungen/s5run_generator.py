@@ -44,31 +44,11 @@ import os
 from .s5run_schema import S5RunCliSchema
 from . import s5run_java21_generator
 from . import s5run_java17_generator
-from . import s5run_py_generator
 
 
 class S5RunCliGenerator:
     def __init__(self, schema: S5RunCliSchema):
         self.schema = schema
-
-    def __generate_cpp(self, name, _generate_header, _generate_impl) -> None:
-        s = self.schema
-        opt = self.schema.get_cpp_options(name)
-        if not opt.output_dir():
-            return
-        os.makedirs(opt.output_dir(), exist_ok=True)
-        with open(os.path.join(opt.output_dir(), f"{opt.namespace()}.h"), "w", encoding="utf-8") as f:
-            f.write(_generate_header(s))
-        with open(os.path.join(opt.output_dir(), f"{opt.namespace()}.cpp"), "w", encoding="utf-8") as f:
-            f.write(_generate_impl(s))
-
-    def generate_py(self) -> None:
-        s = self.schema
-        if not s.py_output_dir:
-            return
-        os.makedirs(s.py_output_dir, exist_ok=True)
-        with open(os.path.join(s.py_output_dir, f"{s.py_module}.py"), "w", encoding="utf-8") as f:
-            f.write(s5run_py_generator.generate(s))
 
     def generate_java21(self) -> None:
         s = self.schema
@@ -103,8 +83,6 @@ class S5RunCliGenerator:
 
 
     def generate_all(self) -> None:
-        self.generate_cpp11()
-        self.generate_py()
         self.generate_java21()
         self.generate_java17()
         self.generate_java11()
@@ -112,12 +90,6 @@ class S5RunCliGenerator:
     def report(self, what: str = "all") -> str:
         s = self.schema
         lines = []
-        if what in ("all", "cpp11"):
-            opt = s.get_cpp_options("cpp11")
-            # TODO redesign this from Generator.report() or something like this
-            lines.append(f"cpp11 -> {opt.output_dir()}{opt.namespace()}.h, {opt.output_dir()}{opt.namespace()}.cpp")
-        if what in ("all", "py") and s.py_output_dir:
-            lines.append(f"py   -> {s.py_output_dir}{s.py_module}.py")
         if what in ("all", "java21") and s.java21_output_dir:
             lines.append(f"java21 -> {s.java21_output_dir}{s.java21_package.replace('.', '/')}/")
         if what in ("all", "java17") and s.java17_output_dir:

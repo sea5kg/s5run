@@ -44,6 +44,7 @@ std::map<std::string, std::shared_ptr<IGenerator>> all() {
     ret["cpp98"] = make_generator_cpp98();
     ret["cpp11"] = make_generator_cpp11();
     ret["go"] = make_generator_golang();
+    ret["py"] = make_generator_python();
     return ret;
 };
 

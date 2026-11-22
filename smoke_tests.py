@@ -113,6 +113,7 @@ def ensure_generated():
         "cpp98": os.path.join(ROOT, "tests", "cpp98-client", "s5run_cli"),
         "cpp11": os.path.join(ROOT, "tests", "cpp11-client", "s5run_cli_example"),
         "go": os.path.join(ROOT, "tests", "go-client", "s5runcli"),
+        "py": os.path.join(ROOT, "tests", "py-client"),
     }
     _langs = _todo_generate.keys()
     _langs = sorted(_langs)
@@ -126,7 +127,6 @@ def ensure_generated():
 
     # other languages via pys5rungen
     _todo_generate2 = [
-        "py",
         "java21",
         "java17",
         "java11",

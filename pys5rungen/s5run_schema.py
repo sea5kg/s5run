@@ -171,8 +171,6 @@ class S5RunCliSchema:
             self.__schema = json.load(f)
         self.__parse_version()
         self.__parse_client_version()
-        self.__parse_cpp_options("cpp11")
-        self.__parse_cpp_options("cpp98")
         self.__parse_java21_options()
         self.__parse_java17_options()
         self.__parse_java11_options()
@@ -240,13 +238,6 @@ class S5RunCliSchema:
         self.go_output_dir = section["output-dir"]
         if "package" in section:
             self.go_package = section["package"]
-
-    def __parse_cpp_options(self, name):
-        if "options" not in self.__schema:
-            return
-        if name not in self.__schema["options"]:
-            return
-        self.__options[name] = S5RunCliSchemaCppOptions(name, self.__schema["options"][name])
 
     def __resolve_names(self):
         # Languages without an explicit name fall back to the shared namespace.

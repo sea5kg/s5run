@@ -215,6 +215,11 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
     s.golang.package_ = o.value("package", "");
     s.golang.output_dir = o.value("output-dir", "");
   }
+  if (j.contains("options") && j["options"].contains("py")) {
+    const auto &o = j["options"]["py"];
+    s.py.module_ = o.value("module", "");
+    s.py.output_dir = o.value("output-dir", "");
+  }
   if (j.contains("functions")) {
     for (const auto &fj : j["functions"]) {
       schema_function fn;

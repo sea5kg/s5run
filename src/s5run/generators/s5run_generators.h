@@ -56,6 +56,7 @@ public:
 std::shared_ptr<IGenerator> make_generator_cpp98();
 std::shared_ptr<IGenerator> make_generator_cpp11();
 std::shared_ptr<IGenerator> make_generator_golang();
+std::shared_ptr<IGenerator> make_generator_python();
 
 std::map<std::string, std::shared_ptr<IGenerator>> all();
 

@@ -98,7 +98,6 @@ def print_usage() -> None:
         "  java21  generate only the Java 21 client\n"
         "  java17  generate only the Java 17 client\n"
         "  java11  generate only the Java 11 client\n"
-        "  py      generate only the Python client\n"
         "  help    show this help"
     )
 
@@ -141,16 +140,12 @@ def main(argv=None) -> int:
 
     if command == "all":
         gen.generate_all()
-    elif command == "cpp11":
-        gen.generate_cpp11()
     elif command == "java21":
         gen.generate_java21()
     elif command == "java17":
         gen.generate_java17()
     elif command == "java11":
         gen.generate_java11()
-    elif command == "py":
-        gen.generate_py()
     else:
         print(f"error: unknown command: {command}", file=sys.stderr)
         print_usage()
