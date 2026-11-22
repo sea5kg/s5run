@@ -40,7 +40,6 @@ Helper tool for smoke tests
 """
 
 import os
-import sys
 import shutil
 
 from .pm_config import FolderSwitcher

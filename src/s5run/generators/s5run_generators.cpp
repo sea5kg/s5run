@@ -41,8 +41,9 @@ namespace generators {
 
 std::map<std::string, std::shared_ptr<IGenerator>> all() {
     std::map<std::string, std::shared_ptr<IGenerator>> ret;
-    ret["cpp98"] = make_cpp98_generator();
-    ret["cpp11"] = make_cpp11_generator();
+    ret["cpp98"] = make_generator_cpp98();
+    ret["cpp11"] = make_generator_cpp11();
+    ret["go"] = make_generator_golang();
     return ret;
 };
 

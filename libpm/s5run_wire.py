@@ -410,6 +410,7 @@ def send_callback_result(sock, cid, value):
 
 
 def send_callback_error(sock, cid, error):
+    """ send_callback_error """
     w = Writer()
     w.i32(cid)
     w.u8(0)

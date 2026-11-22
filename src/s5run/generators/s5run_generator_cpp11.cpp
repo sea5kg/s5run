@@ -44,7 +44,7 @@
 namespace s5run {
 namespace generators {
 
-class cpp11_generator : public IGenerator {
+class generator_cpp11 : public IGenerator {
 public:
   std::vector<std::string> generate(const schema &s,
                                      const std::string &output_dir) override;
@@ -1087,7 +1087,7 @@ static void emit_encode_result(std::string &out, const std::string &ret) {
 // Header generation
 // -----------------------------------------------------------------------
 
-std::string cpp11_generator::generate_header(const schema &s) const {
+std::string generator_cpp11::generate_header(const schema &s) const {
   const std::string &ns = s.cpp11.namespace_;
   std::string out;
 
@@ -1151,7 +1151,7 @@ std::string cpp11_generator::generate_header(const schema &s) const {
 // Implementation generation (full port from Python)
 // -----------------------------------------------------------------------
 
-std::string cpp11_generator::generate_impl(const schema &s) const {
+std::string generator_cpp11::generate_impl(const schema &s) const {
   const std::string &ns = s.cpp11.namespace_;
   std::string out;
 
@@ -1375,7 +1375,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
   return out;
 }
 
-std::vector<std::string> cpp11_generator::generate(const schema &s,
+std::vector<std::string> generator_cpp11::generate(const schema &s,
                                                     const std::string &output_dir) {
   const std::string &ns = s.cpp11.namespace_;
   std::vector<std::string> written;
@@ -1392,8 +1392,8 @@ std::vector<std::string> cpp11_generator::generate(const schema &s,
   return written;
 }
 
-std::shared_ptr<IGenerator> make_cpp11_generator() {
-  return std::make_shared<cpp11_generator>();
+std::shared_ptr<IGenerator> make_generator_cpp11() {
+  return std::make_shared<generator_cpp11>();
 }
 
 } // namespace generators

@@ -70,16 +70,22 @@ struct schema_class {
   std::vector<schema_method> methods;
 };
 
-struct schema_options {
+struct schema_cpp_options {
   std::string namespace_;
   std::string output_dir;
   std::string prefix_filename; // optional, prepended to generated file names
 };
 
+struct schema_go_options {
+  std::string package_;
+  std::string output_dir;
+};
+
 struct schema {
   std::string client_version = "0.0.0";
-  schema_options cpp98;
-  schema_options cpp11;
+  schema_cpp_options cpp98;
+  schema_cpp_options cpp11;
+  schema_go_options golang;
   std::vector<schema_function> functions;
   std::vector<schema_class> classes;
 };

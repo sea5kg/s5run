@@ -210,6 +210,11 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
       return false;
     }
   }
+  if (j.contains("options") && j["options"].contains("go")) {
+    const auto &o = j["options"]["go"];
+    s.golang.package_ = o.value("package", "");
+    s.golang.output_dir = o.value("output-dir", "");
+  }
   if (j.contains("functions")) {
     for (const auto &fj : j["functions"]) {
       schema_function fn;

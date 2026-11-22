@@ -53,8 +53,9 @@ public:
   virtual std::vector<std::string> generate(const schema &s, const std::string &output_dir) = 0;
 };
 
-std::shared_ptr<IGenerator> make_cpp98_generator();
-std::shared_ptr<IGenerator> make_cpp11_generator();
+std::shared_ptr<IGenerator> make_generator_cpp98();
+std::shared_ptr<IGenerator> make_generator_cpp11();
+std::shared_ptr<IGenerator> make_generator_golang();
 
 std::map<std::string, std::shared_ptr<IGenerator>> all();
 

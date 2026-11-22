@@ -42,7 +42,6 @@ Generator
 import os
 
 from .s5run_schema import S5RunCliSchema
-from . import s5run_go_generator
 from . import s5run_java21_generator
 from . import s5run_java17_generator
 from . import s5run_py_generator
@@ -102,11 +101,6 @@ class S5RunCliGenerator:
         finally:
             s.java11_output_dir, s.java11_package = orig_dir, orig_pkg
 
-    def generate_go(self) -> None:
-        s = self.schema
-        if not s.go_output_dir:
-            return
-        s5run_go_generator.generate(s, s.go_output_dir)
 
     def generate_all(self) -> None:
         self.generate_cpp11()
@@ -114,7 +108,6 @@ class S5RunCliGenerator:
         self.generate_java21()
         self.generate_java17()
         self.generate_java11()
-        self.generate_go()
 
     def report(self, what: str = "all") -> str:
         s = self.schema
@@ -131,6 +124,4 @@ class S5RunCliGenerator:
             lines.append(f"j17  -> {s.java17_output_dir}{s.java17_package.replace('.', '/')}/")
         if what in ("all", "java11") and s.java11_output_dir:
             lines.append(f"j11  -> {s.java11_output_dir}{s.java11_package.replace('.', '/')}/")
-        if what in ("all", "go") and s.go_output_dir:
-            lines.append(f"go   -> {s.go_output_dir} (package {s.go_package})")
         return "\n".join(lines)

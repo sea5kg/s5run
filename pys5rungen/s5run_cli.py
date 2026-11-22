@@ -99,7 +99,6 @@ def print_usage() -> None:
         "  java17  generate only the Java 17 client\n"
         "  java11  generate only the Java 11 client\n"
         "  py      generate only the Python client\n"
-        "  go      generate only the Go client\n"
         "  help    show this help"
     )
 
@@ -152,8 +151,6 @@ def main(argv=None) -> int:
         gen.generate_java11()
     elif command == "py":
         gen.generate_py()
-    elif command == "go":
-        gen.generate_go()
     else:
         print(f"error: unknown command: {command}", file=sys.stderr)
         print_usage()

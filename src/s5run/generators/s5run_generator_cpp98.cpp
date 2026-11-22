@@ -46,7 +46,7 @@
 namespace s5run {
 namespace generators {
 
-class cpp98_generator : public IGenerator {
+class generator_cpp98 : public IGenerator {
 public:
   std::vector<std::string> generate(const schema &s,
                                      const std::string &output_dir) override;
@@ -378,7 +378,7 @@ static std::string include_guard(const std::string &ns) {
   return out + "_H";
 }
 
-std::string cpp98_generator::generate_header(const schema &s) const {
+std::string generator_cpp98::generate_header(const schema &s) const {
   const std::string &ns = s.cpp98.namespace_;
   std::string out;
 
@@ -659,7 +659,7 @@ static std::string gen_m_callback(const schema_class &c, const schema_method &m)
   return out;
 }
 
-std::string cpp98_generator::generate_impl(const schema &s) const {
+std::string generator_cpp98::generate_impl(const schema &s) const {
   const std::string &ns = s.cpp98.namespace_;
   std::string out;
 
@@ -1225,7 +1225,7 @@ run_result context::context_impl::run(const std::string &entry,
   return out;
 }
 
-std::vector<std::string> cpp98_generator::generate(const schema &s,
+std::vector<std::string> generator_cpp98::generate(const schema &s,
                                                    const std::string &output_dir) {
   const std::string &ns = s.cpp98.namespace_;
   std::vector<std::string> written;
@@ -1242,8 +1242,8 @@ std::vector<std::string> cpp98_generator::generate(const schema &s,
   return written;
 }
 
-std::shared_ptr<IGenerator> make_cpp98_generator() {
-  return std::make_shared<cpp98_generator>();
+std::shared_ptr<IGenerator> make_generator_cpp98() {
+  return std::make_shared<generator_cpp98>();
 }
 
 } // namespace generators

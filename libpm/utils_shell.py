@@ -41,6 +41,28 @@ import os
 import sys
 import subprocess
 
+class UtilsShellOutput:
+    """ helper UtilsShellOutput """
+    def __init__(self, _log=None):
+        self.__log = _log
+        self.__collect_output = []
+
+    def debug(self, _msg):
+        """ debug """
+        self.__collect_output += [_msg]
+        if self.__log is not None:
+            self.__log.debug(_msg)
+
+    def error(self, _msg):
+        """ error """
+        print(_msg)
+        self.__collect_output += [_msg]
+        if self.__log is not None:
+            self.__log.error(_msg)
+
+    def get_output(self):
+        """ return output """
+        return "\n".join(self.__collect_output)
 
 class UtilsShell:
     """ UtilsShell """
@@ -48,11 +70,8 @@ class UtilsShell:
     @staticmethod
     def run_command(_command, _log=None, exit_on_error=True, print_output_on_exit=False):
         """ run_command """
-        _collect_output = []
-        _msg = "Run command: " + " ".join(_command) + "\n"
-        _collect_output += [_msg]
-        if _log is not None:
-            _log.debug(_msg)
+        output = UtilsShellOutput(_log)
+        output.debug("Run command: " + " ".join(_command))
         with subprocess.Popen(
             _command,
             stdout=subprocess.PIPE,
@@ -64,36 +83,27 @@ class UtilsShell:
                 _returncode = _proc.poll()
                 _line = _proc.stdout.readline()
                 if _line:
-                    _line = _line.decode("utf-8").strip()
-                    _collect_output += [_line]
-                    if _log is not None:
-                        _log.debug(_line)
+                    _line = _line.decode("utf-8").rstrip()
+                    output.debug(_line)
             while _line:
                 _line = _proc.stdout.readline()
                 if _line:
-                    _line = _line.decode("utf-8").strip()
-                    _collect_output += [_line]
-                    if _log is not None:
-                        _log.debug(_line + "\n")
+                    _line = _line.decode("utf-8").rstrip()
+                    output.debug(_line)
                 else:
                     break
             if _returncode != 0:
-                print("ERROR: returncode " + str(_returncode))
                 _msg = "ERROR: returncode " + str(_returncode) + "\n"
-                _collect_output += [_msg]
-                if _log is not None:
-                    _log.error(_msg)
+                output.error(_msg)
                 if exit_on_error:
                     if print_output_on_exit:
-                        print("\n".join(_collect_output))
+                        print(output.get_output())
                     sys.exit(_returncode)
             return _returncode
-        _msg = "ERROR: Could not start process"
-        _collect_output += [_msg]
-        _log.error(_msg)
+        output.error("ERROR: Could not start process")
         if exit_on_error:
             if print_output_on_exit:
-                print("\n".join(_collect_output))
+                print(output.get_output())
             sys.exit(-1)
         return -1
 
