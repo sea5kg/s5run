@@ -367,13 +367,26 @@ i32 read_ref(Reader &r) {
 // Header generation
 // -----------------------------------------------------------------------
 
+static std::string include_guard(const std::string &ns) {
+  std::string out;
+  for (size_t i = 0; i < ns.size(); ++i) {
+    char c = ns[i];
+    if (c >= 'a' && c <= 'z')
+      c = static_cast<char>(c - 'a' + 'A');
+    out += c;
+  }
+  return out + "_H";
+}
+
 std::string cpp98_generator::generate_header(const schema &s) const {
   const std::string &ns = s.cpp98.namespace_;
   std::string out;
 
   out += "// AUTO-GENERATED. DO NOT EDIT.\n";
   out += "// C++98 legacy client, portable across Windows (WinSock2) and Linux.\n";
-  out += "#pragma once\n\n#include <map>\n#include <string>\n#include <vector>\n\n";
+  std::string guard = include_guard(ns);
+  out += "#ifndef " + guard + "\n#define " + guard + "\n\n";
+  out += "#include <map>\n#include <string>\n#include <vector>\n\n";
   out += "namespace " + ns + " {\n\n";
   out += "typedef unsigned char u8;\ntypedef unsigned short u16;\ntypedef unsigned int u32;\n";
   out += "#ifdef _MSC_VER\ntypedef __int64 i64;\ntypedef unsigned __int64 u64;\n#else\n";
@@ -475,7 +488,8 @@ std::string cpp98_generator::generate_header(const schema &s) const {
 
   out += "run_result run_script(context *ctx, const std::string &entry, ";
   out += "const std::vector<value> &args = std::vector<value>());\n\n";
-  out += "} // namespace " + ns + "\n";
+  out += "} // namespace " + ns + "\n\n";
+  out += "#endif // " + guard + "\n";
   return out;
 }
 
