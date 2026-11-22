@@ -3,12 +3,13 @@
  *            ░░░░░░░
  *           ░██▓▓▓▓▒
  *  ░▓▓▓▓▓▓░ ░█▓░░░    ▓▓▒▓█ ▒█▒   ██░ ░▓▓▒▓██▓
- *  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒█▓   ▓█▒
+ *  ▒█▓░░░░░ ▒██▓▓▓█▓  ██▓   ▓█▓   ██░ ▒██░  ▓█▒
  *   ░▒▓▓██▒       ██▒ ██░   ▓█▓   ██░ ▒█▓   ▓█▒
  *  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
- *  ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ▒▒░
+ *   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
  *
  * MIT License
+ *
  * Copyright (c) 2026 Evgenii Sopov
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -41,9 +42,9 @@
 #include <thread>
 #include <vector>
 
-#include "server/s5run_server.h"
-#include "generators/s5run_generators.h"
 #include "client/s5run_client.h"
+#include "generators/s5run_generators.h"
+#include "server/s5run_server.h"
 
 static std::string g_bin = "s5run";
 
@@ -74,7 +75,8 @@ static void print_usage() {
     "  help       Show this help\n"
     "\n"
     "Run '%s help <command>' for command details.\n",
-    g_bin.c_str(), g_bin.c_str()
+    g_bin.c_str(),
+    g_bin.c_str()
   );
 }
 
@@ -109,7 +111,9 @@ static void print_generate_usage() {
     "  --output-dir DIR where to write generated files\n"
     "  --schema FILE    schema file (default s5run-client.json)\n"
     "  --list           list available generators\n",
-    g_bin.c_str(), g_bin.c_str(), g_bin.c_str()
+    g_bin.c_str(),
+    g_bin.c_str(),
+    g_bin.c_str()
   );
 }
 
@@ -126,7 +130,8 @@ static void print_run_usage() {
     "  --provider SPEC   remote context provider: \"host:port,name1,name2\"\n"
     "  --api-key KEY     api key for authentication (stub)\n"
     "  args...           arguments passed to the script entry point\n",
-    g_bin.c_str(), g_bin.c_str()
+    g_bin.c_str(),
+    g_bin.c_str()
   );
 }
 
@@ -220,7 +225,12 @@ static int cmd_generate(int argc, char **argv) {
     return 1;
   }
 
-  auto schema = s5run::generators::load_schema(schema_file);
+  s5run::generators::schema schema;
+  std::string schema_error;
+  if (!s5run::generators::load_schema_from_file(schema_file, schema, schema_error)) {
+    std::fprintf(stderr, "schema: %s\n", schema_error.c_str());
+    return 1;
+  }
   auto all_generators = s5run::generators::all();
 
   if (all_generators.count(language) == 0) {

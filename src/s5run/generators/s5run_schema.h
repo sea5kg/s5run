@@ -83,8 +83,11 @@ struct schema {
   std::vector<schema_class> classes;
 };
 
-// Parses s5run-client.json; exits with an error message on invalid schema.
-schema load_schema(const std::string &filepath);
+// Parses a schema from a JSON string; returns false and fills `error` on failure.
+bool load_schema(const std::string &json_data, schema &out, std::string &error);
+
+// Parses a schema from a JSON file; returns false and fills `error` on failure.
+bool load_schema_from_file(const std::string &filepath, schema &out, std::string &error);
 
 } // namespace generators
 } // namespace s5run
