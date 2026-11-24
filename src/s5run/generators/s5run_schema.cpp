@@ -55,6 +55,12 @@ static bool is_scalar_type(const std::string &t) {
          t == "double" || t == "string" || t == "byte";
 }
 
+// 'var' - dynamic type: the client's generic value type, the developer
+// decides the conversion (JavaScript can hold any type in a variable).
+static bool is_dynamic_type(const std::string &t) {
+  return t == "var";
+}
+
 // Validates a type usage; ref types must be declared in classes.
 static bool validate_type(const std::string &t, bool allow_void,
                           const std::set<std::string> &classes,
@@ -70,7 +76,7 @@ static bool validate_type(const std::string &t, bool allow_void,
     }
     return true;
   }
-  if (is_scalar_type(t))
+  if (is_scalar_type(t) || is_dynamic_type(t))
     return true;
   if (t.substr(0, 6) == "array<") {
     if (t.size() < 7 || t[t.size() - 1] != '>') {
@@ -112,7 +118,8 @@ static bool validate_arguments(const std::vector<schema_argument> &args,
 static bool validate_schema(const schema &s, std::string &error) {
   std::set<std::string> classes;
   for (const auto &c : s.classes) {
-    if (is_scalar_type(c.name) || c.name == "void" || c.name.substr(0, 6) == "array<") {
+    if (is_scalar_type(c.name) || is_dynamic_type(c.name) || c.name == "void" ||
+        c.name.substr(0, 6) == "array<") {
       error = "class name '" + c.name + "' conflicts with a builtin type";
       return false;
     }
