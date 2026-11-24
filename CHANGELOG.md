@@ -12,6 +12,7 @@
 - Renamed s5run-client.json -> s5run-schema.json
 - Added './s5run generate client ..'
 - Added './s5run run host:port script.js'
+- Updated build env installed golang compiler and java sdk
 
 ## [v0.1.0] - (2026 Nov 20)
 
