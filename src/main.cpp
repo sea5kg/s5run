@@ -224,11 +224,10 @@ void s5run_parse_args::print_run_usage() const {
   std::cout << m_bin << " run - run a script against a server" << std::endl;
   std::cout << "" << std::endl;
   std::cout << "Usage:" << std::endl;
-  std::cout << "  " << m_bin << " run <host:port> [FILE] [--provider SPEC] [--api-key KEY] [args...]" << std::endl;
-  std::cout << "  cat script.js | " << m_bin << " run <host:port> [args...]" << std::endl;
+  std::cout << "  " << m_bin << " run <host:port> [--provider SPEC] [--api-key KEY] [FILE] [args...]" << std::endl;
   std::cout << "" << std::endl;
   std::cout << "Options:" << std::endl;
-  std::cout << "  FILE              script file to execute (default: stdin)" << std::endl;
+  std::cout << "  FILE              script file to execute" << std::endl;
   std::cout << "  --provider SPEC   remote context provider: \"host:port,name1,name2\"" << std::endl;
   std::cout << "  --api-key KEY     api key for authentication (stub)" << std::endl;
   std::cout << "  args...           arguments passed to the script entry point" << std::endl;
@@ -410,15 +409,15 @@ int s5run_parse_args::cmd_run() {
 
   for (size_t i = 1; i < m_arguments.size(); ++i) {
     const std::string &arg = m_arguments[i];
-    if (arg == "--script" && i + 1 < m_arguments.size()) {
-      script_file = m_arguments[++i];
-    } else if (arg == "--provider" && i + 1 < m_arguments.size()) {
+    if (arg == "--provider" && i + 1 < m_arguments.size()) {
       providers.push_back(m_arguments[++i]);
     } else if (arg == "--api-key" && i + 1 < m_arguments.size()) {
       api_key = m_arguments[++i];
     } else if (arg == "--help" || arg == "-h") {
       print_run_usage();
       return 0;
+    } else if (script_file.empty()) {
+      script_file = arg;
     } else {
       script_args.push_back(s5run::variable::parse_script_arg(arg));
     }
@@ -428,7 +427,7 @@ int s5run_parse_args::cmd_run() {
     std::cerr << "run: --api-key is a stub, not implemented yet" << std::endl;
   }
 
-  // Read script from file or stdin
+  // Read script from file
   std::string script;
   if (!script_file.empty()) {
     FILE *f = std::fopen(script_file.c_str(), "rb");
@@ -440,10 +439,6 @@ int s5run_parse_args::cmd_run() {
     while (size_t n = std::fread(buf, 1, sizeof(buf), f))
       script.append(buf, n);
     std::fclose(f);
-  } else {
-    char buf[4096];
-    while (size_t n = std::fread(buf, 1, sizeof(buf), stdin))
-      script.append(buf, n);
   }
 
   if (script.empty()) {
@@ -487,7 +482,6 @@ int s5run_parse_args::cmd_run() {
     return 1;
   }
 
-  
   std::cout << s5run::value_to_display_string(result.value) << std::endl;
   std::cout << "  duration: " << result.duration_ms << "ms" << std::endl;
   return 0;

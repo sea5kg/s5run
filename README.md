@@ -102,19 +102,17 @@ $ ./s5run help run
 s5run run - run a script against a server
 
 Usage:
-  ./s5run run <host:port> [--script FILE] [--provider SPEC] [--api-key KEY] [args...]
-  cat script.js | ./s5run run <host:port> [args...]
+  ./s5run run <host:port> [--provider SPEC] [--api-key KEY] [FILE] [args...]
 
 Options:
-  --script FILE     script file to execute (default: stdin)
   --provider SPEC   remote context provider: "host:port,name1,name2"
   --api-key KEY     api key for authentication (stub)
+  FILE              script file to execute (default: stdin)
   args...           arguments passed to the script entry point
 ```
 
 Usage examples:
-- `./s5run run localhost:7777 --script ./tests/test_run_script.js 21 21` - Run script file
-- `cat script.js | ./s5run run localhost:7777 [args...]` - Run script from stdin
+- `./s5run run localhost:7777 ./tests/test_run_script.js 21 21` - Run script file
 - The built-in `console` object (log/warning/error) is registered automatically and served client-side
 
 ## Generation client code library (context-provider)
