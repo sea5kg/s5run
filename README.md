@@ -336,13 +336,13 @@ $ ./pm.py rebuild-environment-images --build
 
 Build image:
 ```sh
-$ docker build --rm=true -t "sea5kg/s5run:v0.1.0" .
+$ docker build --rm=true -t "sea5kg/s5run:v0.2.0" .
 ```
 
 Easy test run:
 
 ```sh
-$ docker run --rm -p 7777:7777 sea5kg/s5run:v0.1.0
+$ docker run --rm -p 7777:7777 sea5kg/s5run:v0.2.0
 ```
 
 ## Example run server

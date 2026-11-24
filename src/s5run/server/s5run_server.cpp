@@ -145,7 +145,7 @@ void client_handler::handle() {
 
   // Greet the client: "s5run <server-version> <protocol-version>"
   {
-    std::string hello = std::string("s5run ") + S5RUN_SERVER_VERSION + " "
+    std::string hello = std::string("s5run ") + WSJCPP_APP_VERSION + " "
                         + std::to_string(S5RUN_PROTOCOL_VERSION);
     s5run::write_message(m_fd, protocol_msg_type::M_SERVER_HELLO,
                          std::vector<uint8_t>(hello.begin(), hello.end()));

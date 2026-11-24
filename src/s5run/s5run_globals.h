@@ -40,7 +40,6 @@
 
 namespace s5run {
 
-constexpr const char *S5RUN_SERVER_VERSION = "v0.1.0";
 constexpr int S5RUN_PROTOCOL_VERSION = 2;
 
 enum protocol_msg_type : uint8_t {

@@ -1,5 +1,5 @@
 name: "s5run"
-version: "v0.1.0"
+version: "v0.2.0"
 cmake_minimum_required: "3.20"
 cmake_cxx_standard: "20"
 description: "Remote script execution on another server (JavaScript). Using a special context sharing protocol."

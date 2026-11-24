@@ -206,7 +206,7 @@ void channel::read_hello() {
 }
 
 void channel::write_hello() {
-  std::string hello = std::string("s5run ") + S5RUN_SERVER_VERSION + " "
+  std::string hello = std::string("s5run ") + WSJCPP_APP_VERSION + " "
                       + std::to_string(S5RUN_PROTOCOL_VERSION);
   std::vector<uint8_t> body(hello.begin(), hello.end());
   s5run::write_message(m_fd, s5run::M_SERVER_HELLO, body);
