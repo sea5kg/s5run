@@ -4,33 +4,30 @@
 #include "d1_s5run_cli_cpp98.h"
 
 #include <cstdio>
+#include <fstream>
 #include <cstdlib>
 #include <stdexcept>
 #include <cstring>
 #include <string>
 #include <vector>
 
-static const char *kScript =
-    "function main(path) {\n"
-    "    var f = GetFile(path);\n"
-    "    var t = GetTimeNow();\n"
-    "    console.log(\"hello\", path, 1, 2);\n"
-    "    var sizeByRef = GetFileSize(f);\n"
-    "    var opened = GetOpenedFiles();\n"
-    "    var openedSum = 0;\n"
-    "    for (var i = 0; i < opened.length; ++i)\n"
-    "        openedSum += opened[i].GetSize();\n"
-    "    CloseFiles(opened);\n"
-    "    var fileList = FileSystem.GetList(path);\n"
-    "    return {\n"
-    "        size: f.GetSize(),\n"
-    "        sizeByRef: sizeByRef,\n"
-    "        openedCount: opened.length,\n"
-    "        openedSum: openedSum,\n"
-    "        fileListCount: fileList.length,\n"
-    "        time: t\n"
-    "    };\n"
-    "}\n";
+static std::string load_base_script() {
+    const char *paths[] = {"tests/base_cli_test_script.js", "../base_cli_test_script.js"};
+    for (int i = 0; i < 2; ++i) {
+        std::ifstream f(paths[i]);
+        if (f.is_open()) {
+            std::string content;
+            char buf[4096];
+            while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
+                content.append(buf, (std::size_t)f.gcount());
+            }
+            return content;
+        }
+    }
+    throw std::runtime_error("cannot find tests/base_cli_test_script.js");
+}
+
+static std::string kScript = load_base_script();
 
 class MyFile : public s5run_cli_cpp98::base_context_class_File {
 public:

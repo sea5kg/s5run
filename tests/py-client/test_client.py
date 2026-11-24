@@ -11,30 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import libs5run_cli_example as m
 
-K_SCRIPT = """
-function main(path) {
-    var f = GetFile(path);
-    var t = GetTimeNow();
-    var b = f.ReadBytes(3);
-    console.log("hello", path, 1, 2);
-    var sizeByRef = GetFileSize(f);
-    var opened = GetOpenedFiles();
-    var openedSum = 0;
-    for (var i = 0; i < opened.length; ++i)
-        openedSum += opened[i].GetSize();
-    CloseFiles(opened);
-    var fileList = FileSystem.GetList(path);
-    return {
-        size: f.GetSize(),
-        sizeByRef: sizeByRef,
-        openedCount: opened.length,
-        openedSum: openedSum,
-        fileListCount: fileList.length,
-        time: t,
-        bytes: b.length
-    };
-}
-"""
+K_SCRIPT = (Path(__file__).resolve().parent.parent / "base_cli_test_script.js").read_text()
 
 
 class MyFile(m.File):

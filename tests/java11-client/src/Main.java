@@ -126,30 +126,20 @@ public class Main {
         }
     }
 
-    static final String K_SCRIPT =
-            ""
-            + "function main(path) {\n"
-            + "                var f = GetFile(path);\n"
-            + "                var t = GetTimeNow();\n"
-            + "                var b = f.ReadBytes(3);\n"
-            + "                console.log(\"hello\", path, 1, 2);\n"
-            + "                var sizeByRef = GetFileSize(f);\n"
-            + "                var opened = GetOpenedFiles();\n"
-            + "                var openedSum = 0;\n"
-            + "                for (var i = 0; i < opened.length; ++i)\n"
-            + "                    openedSum += opened[i].GetSize();\n"
-            + "                CloseFiles(opened);\n"
-            + "                var fileList = FileSystem.GetList(path);\n"
-            + "                return {\n"
-            + "                    size: f.GetSize(),\n"
-            + "                    sizeByRef: sizeByRef,\n"
-            + "                    openedCount: opened.length,\n"
-            + "                    openedSum: openedSum,\n"
-            + "                    fileListCount: fileList.length,\n"
-            + "                    time: t,\n"
-            + "                    bytes: b.length\n"
-            + "                };\n"
-            + "            }\n";;
+    static final String K_SCRIPT = loadBaseScript();
+
+    private static String loadBaseScript() {
+        String[] paths = {"tests/base_cli_test_script.js", "../base_cli_test_script.js"};
+        for (String p : paths) {
+            try {
+                return new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(p)),
+                        java.nio.charset.StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                // try the next path
+            }
+        }
+        throw new RuntimeException("cannot find tests/base_cli_test_script.js");
+    }
 
     static String address;
 

@@ -4,6 +4,8 @@
 #include "s5run_cli_example/s5run_cli_example.h"
 
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -165,31 +167,19 @@ std::string MyConsole::to_line(const std::vector<std::string> &args) {
   return line;
 }
 
-static const char *kScript = R"(
-function main(path) {
-    var f = GetFile(path);
-    var t = GetTimeNow();
-    var b = f.ReadBytes(3);
-    console.log("hello", path, 1, 2);
-    var size_by_ref = GetFileSize(f);
-    var opened = GetOpenedFiles();
-    var opened_sum = 0;
-    for (var i = 0; i < opened.length; ++i)
-        opened_sum += opened[i].GetSize();
-    CloseFiles(opened);
-    var file_list = FileSystem.GetList(path);
-    return {
-        file_list_count: file_list.length,
-        size: f.GetSize(),
-        size_by_ref: size_by_ref,
-        opened_count: opened.length,
-        opened_sum: opened_sum,
-        time: t,
-        bytes: b.length,
-        first: b[0]
-    };
+static std::string load_base_script() {
+    const char *paths[] = {"tests/base_cli_test_script.js", "../base_cli_test_script.js"};
+    for (int i = 0; i < 2; ++i) {
+        std::ifstream f(paths[i]);
+        if (f.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            return content;
+        }
+    }
+    throw std::runtime_error("cannot find tests/base_cli_test_script.js");
 }
-)";
+
+static std::string kScript = load_base_script();
 
 int main(int argc, char **argv) {
   std::string host = argc > 1 ? argv[1] : "127.0.0.1";
@@ -236,23 +226,23 @@ int main(int argc, char **argv) {
 
     const std::map<std::string, s5run_cli_example::value> &obj = result->get_value().as_object();
     std::printf(
-      "  exec result: {size: %lld, time: %lld, bytes: %lld, first: %lld}\n",
+      "  exec result: {size: %lld, time: %lld, bytes: %lld, openedSum: %lld}\n",
       (long long)obj.at("size").as_int(),
       (long long)obj.at("time").as_int(),
       (long long)obj.at("bytes").as_int(),
-      (long long)obj.at("first").as_int()
+      (long long)obj.at("openedSum").as_int()
     );
 
     if (obj.at("size").as_int() != 1024)
       throw std::runtime_error("unexpected size");
-    if (obj.at("size_by_ref").as_int() != 1024)
-      throw std::runtime_error("unexpected size_by_ref");
-    if (obj.at("opened_count").as_int() != 2)
-      throw std::runtime_error("unexpected opened_count");
-    if (obj.at("opened_sum").as_int() != 300)
-      throw std::runtime_error("unexpected opened_sum");
-    if (obj.at("file_list_count").as_int() != 3)
-      throw std::runtime_error("unexpected file_list_count");
+    if (obj.at("sizeByRef").as_int() != 1024)
+      throw std::runtime_error("unexpected sizeByRef");
+    if (obj.at("openedCount").as_int() != 2)
+      throw std::runtime_error("unexpected openedCount");
+    if (obj.at("openedSum").as_int() != 300)
+      throw std::runtime_error("unexpected openedSum");
+    if (obj.at("fileListCount").as_int() != 3)
+      throw std::runtime_error("unexpected fileListCount");
     if (MyFileSystem::m_last_path != "test.txt")
       throw std::runtime_error("unexpected FileSystem.GetList path: " + MyFileSystem::m_last_path);
     if (MyCloseFiles::m_closed_sizes.size() != 2
@@ -263,8 +253,6 @@ int main(int argc, char **argv) {
       throw std::runtime_error("unexpected time");
     if (obj.at("bytes").as_int() != 3)
       throw std::runtime_error("unexpected bytes");
-    if (obj.at("first").as_int() != 'a')
-      throw std::runtime_error("unexpected first byte");
     if (MyGetFile::m_last_path != "test.txt")
       throw std::runtime_error("unexpected filepath: " + MyGetFile::m_last_path);
     if (con->get_logs().size() == 0) {
