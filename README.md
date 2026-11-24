@@ -1,6 +1,6 @@
 # s5run
 
-[![s5run Version](https://img.shields.io/badge/s5run-v0.2.0-yellow.svg)](https://github.com/sea5kg/s5run) [![s5run ProgrammingLanguage](https://img.shields.io/badge/ProgrammingLanguage-c++-yellow.svg)](https://github.com/sea5kg/s5run) [![Docker Pulls](https://img.shields.io/docker/pulls/sea5kg/s5run.svg)](https://hub.docker.com/r/sea5kg/s5run/) [![Github Stars](https://img.shields.io/github/stars/sea5kg/s5run.svg?label=github%20%E2%98%85)](https://github.com/sea5kg/s5run/) [![Github Stars](https://img.shields.io/github/contributors/sea5kg/s5run.svg)](https://github.com/sea5kg/s5run/) [![Github Forks](https://img.shields.io/github/forks/sea5kg/s5run.svg?label=github%20forks)](https://github.com/sea5kg/s5run/)
+[![s5run Version](https://img.shields.io/badge/s5run-v0.3.0-yellow.svg)](https://github.com/sea5kg/s5run) [![s5run ProgrammingLanguage](https://img.shields.io/badge/ProgrammingLanguage-c++-yellow.svg)](https://github.com/sea5kg/s5run) [![Docker Pulls](https://img.shields.io/docker/pulls/sea5kg/s5run.svg)](https://hub.docker.com/r/sea5kg/s5run/) [![Github Stars](https://img.shields.io/github/stars/sea5kg/s5run.svg?label=github%20%E2%98%85)](https://github.com/sea5kg/s5run/) [![Github Stars](https://img.shields.io/github/contributors/sea5kg/s5run.svg)](https://github.com/sea5kg/s5run/) [![Github Forks](https://img.shields.io/github/forks/sea5kg/s5run.svg?label=github%20forks)](https://github.com/sea5kg/s5run/)
 
 
 Look's like: *Reversible RPC (bidirectional streaming/callback bridge) over a single connection.*
@@ -34,7 +34,7 @@ $ ./s5run help
  ▒▓▒░░▒█▓ ▒█▓▒▒▓█▓  ██░   ▒██▒░▒██░ ▒█▓   ▓█▒
   ░▒▒▒▒░   ░▒▒▒▒░   ▒▒░    ░▒▒▒ ▒▒░ ░▒▒   ░▒░
 
-s5run v0.2.0 - remote script execution server
+s5run v0.3.0 - remote script execution server
 
 Usage:
   ./s5run <command> [options]
@@ -116,8 +116,6 @@ Usage examples:
 - `./s5run run localhost:7777 --script ./tests/test_run_script.js 21 21` - Run script file
 - `cat script.js | ./s5run run localhost:7777 [args...]` - Run script from stdin
 - The built-in `console` object (log/warning/error) is registered automatically and served client-side
-
-
 
 ## Generation client code library (context-provider)
 
@@ -407,13 +405,13 @@ $ ./pm.py rebuild-environment-images --build
 
 Build image:
 ```sh
-$ docker build --rm=true -t "sea5kg/s5run:v0.2.0" .
+$ docker build --rm=true -t "sea5kg/s5run:v0.3.0" .
 ```
 
 Easy test run:
 
 ```sh
-$ docker run --rm -p 7777:7777 sea5kg/s5run:v0.2.0
+$ docker run --rm -p 7777:7777 sea5kg/s5run:v0.3.0
 ```
 
 ## Example run server

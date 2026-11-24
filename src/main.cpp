@@ -61,23 +61,19 @@ static void print_banner() {
 }
 
 static void print_usage() {
-  std::printf(
-    "s5run v0.2.0 - remote script execution server\n"
-    "\n"
-    "Usage:\n"
-    "  %s <command> [options]\n"
-    "\n"
-    "Commands:\n"
-    "  server     Start the script server\n"
-    "  generate   Generate client or provider code\n"
-    "  run        Run a script against a server\n"
-    "  version    Print version\n"
-    "  help       Show this help\n"
-    "\n"
-    "Run '%s help <command>' for command details.\n",
-    g_bin.c_str(),
-    g_bin.c_str()
-  );
+  std::cout << "s5run " << WSJCPP_APP_VERSION << " - remote script execution server" << std::endl;
+  std::cout << "\n" << std::endl;
+  std::cout << "Usage:\n" << std::endl;
+  std::cout << "  " << g_bin << " <command> [options]\n" << std::endl;
+  std::cout << "\n" << std::endl;
+  std::cout << "Commands:\n" << std::endl;
+  std::cout << "  server     Start the script server\n" << std::endl;
+  std::cout << "  generate   Generate client or provider code\n" << std::endl;
+  std::cout << "  run        Run a script against a server\n" << std::endl;
+  std::cout << "  version    Print version\n" << std::endl;
+  std::cout << "  help       Show this help\n" << std::endl;
+  std::cout << "\n" << std::endl;
+  std::cout << "Run '" << g_bin << " help <command>' for command details." << std::endl;
 }
 
 static void print_server_usage() {

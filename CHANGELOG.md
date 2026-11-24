@@ -1,6 +1,12 @@
 
 # Changelog
 
+## [v0.3.0] - (2026 ?? ??)
+
+- added wsjcpp-employees:v0.2.2 for a server
+- added sea5kg-logger:v2.0.1 for a server
+
+
 ## [v0.2.0] - (2026 Nov 24)
 
 - Added wsjcpp package manager
