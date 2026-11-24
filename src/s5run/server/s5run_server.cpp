@@ -44,6 +44,7 @@
 #include "s5run_value_wire.h"
 
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -54,6 +55,7 @@
 #include <thread>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -435,8 +437,19 @@ int server::run(const std::string &listen_address, int threads) {
   addr.sin_family = AF_INET;
   addr.sin_port = htons(listen_port);
   if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
-    std::fprintf(stderr, "invalid listen host: %s\n", host.c_str());
-    return 1;
+    // not a numeric IP - resolve the host name (e.g. localhost)
+    addrinfo hints{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo *resolved = nullptr;
+    if (::getaddrinfo(host.c_str(), nullptr, &hints, &resolved) != 0 || resolved == nullptr) {
+      std::fprintf(stderr, "invalid listen host: %s\n", host.c_str());
+      return 1;
+    }
+    std::memcpy(&addr.sin_addr,
+                &((sockaddr_in *)resolved->ai_addr)->sin_addr,
+                sizeof(addr.sin_addr));
+    ::freeaddrinfo(resolved);
   }
 
   if (::bind(g_listen_fd, (sockaddr *)&addr, sizeof(addr)) < 0) {

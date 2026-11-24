@@ -39,6 +39,7 @@
 #include "s5run_globals.h"
 
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -89,23 +90,29 @@ void channel::move_from(channel &&other) {
 void channel::connect(const std::string &host, uint16_t port) {
   disconnect();
 
-  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  // Resolve the host (numeric IP or domain name) via getaddrinfo.
+  addrinfo hints;
+  std::memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  addrinfo *result = nullptr;
+  if (::getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &result) != 0 ||
+      result == nullptr)
+    throw std::runtime_error("channel: cannot resolve host: " + host);
+
+  int fd = -1;
+  for (addrinfo *ai = result; ai != nullptr; ai = ai->ai_next) {
+    fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+    if (fd < 0)
+      continue;
+    if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0)
+      break;
+    ::close(fd);
+    fd = -1;
+  }
+  ::freeaddrinfo(result);
   if (fd < 0)
-    throw std::runtime_error("channel: socket failed");
-
-  sockaddr_in addr;
-  std::memset(&addr, 0, sizeof(addr));
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
-    ::close(fd);
-    throw std::runtime_error("channel: invalid host: " + host);
-  }
-
-  if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0) {
-    ::close(fd);
     throw std::runtime_error("channel: connect failed to " + host + ":" + std::to_string(port));
-  }
 
   m_fd = fd;
   set_timeout_ms(m_timeout_ms);
