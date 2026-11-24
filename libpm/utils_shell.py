@@ -102,13 +102,13 @@ class UtilsShell:
                     if print_output_on_exit:
                         print(output.get_output())
                     sys.exit(_returncode)
-            return _returncode
+            return _returncode, output.get_output()
         output.error("ERROR: Could not start process")
         if exit_on_error:
             if print_output_on_exit:
                 print(output.get_output())
             sys.exit(-1)
-        return -1
+        return -1, output.get_output()
 
     @staticmethod
     def run_command_get_output(_log, _command):

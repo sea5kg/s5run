@@ -67,17 +67,6 @@ LOG = UtilsLog("smoke_tests", SMOKE_TESTS_LOG)
 class CallbackError(Exception):
     pass
 
-
-# ---------------------------------------------------------------------------
-# build helpers
-# ---------------------------------------------------------------------------
-
-def _run(cmd, what, cwd=ROOT):
-    print("-- %s" % what, flush=True)
-    ret = subprocess.call(cmd, cwd=cwd)
-    if ret != 0:
-        raise SystemExit("!!! FAIL: %s (exit %d)" % (what, ret))
-
 def generated_client_code():
     UtilsSmokeTests.clean_generated_outputs(LOG.get_logger())
     LOG.get_logger().info("-> Generating client's libs ...")
@@ -106,11 +95,9 @@ def generated_client_code():
 def test_py_gen_client(port):
     LOG.get_logger().info(" -> python client test: py-client")
     LOG.get_logger().info(" ... py-client: scenarios")
-
     client_dir = os.path.join(ROOT, "tests", "py-client")
-
     with FolderSwitcher(LOG.get_logger(), client_dir) as _:
-        ret = UtilsShell.run_command(
+        ret, _ = UtilsShell.run_command(
             [sys.executable, "-u", "test_client.py", "127.0.0.1", str(port)],
             _log=LOG.get_logger(),
             print_output_on_exit=True
@@ -139,7 +126,7 @@ def test_cpp_gen_client(cpp_version, port):
 
     LOG.get_logger().info(" ... Builded client for %s [PASS]", cpp_version)
     LOG.get_logger().info(" ... %s-client: scenarios", cpp_version)
-    ret = UtilsShell.run_command(
+    ret, _ = UtilsShell.run_command(
         [client_bin, "127.0.0.1", str(port)],
         _log=LOG.get_logger(),
         print_output_on_exit=True
@@ -157,15 +144,14 @@ def test_go_client(port):
     client_dir = os.path.join(ROOT, "tests", "go-client")
     client_bin = os.path.join(client_dir, "bin", "go-client")
     with FolderSwitcher(LOG.get_logger(), client_dir) as _:
-        ret = UtilsShell.run_command(
+        ret, _ = UtilsShell.run_command(
             ["go", "build", "-o", client_bin, "./cmd_main.go"],
             _log=LOG.get_logger(),
             print_output_on_exit=True
         )
         LOG.get_logger().info(" ... Builded client for go-client [PASS]")
-
     LOG.get_logger().info(" ... go-client: scenarios")
-    ret = UtilsShell.run_command(
+    ret, _ = UtilsShell.run_command(
         [client_bin, "127.0.0.1", str(port)],
         _log=LOG.get_logger(),
         print_output_on_exit=True
@@ -237,7 +223,7 @@ def test_java_client(java_version, port):
     client_dir = os.path.join(ROOT, "tests", "java" + str(java_x) + "-client")
     ret = -1
     with FolderSwitcher(LOG.get_logger(), client_dir) as _:
-        ret = UtilsShell.run_command(
+        ret, _ = UtilsShell.run_command(
             ["./build_simple.sh", "127.0.0.1", str(port)],
             _log=LOG.get_logger(),
             print_output_on_exit=True,
@@ -245,7 +231,7 @@ def test_java_client(java_version, port):
         )
         LOG.get_logger().info(" ... Builded client for java%s [PASS]", str(java_x))
         LOG.get_logger().info(" ... java%s-client: scenarios", str(java_x))
-        ret = UtilsShell.run_command(
+        ret, _ = UtilsShell.run_command(
             ["java", "-jar", "s5run-client-1.0.0.jar", "127.0.0.1", str(port)],
             _log=LOG.get_logger(),
             print_output_on_exit=True,
@@ -268,7 +254,7 @@ def _free_port():
 
 
 def start_server(port):
-    print("-- start server on :%d" % port)
+    LOG.get_logger().info("-> Start server on %d port... ", port)
     log = open(os.path.join(ROOT, "tmp", "smoke-server.log"), "w")
     queue_db = os.path.join(ROOT, "tmp", "smoke-queue.sqlite3")
     for suffix in ("", "-wal", "-shm"):
@@ -324,7 +310,7 @@ def run_with_dispatch(sock):
             cid = r.i32()
             method = r.s()
             args = [r.val() for _ in range(r.u32())]
-            print("  <- callback %s%s" % (method, tuple(args)))
+            # print("  <- callback %s%s" % (method, tuple(args)))
             try:
                 s5run_wire.send_callback_result(sock, cid, dispatch(method, args))
             except CallbackError as e:
@@ -336,13 +322,32 @@ def run_with_dispatch(sock):
         raise s5run_wire.WireError("unexpected msg type %d" % t)
 
 
+def test_run_command(port):
+    LOG.get_logger().info("-> Run command line client s5run run...")
+
+    with FolderSwitcher(LOG.get_logger(), ROOT) as _:
+        ret, out = UtilsShell.run_command(
+            [SERVER_BIN, "run", "127.0.0.1:" + str(port),
+                os.path.join(ROOT, "tests", "test_run_script.js"), "1", "2"],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+    assert ret == 0, f"s5run run failed: ${out}"
+    assert "hello from test_run_script.js" in out, out
+    assert "a = 1, b = 2" in out, out
+    assert "a + b = 3" in out, out
+    assert "[warning] this is a warning message" in out
+    assert "{args: [1, 2], loopTotal: 55, ok: true, sum: 3}" in out, out
+    LOG.get_logger().info(" ... Run script test_run_script.js via command line [PASS]")
+
+
 def test_happy_path(host, port):
-    print("== py-client: happy path")
+    LOG.get_logger().info("-> Check happy path...")
     sock = s5run_wire.connect(host, port)
     s5run_wire.register_object_type(sock, "File", ["GetSize", "ReadBytes"])
     s5run_wire.register_func(sock, "GetFile")
     s5run_wire.register_func(sock, "GetTimeNow")
-    print("  registered type 'File', functions GetFile/GetTimeNow")
+    # print("  registered type 'File', functions GetFile/GetTimeNow")
 
     script = """
 function main(path) {
@@ -353,24 +358,24 @@ function main(path) {
 """
     s5run_wire.exec_script(sock, script, "main", ["test.txt"])
     ok, value = run_with_dispatch(sock)
-    print("  exec result: %s" % (value,))
+    # print("  exec result: %s" % (value,))
     assert ok, "exec failed: %s" % value
     assert value == {"size": 1024, "time": 1737000000}, value
     sock.close()
-    print("  PASS")
+    LOG.get_logger().info(" ... [PASS]")
 
 
 def test_queue(host, port):
-    print("== py-client: job queue")
+    LOG.get_logger().info("-> Check job queue...")
     sock = s5run_wire.connect(host, port)
     uuid = s5run_wire.submit_job(sock, "function main(a, b) { return a + b; }", "main", [2, 3])
-    print("  submitted:", uuid)
+    # print("  submitted:", uuid)
     for _ in range(100):
         status, ok, payload = s5run_wire.get_job_result(sock, uuid)
         if status in (2, 3):
             break
         time.sleep(0.1)
-    print("  result: status=%s payload=%s" % (status, payload))
+    # print("  result: status=%s payload=%s" % (status, payload))
     assert status == 2 and ok and payload == 5
 
     uuid2 = s5run_wire.submit_job(sock, "function main() { return nope(); }", "main", [])
@@ -384,22 +389,22 @@ def test_queue(host, port):
     status3, _, _ = s5run_wire.get_job_result(sock, "deadbeef-0000")
     assert status3 == 0xFF, status3
     sock.close()
-    print("  PASS")
+    LOG.get_logger().info(" ... [PASS]")
 
 
 def test_server_stats(host, port):
-    print("== py-client: server stats")
+    LOG.get_logger().info("-> Check server stats...")
     sock = s5run_wire.connect(host, port)
     threads, busy, queued, clients = s5run_wire.request_stats(sock)
-    print("  threads=%d busy=%d queued=%d clients=%d" % (threads, busy, queued, clients))
+    # print("  threads=%d busy=%d queued=%d clients=%d" % (threads, busy, queued, clients))
     assert threads >= 1, "threads must be positive"
     assert clients >= 1, "our own connection must be counted"
     sock.close()
-    print("  PASS")
+    LOG.get_logger().info(" ... stats [PASS]")
 
 
 def test_callback_error(host, port):
-    print("== py-client: callback error path")
+    LOG.get_logger().info("-> Check callback error path...")
     sock = s5run_wire.connect(host, port)
     s5run_wire.register_func(sock, "Fail")
     s5run_wire.exec_script(sock, "function main() { return Fail(); }", "main", [])
@@ -408,14 +413,14 @@ def test_callback_error(host, port):
     cid = r.i32()
     method = r.s()
     assert method == "Fail", method
-    print("  <- callback %s" % method)
+    # print("  <- callback %s" % method)
     s5run_wire.send_callback_error(sock, cid, "boom")
     ok, err = s5run_wire.recv_exec_result(sock)
-    print("  exec error: %s" % err.splitlines()[0])
+    # print("  exec error: %s" % err.splitlines()[0])
     assert not ok, "expected failure, got %r" % (err,)
     assert "boom" in err, err
     sock.close()
-    print("  PASS")
+    LOG.get_logger().info(" ... [PASS]")
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +450,7 @@ def main():
         test_queue("127.0.0.1", port)
         test_server_stats("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
+        test_run_command(port)
         test_cpp_gen_client("cpp98", port)
         test_cpp_gen_client("cpp11", port)
         test_py_gen_client(port)
