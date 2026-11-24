@@ -270,6 +270,14 @@ void test_unknown_fields() {
     "options": {"cpp98": {"namespace": "n", "output-dir": "/tmp", "module": "m"}}
   })JSON", "unknown field 'module' in options.cpp98");
 
+  expect_fail("opt_cpp_extra_field", R"JSON({
+    "options": {"cpp11": {"namespace": "n", "output-dir": "/tmp", "some": "m"}}
+  })JSON", "unknown field 'some' in options.cpp11");
+
+  expect_fail("opt_cpp_missing_field", R"JSON({
+    "options": {"cpp11": {}}
+  })JSON", "options.cpp11 required 'namespace'");
+
   expect_fail("opt_go_field", R"JSON({
     "options": {"go": {"output-dir": "/tmp", "namespace": "n"}}
   })JSON", "unknown field 'namespace' in options.go");

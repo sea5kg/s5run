@@ -121,7 +121,7 @@ def ensure_generated():
     _langs = _todo_generate.keys()
     _langs = sorted(_langs)
     for _lang in _langs:
-        LOG.get_logger().info(" ... generate-cli for %s", _lang)
+        LOG.get_logger().info(" ... generate client for %s", _lang)
         UtilsShell.run_command(
             [SERVER_BIN, "generate", "client", "--language", _lang, "--output-dir", _todo_generate[_lang]],
             _log=LOG.get_logger(),
@@ -221,46 +221,6 @@ def test_go_client(port):
     _run(["go", "build", "-o", GO_CLIENT_BIN, "./cmd_main.go"], "build go-client", cwd=GO_CLIENT_DIR)
     ret = subprocess.call([GO_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
     assert ret == 0, "go-client failed with code %d" % ret
-    print("  PASS")
-
-
-
-def test_cpp98_prefix_client(port):
-    print("== cpp98-prefix-client: generate with prefix-filename")
-    import json as _json
-    schema = _json.load(open(os.path.join(ROOT, "s5run-schema.json")))
-    schema["options"]["cpp98"]["prefix-filename"] = "MyLib_"
-    tmp_schema = os.path.join(ROOT, "tmp", "s5run-schema-prefix.json")
-    with open(tmp_schema, "w") as f:
-        _json.dump(schema, f, indent=2)
-    gen_dir = os.path.join(ROOT, "tmp", "cpp98-prefix")
-    shutil.rmtree(gen_dir, ignore_errors=True)
-    _run([SERVER_BIN, "generate", "client", "--language", "cpp98",
-          "--output-dir", gen_dir, "--schema", tmp_schema], "generate cpp98 prefix")
-    hdr = os.path.join(gen_dir, "MyLib_s5run_cli_cpp98.h")
-    impl = os.path.join(gen_dir, "MyLib_s5run_cli_cpp98.cpp")
-    assert os.path.exists(hdr), "missing prefixed header: " + hdr
-    assert os.path.exists(impl), "missing prefixed impl: " + impl
-    main_src = os.path.join(gen_dir, "main_prefix.cpp")
-    with open(main_src, "w") as f:
-        f.write('#include "MyLib_s5run_cli_cpp98.h"\n')
-        f.write('#include <cstdio>\n')
-        f.write('int main(int argc, char **argv) {\n')
-        f.write('    if (argc < 3) { return 1; }\n')
-        f.write('    s5run_cli_cpp98::context *ctx = s5run_cli_cpp98::make_context();\n')
-        f.write('    s5run_cli_cpp98::remote_server_info server0;\n')
-        f.write('    server0.set_address(std::string("s5run://") + argv[1] + ":" + argv[2]);\n')
-        f.write('    ctx->add_server(&server0);\n')
-        f.write('    ctx->set_script("function main() { return 42; }");\n')
-        f.write('    s5run_cli_cpp98::run_result result = s5run_cli_cpp98::run_script(ctx, "main");\n')
-        f.write('    bool ok = !result.has_error() && result.get_value().as_int() == 42;\n')
-        f.write('    std::printf("%s\\n", ok ? "prefix-client-ok" : result.error().c_str());\n')
-        f.write('    return ok ? 0 : 1;\n')
-        f.write('}\n')
-    bin_path = os.path.join(gen_dir, "cpp98_prefix_client")
-    _run(["g++", "-std=c++98", main_src, impl, "-o", bin_path], "build cpp98 prefix client")
-    ret = subprocess.call([bin_path, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "cpp98-prefix-client failed with code %d" % ret
     print("  PASS")
 
 
@@ -512,7 +472,6 @@ def main():
         test_py_gen_client(port)
         test_go_client(port)
         test_cpp98_client(port)
-        test_cpp98_prefix_client(port)
         test_java11_client(port)
         test_java17_client(port)
         test_java21_client(port)

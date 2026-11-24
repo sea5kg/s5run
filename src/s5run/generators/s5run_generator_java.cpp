@@ -1520,9 +1520,9 @@ static void write_java_file(const std::string &pkg_dir, const std::string &pkg,
 std::vector<std::string> generator_java::generate(const schema &s,
                                                   const std::string &output_dir) {
   std::vector<std::string> written;
-  std::string pkg = (m_flavor == JAVA_21) ? s.java.package_
-                   : (m_flavor == JAVA_17) ? s.java17.package_
-                   : s.java11.package_;
+  std::string pkg = (m_flavor == JAVA_21) ? s.java21.get_package_name()
+                   : (m_flavor == JAVA_17) ? s.java17.get_package_name()
+                   : s.java11.get_package_name();
 
   std::string pkg_dir = output_dir;
   if (!pkg.empty()) {

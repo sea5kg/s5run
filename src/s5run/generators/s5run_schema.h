@@ -39,6 +39,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "s5run_schema_options.h"
 
 namespace s5run {
 namespace generators {
@@ -78,38 +79,22 @@ struct schema_class {
   std::vector<schema_property> properties;
 };
 
-struct schema_cpp_options {
-  std::string namespace_;
-  std::string output_dir;
-  std::string prefix_filename; // optional, prepended to generated file names
-};
-
-struct schema_go_options {
-  std::string package_;
-  std::string output_dir;
-};
-
-struct schema_py_options {
-  std::string module_;
-  std::string output_dir;
-};
-
-struct schema_java_options {
-  std::string package_;
-  std::string output_dir;
-};
-
-struct schema {
+class schema {
+public:
+  schema();
   std::string client_version = "0.0.0";
-  schema_cpp_options cpp98;
-  schema_cpp_options cpp11;
-  schema_go_options golang;
-  schema_py_options py;
-  schema_java_options java;     // options.java (used by java21)
-  schema_java_options java17;
-  schema_java_options java11;
+  schema_cpp_options cpp98 = {"cpp98"};
+  schema_cpp_options cpp11 = {"cpp11"};
+  std::shared_ptr<schema_go_options> golang() const;
+  schema_py_options py = {"py"};
+  schema_java_options java21 = {"java11"};
+  schema_java_options java17 = {"java17"};
+  schema_java_options java11 = {"java21"};
   std::vector<schema_function> functions;
   std::vector<schema_class> classes;
+
+private:
+  std::map<std::string, std::shared_ptr<schema_options>> m_options;
 };
 
 // Parses a schema from a JSON string; returns false and fills `error` on failure.

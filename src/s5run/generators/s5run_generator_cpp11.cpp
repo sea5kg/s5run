@@ -1088,7 +1088,7 @@ static void emit_encode_result(std::string &out, const std::string &ret) {
 // -----------------------------------------------------------------------
 
 std::string generator_cpp11::generate_header(const schema &s) const {
-  const std::string &ns = s.cpp11.namespace_;
+  const std::string &ns = s.cpp11.get_namespace();
   std::string out;
 
   out += "// AUTO-GENERATED. DO NOT EDIT.\n#pragma once\n\n";
@@ -1152,11 +1152,11 @@ std::string generator_cpp11::generate_header(const schema &s) const {
 // -----------------------------------------------------------------------
 
 std::string generator_cpp11::generate_impl(const schema &s) const {
-  const std::string &ns = s.cpp11.namespace_;
+  const std::string &ns = s.cpp11.get_namespace();
   std::string out;
 
   out += "// AUTO-GENERATED. DO NOT EDIT.\n";
-  out += "#include \"" + s.cpp11.prefix_filename + ns + ".h\"\n\n";
+  out += "#include \"" + s.cpp11.get_prefix_filename() + ns + ".h\"\n\n";
   out += "#include <arpa/inet.h>\n#include <netinet/in.h>\n#include <netinet/tcp.h>\n";
   out += "#include <sys/socket.h>\n#include <sys/time.h>\n#include <unistd.h>\n\n";
   out += "#include <cerrno>\n#include <cstdio>\n#include <cstdlib>\n#include <cstring>\n";
@@ -1377,15 +1377,15 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
 
 std::vector<std::string> generator_cpp11::generate(const schema &s,
                                                     const std::string &output_dir) {
-  const std::string &ns = s.cpp11.namespace_;
+  const std::string &ns = s.cpp11.get_namespace();
   std::vector<std::string> written;
   ::mkdir(output_dir.c_str(), 0755);
 
-  std::string header_path = output_dir + "/" + s.cpp11.prefix_filename + ns + ".h";
+  std::string header_path = output_dir + "/" + s.cpp11.get_prefix_filename() + ns + ".h";
   { std::ofstream f(header_path.c_str()); f << generate_header(s); }
   written.push_back(header_path);
 
-  std::string impl_path = output_dir + "/" + s.cpp11.prefix_filename + ns + ".cpp";
+  std::string impl_path = output_dir + "/" + s.cpp11.get_prefix_filename() + ns + ".cpp";
   { std::ofstream f(impl_path.c_str()); f << generate_impl(s); }
   written.push_back(impl_path);
 

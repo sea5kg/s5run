@@ -1,7 +1,7 @@
 // AUTO-GENERATED. DO NOT EDIT.
 // C++98 legacy client, portable across Windows (WinSock2) and Linux.
-#ifndef S5RUN_CLI_CPP98_H
-#define S5RUN_CLI_CPP98_H
+#ifndef D1_S5RUN_CLI_CPP98_H
+#define D1_S5RUN_CLI_CPP98_H
 
 #include <map>
 #include <string>
@@ -241,4 +241,4 @@ run_result run_script(context *ctx, const std::string &entry, const std::vector<
 
 } // namespace s5run_cli_cpp98
 
-#endif // S5RUN_CLI_CPP98_H
+#endif // D1_S5RUN_CLI_CPP98_H

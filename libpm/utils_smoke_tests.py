@@ -81,6 +81,8 @@ class UtilsSmokeTests:
         _counter = 0
         for _dir in os.listdir(_tests_dir):
             _dir = os.path.join(_tests_dir, _dir)
+            if not os.path.isdir(_dir):
+                continue
             # print(_dir)
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_cli")  # cpp
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_cli_example")  # cpp
@@ -109,6 +111,8 @@ class UtilsSmokeTests:
         _counter = 0
         for _dir in os.listdir(_tests_dir):
             _dir = os.path.join(_tests_dir, _dir)
+            if not os.path.isdir(_dir):
+                continue
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "bin")  # go, cpp
 
             # *.jar files

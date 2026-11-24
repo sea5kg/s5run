@@ -8,8 +8,10 @@
 - Fixed periodically crash in java-client
 - Redesign command line
 - Generator cpp11 moved to s5run app
-- Added generators for cpp98, java11, java17, java21
+- Added generators for cpp98, java11, java17, java21, go, py
 - Renamed s5run-client.json -> s5run-schema.json
+- Added './s5run generate client ..'
+- Added './s5run run host:port script.js'
 
 ## [v0.1.0] - (2026 Nov 20)
 

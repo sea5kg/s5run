@@ -8,7 +8,7 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
 add_executable(cpp98-client
     main_test.cpp
-    s5run_cli/s5run_cli_cpp98.cpp
+    s5run_cli/d1_s5run_cli_cpp98.cpp
 )
 
 target_include_directories(

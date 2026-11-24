@@ -242,7 +242,7 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
   if (j.contains("options")) {
     const auto &opts = j["options"];
     static const std::set<std::string> k_known_langs = {
-      "cpp98", "cpp11", "go", "py", "java", "java11", "java17", "java21"};
+      "cpp98", "cpp11", "go", "py", "java11", "java17", "java21"};
     for (const auto &kv : opts.items()) {
       if (k_known_langs.count(kv.key()) == 0) {
         error = "unknown options section '" + kv.key()
@@ -250,8 +250,7 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
         return false;
       }
       bool cpp_like = kv.key() == "cpp98" || kv.key() == "cpp11";
-      bool java_like = kv.key() == "java" || kv.key() == "java11"
-                       || kv.key() == "java17" || kv.key() == "java21";
+      bool java_like = kv.key() == "java11" || kv.key() == "java17" || kv.key() == "java21";
       bool ok_fields = cpp_like
         ? check_unknown_fields(kv.value(), {"namespace", "output-dir", "prefix-filename"},
                                "options." + kv.key(), error)
@@ -268,49 +267,40 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
     }
   }
   if (j.contains("options") && j["options"].contains("cpp98")) {
-    const auto &o = j["options"]["cpp98"];
-    s.cpp98.namespace_ = o.value("namespace", "");
-    s.cpp98.output_dir = o.value("output-dir", "");
-    s.cpp98.prefix_filename = o.value("prefix-filename", "");
-    if (s.cpp98.namespace_.empty() || s.cpp98.output_dir.empty()) {
-      error = "options.cpp98 requires namespace and output-dir";
+    if (!s.cpp98.parse(j["options"]["cpp98"], error)) {
       return false;
     }
   }
   if (j.contains("options") && j["options"].contains("cpp11")) {
-    const auto &o = j["options"]["cpp11"];
-    s.cpp11.namespace_ = o.value("namespace", "");
-    s.cpp11.output_dir = o.value("output-dir", "");
-    s.cpp11.prefix_filename = o.value("prefix-filename", "");
-    if (s.cpp11.namespace_.empty() || s.cpp11.output_dir.empty()) {
-      error = "options.cpp11 requires namespace and output-dir";
+    if (!s.cpp11.parse(j["options"]["cpp11"], error)) {
       return false;
     }
   }
   if (j.contains("options") && j["options"].contains("go")) {
-    const auto &o = j["options"]["go"];
-    s.golang.package_ = o.value("package", "");
-    s.golang.output_dir = o.value("output-dir", "");
+    if (!s.golang()->parse(j["options"]["go"], error)) {
+      return false;
+    }
   }
   if (j.contains("options") && j["options"].contains("py")) {
     const auto &o = j["options"]["py"];
-    s.py.module_ = o.value("module", "");
-    s.py.output_dir = o.value("output-dir", "");
+    if (!s.py.parse(j["options"]["py"], error)) {
+      return false;
+    }
   }
-  if (j.contains("options") && j["options"].contains("java")) {
-    const auto &o = j["options"]["java"];
-    s.java.package_ = o.value("package", "");
-    s.java.output_dir = o.value("output-dir", "");
+  if (j.contains("options") && j["options"].contains("java21")) {
+    if (!s.java21.parse(j["options"]["java21"], error)) {
+      return false;
+    }
   }
   if (j.contains("options") && j["options"].contains("java17")) {
-    const auto &o = j["options"]["java17"];
-    s.java17.package_ = o.value("package", "");
-    s.java17.output_dir = o.value("output-dir", "");
+    if (!s.java17.parse(j["options"]["java17"], error)) {
+      return false;
+    }
   }
   if (j.contains("options") && j["options"].contains("java11")) {
-    const auto &o = j["options"]["java11"];
-    s.java11.package_ = o.value("package", "");
-    s.java11.output_dir = o.value("output-dir", "");
+    if (!s.java11.parse(j["options"]["java11"], error)) {
+      return false;
+    }
   }
   if (j.contains("functions")) {
     for (const auto &fj : j["functions"]) {
@@ -376,6 +366,21 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
     }
   }
   return true;
+}
+
+schema::schema() {
+  m_options["cpp98"] = std::make_shared<schema_cpp_options>("cpp98");
+  m_options["cpp11"] = std::make_shared<schema_cpp_options>("cpp11");
+  m_options["go"] = std::make_shared<schema_go_options>("go");
+  m_options["py"] = std::make_shared<schema_py_options>("py");
+  m_options["java11"] = std::make_shared<schema_java_options>("java11");
+  m_options["java17"] = std::make_shared<schema_java_options>("java17");
+  m_options["java21"] = std::make_shared<schema_java_options>("java21");
+}
+
+std::shared_ptr<schema_go_options> schema::golang() const {
+  std::shared_ptr<schema_options> o = m_options.at("go");
+  return std::static_pointer_cast<schema_go_options>(o);
 }
 
 bool load_schema(const std::string &json_data, schema &out, std::string &error) {

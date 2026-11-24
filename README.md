@@ -113,7 +113,7 @@ Options:
 ```
 
 Usage examples:
-- `./s5run run localhost:7777 --script test_script.js 21 21` - Run script file
+- `./s5run run localhost:7777 --script ./tests/test_run_script.js 21 21` - Run script file
 - `cat script.js | ./s5run run localhost:7777 [args...]` - Run script from stdin
 - The built-in `console` object (log/warning/error) is registered automatically and served client-side
 
@@ -272,7 +272,7 @@ Allowed fields per section:
 - root: `client-version`, `version`, `options`, `functions`, `classes`
 - `options.cpp98` / `options.cpp11`: `namespace`, `output-dir`, `prefix-filename`
 - `options.go`: `output-dir`, `package`; `options.py`: `output-dir`, `module`
-- `options.java` / `java11` / `java17` / `java21`: `output-dir`, `package`
+- `options.java11` / `options.java17` / `options.java21`: `output-dir`, `package`
 - `functions[]` / `methods[]`: `name`, `return`, `arguments`
 - `classes[]`: `name`, `methods`, `properties`
 - `properties[]`: `name`, `type`, `getter`, `setter`

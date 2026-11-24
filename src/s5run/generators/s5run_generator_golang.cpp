@@ -1240,7 +1240,7 @@ static void write_go_file(const std::string &pkg_dir, const std::string &pkg,
 std::vector<std::string> generator_golang::generate(const schema &s,
                                                     const std::string &output_dir) {
   std::vector<std::string> written;
-  std::string pkg = s.golang.package_.empty() ? "s5runcli" : s.golang.package_;
+  std::string pkg = s.golang()->get_package_name();
   ::mkdir(output_dir.c_str(), 0755);
 
   write_go_file(output_dir, pkg, "wire", WIRE_TEMPLATE, written);

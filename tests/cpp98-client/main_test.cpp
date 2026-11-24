@@ -1,7 +1,7 @@
 // Smoke test for the GENERATED legacy C++98 client (Windows/Linux portable).
 //
 // Usage: ./cpp98-client [host] [port]
-#include "s5run_cli_cpp98.h"
+#include "d1_s5run_cli_cpp98.h"
 
 #include <cstdio>
 #include <cstdlib>

@@ -108,6 +108,7 @@ list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_ge
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generator_python.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generator_java.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_generators.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_schema_options.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/generators/s5run_schema.cpp")
 
 # protocol

@@ -407,12 +407,12 @@ static std::string include_guard(const std::string &ns) {
 }
 
 std::string generator_cpp98::generate_header(const schema &s) const {
-  const std::string &ns = s.cpp98.namespace_;
+  const std::string &ns = s.cpp98.get_namespace();
   std::string out;
 
   out += "// AUTO-GENERATED. DO NOT EDIT.\n";
   out += "// C++98 legacy client, portable across Windows (WinSock2) and Linux.\n";
-  std::string guard = include_guard(s.cpp98.prefix_filename + ns);
+  std::string guard = include_guard(s.cpp98.get_prefix_filename() + ns);
   out += "#ifndef " + guard + "\n#define " + guard + "\n\n";
   out += "#include <map>\n#include <string>\n#include <vector>\n\n";
   out += UNDEF_WIN32_MACROS;
@@ -690,12 +690,12 @@ static std::string gen_m_callback(const schema_class &c, const schema_method &m)
 }
 
 std::string generator_cpp98::generate_impl(const schema &s) const {
-  const std::string &ns = s.cpp98.namespace_;
+  const std::string &ns = s.cpp98.get_namespace();
   std::string out;
 
   // File header + includes + namespace
   out += "// AUTO-GENERATED. DO NOT EDIT.\n";
-  out += "#include \"" + s.cpp98.prefix_filename + ns + ".h\"\n\n";
+  out += "#include \"" + s.cpp98.get_prefix_filename() + ns + ".h\"\n\n";
   out += "#ifdef _WIN32\n#ifndef WIN32_LEAN_AND_MEAN\n#define WIN32_LEAN_AND_MEAN\n#endif\n";
   out += "#include <winsock2.h>\n#include <ws2tcpip.h>\n#pragma comment(lib, \"ws2_32.lib\")\n";
   out += "#else\n#include <arpa/inet.h>\n#include <netinet/in.h>\n#include <netinet/tcp.h>\n";
@@ -1267,15 +1267,15 @@ run_result context::context_impl::run(const std::string &entry,
 
 std::vector<std::string> generator_cpp98::generate(const schema &s,
                                                    const std::string &output_dir) {
-  const std::string &ns = s.cpp98.namespace_;
+  const std::string &ns = s.cpp98.get_namespace();
   std::vector<std::string> written;
   ::mkdir(output_dir.c_str(), 0755);
 
-  std::string header_path = output_dir + "/" + s.cpp98.prefix_filename + ns + ".h";
+  std::string header_path = output_dir + "/" + s.cpp98.get_prefix_filename() + ns + ".h";
   { std::ofstream f(header_path.c_str()); f << generate_header(s); }
   written.push_back(header_path);
 
-  std::string impl_path = output_dir + "/" + s.cpp98.prefix_filename + ns + ".cpp";
+  std::string impl_path = output_dir + "/" + s.cpp98.get_prefix_filename() + ns + ".cpp";
   { std::ofstream f(impl_path.c_str()); f << generate_impl(s); }
   written.push_back(impl_path);
 

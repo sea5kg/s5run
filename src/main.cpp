@@ -242,19 +242,19 @@ static int cmd_generate(int argc, char **argv) {
   // output-dir: CLI option overrides the schema; fall back to options.<lang>
   if (output_dir.empty()) {
     if (language == "cpp98")
-      output_dir = schema.cpp98.output_dir;
+      output_dir = schema.cpp98.get_output_dir();
     else if (language == "cpp11")
-      output_dir = schema.cpp11.output_dir;
+      output_dir = schema.cpp11.get_output_dir();
     else if (language == "go")
-      output_dir = schema.golang.output_dir;
+      output_dir = schema.golang()->get_output_dir();
     else if (language == "py")
-      output_dir = schema.py.output_dir;
+      output_dir = schema.py.get_output_dir();
     else if (language == "java21")
-      output_dir = schema.java.output_dir;
+      output_dir = schema.java21.get_output_dir();
     else if (language == "java17")
-      output_dir = schema.java17.output_dir;
+      output_dir = schema.java17.get_output_dir();
     else if (language == "java11")
-      output_dir = schema.java11.output_dir;
+      output_dir = schema.java11.get_output_dir();
   }
   if (output_dir.empty()) {
     std::fprintf(stderr, "output-dir is not specified: "
