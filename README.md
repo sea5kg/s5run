@@ -137,22 +137,38 @@ For example json:
 
 ```json
 {
+  "client-version": "1.0.0",
   "options": {
+    "cpp98": {
+      "output-dir": "tests/cpp98-client/s5run_cli/",
+      "prefix-filename": "d1_",
+      "namespace": "s5run_cli_cpp98"
+    },
     "cpp11": {
       "output-dir": "tests/cpp11-client/s5run_cli_example/",
-      "namespace": "s5run_cli_example",
-      "prefix-filename": "MyLib_"
-    },
-    "java": {
-      "output-dir": "tests/java-client/src/",
-      "package": "com.s5run.example"
+      "namespace": "s5run_cli_example"
     },
     "py": {
       "output-dir": "tests/py-client/",
       "module": "libs5run_cli_example"
+    },
+    "go": {
+      "output-dir": "tests/go-client/s5runcli/",
+      "package": "s5runcli"
+    },
+    "java11": {
+      "output-dir": "tests/java11-client/src/",
+      "package": "com.s5run.example"
+    },
+    "java17": {
+      "output-dir": "tests/java17-client/src/",
+      "package": "com.s5run.example"
+    },
+    "java21": {
+      "output-dir": "tests/java21-client/src/",
+      "package": "com.s5run.example"
     }
   },
-  "client-version": "1.0.0",
   "version": 1,
   "functions": [
     {
@@ -162,6 +178,16 @@ For example json:
         {
           "type": "string",
           "name": "filepath"
+        }
+      ]
+    },
+    {
+      "name": "GetFileSize",
+      "return": "int",
+      "arguments": [
+        {
+          "type": "File",
+          "name": "file"
         }
       ]
     },
@@ -189,6 +215,31 @@ For example json:
           "name": "filepath"
         }
       ]
+    },
+    {
+      "name": "GetOpenedFiles",
+      "return": "array<File>",
+      "arguments": []
+    },
+    {
+      "name": "CloseFiles",
+      "return": "void",
+      "arguments": [
+        {
+          "type": "array<File>",
+          "name": "files"
+        }
+      ]
+    },
+    {
+      "name": "GetPi",
+      "return": "float",
+      "arguments": []
+    },
+    {
+      "name": "GetServerPort",
+      "return": "uint",
+      "arguments": []
     }
   ],
   "classes": [
@@ -209,6 +260,36 @@ For example json:
               "name": "readBytes"
             }
           ]
+        },
+        {
+          "name": "GetName",
+          "return": "string"
+        },
+        {
+          "name": "GetBufferSize",
+          "return": "int"
+        },
+        {
+          "name": "SetBufferSize",
+          "arguments": [
+            {
+              "type": "int",
+              "name": "bufferSize"
+            }
+          ]
+        }
+      ],
+      "properties": [
+        {
+          "name": "Name",
+          "type": "string",
+          "getter": "GetFileName"
+        },
+        {
+          "name": "BufferSize",
+          "type": "int",
+          "getter": "GetBufferSize",
+          "setter": "SetBufferSize"
         }
       ]
     },
@@ -277,16 +358,6 @@ Allowed fields per section:
 - `classes[]`: `name`, `methods`, `properties`
 - `properties[]`: `name`, `type`, `getter`, `setter`
 - `arguments[]`: `name`, `type`; convert-args object: `name`, `type`, `convert-from`
-
-For regenerate client libraries:
-
-```sh
-$ python3 -m pys5rungen all     # all configured languages
-$ python3 -m pys5rungen java    # only Java
-$ python3 -m pys5rungen py      # only Python
-$ python3 -m pys5rungen init    # create a default example s5run-schema.json
-$ python3 -m pys5rungen help    # show help
-```
 
 ### How add your implementation
 
