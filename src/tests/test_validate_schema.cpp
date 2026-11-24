@@ -290,6 +290,10 @@ void test_unknown_fields() {
     "options": {"java21": {"output-dir": "/tmp", "package": "p"}}
   })JSON");
 
+  expect_fail("opt_java_fail", R"JSON({
+    "options": {"java21": {"output-dir": "/tmp", "package": "p", "some-custom": 1}}
+  })JSON", "unknown field 'some-custom' in options.java21");
+
   expect_fail("fn_extra", R"JSON({
     "functions": [{"name": "F", "returns": "int"}]
   })JSON", "unknown field 'returns' in functions[]");
