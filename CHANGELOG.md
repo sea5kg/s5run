@@ -1,7 +1,7 @@
 
 # Changelog
 
-## [v0.2.0] - (?? ??)
+## [v0.2.0] - (2026 Nov 24)
 
 - Added wsjcpp package manager
 - Added send server hello "s5run <server-version> <protocol-version>"
