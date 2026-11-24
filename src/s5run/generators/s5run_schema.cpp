@@ -144,6 +144,9 @@ static bool validate_schema(const schema &s, std::string &error) {
   }
 
   for (const auto &c : s.classes) {
+    std::map<std::string, const schema_method *> methods;
+    for (const auto &m : c.methods)
+      methods[m.name] = &m;
     std::set<std::string> props;
     for (const auto &p : c.properties) {
       if (props.count(p.name) != 0) {
@@ -154,14 +157,45 @@ static bool validate_schema(const schema &s, std::string &error) {
       if (!validate_type(p.type, false, classes,
                          "class " + c.name + " property '" + p.name + "'", error))
         return false;
+      std::string where = "class " + c.name + " property '" + p.name + "'";
+      if (!p.getter.empty()) {
+        auto it = methods.find(p.getter);
+        if (it == methods.end()) {
+          error = where + ": getter '" + p.getter + "' is not a declared method";
+          return false;
+        }
+        if (it->second->return_type != p.type) {
+          error = where + ": getter '" + p.getter + "' returns '"
+                  + (it->second->return_type.empty() ? "void" : it->second->return_type)
+                  + "', expected '" + p.type + "' (property type)";
+          return false;
+        }
+      }
+      if (!p.setter.empty()) {
+        auto it = methods.find(p.setter);
+        if (it == methods.end()) {
+          error = where + ": setter '" + p.setter + "' is not a declared method";
+          return false;
+        }
+        if (it->second->arguments.size() != 1) {
+          error = where + ": setter '" + p.setter + "' must take exactly one argument";
+          return false;
+        }
+        if (it->second->arguments[0].type != p.type) {
+          error = where + ": setter '" + p.setter + "' takes '"
+                  + it->second->arguments[0].type
+                  + "', expected '" + p.type + "' (property type)";
+          return false;
+        }
+      }
     }
-    std::set<std::string> methods;
+    std::set<std::string> seen_methods;
     for (const auto &m : c.methods) {
-      if (methods.count(m.name) != 0) {
+      if (seen_methods.count(m.name) != 0) {
         error = "duplicate method name: " + m.name + " in class " + c.name;
         return false;
       }
-      methods.insert(m.name);
+      seen_methods.insert(m.name);
       if (!validate_type(m.return_type, true, classes,
                          "class " + c.name + " method " + m.name + " return", error))
         return false;

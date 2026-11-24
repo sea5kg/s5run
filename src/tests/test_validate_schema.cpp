@@ -322,7 +322,11 @@ void test_properties() {
   std::fprintf(stderr, "== schema: properties\n");
 
   expect_ok("prop_ok", R"JSON({
-    "classes": [{"name": "A", "methods": [], "properties": [
+    "classes": [{"name": "A", "methods": [
+      {"name": "GetP", "return": "int", "arguments": []},
+      {"name": "SetP", "arguments": [{"name": "v", "type": "int"}]},
+      {"name": "GetName", "return": "string", "arguments": []}
+    ], "properties": [
       {"name": "P", "type": "int", "getter": "GetP", "setter": "SetP"},
       {"name": "Name", "type": "string", "getter": "GetName"}
     ]}]
@@ -345,6 +349,57 @@ void test_properties() {
       {"name": "P", "type": "int"}, {"name": "P", "type": "int"}
     ]}]
   })JSON", "duplicate property name: P in class A");
+
+  // getter/setter must reference declared methods
+  expect_fail("prop_getter_missing", R"JSON({
+    "classes": [{"name": "A", "methods": [
+      {"name": "GetName", "return": "string", "arguments": []}
+    ], "properties": [
+      {"name": "P", "type": "string", "getter": "Nope"}
+    ]}]
+  })JSON", "getter 'Nope' is not a declared method");
+
+  expect_fail("prop_setter_missing", R"JSON({
+    "classes": [{"name": "A", "methods": [
+      {"name": "SetP", "arguments": [{"name": "v", "type": "int"}]}
+    ], "properties": [
+      {"name": "P", "type": "int", "setter": "Nope"}
+    ]}]
+  })JSON", "setter 'Nope' is not a declared method");
+
+  expect_ok("prop_refs_ok", R"JSON({
+    "classes": [{"name": "A", "methods": [
+      {"name": "GetP", "return": "int", "arguments": []},
+      {"name": "SetP", "arguments": [{"name": "v", "type": "int"}]}
+    ], "properties": [
+      {"name": "P", "type": "int", "getter": "GetP", "setter": "SetP"}
+    ]}]
+  })JSON");
+
+  // type consistency: getter return / setter argument must match the property type
+  expect_fail("prop_getter_type", R"JSON({
+    "classes": [{"name": "A", "methods": [
+      {"name": "GetP", "return": "int", "arguments": []}
+    ], "properties": [
+      {"name": "P", "type": "string", "getter": "GetP"}
+    ]}]
+  })JSON", "getter 'GetP' returns 'int', expected 'string'");
+
+  expect_fail("prop_setter_type", R"JSON({
+    "classes": [{"name": "A", "methods": [
+      {"name": "SetP", "arguments": [{"name": "v", "type": "int"}]}
+    ], "properties": [
+      {"name": "P", "type": "string", "setter": "SetP"}
+    ]}]
+  })JSON", "setter 'SetP' takes 'int', expected 'string'");
+
+  expect_fail("prop_setter_args", R"JSON({
+    "classes": [{"name": "A", "methods": [
+      {"name": "SetP", "arguments": []}
+    ], "properties": [
+      {"name": "P", "type": "string", "setter": "SetP"}
+    ]}]
+  })JSON", "setter 'SetP' must take exactly one argument");
 
   std::fprintf(stderr, "  PASS\n");
 }

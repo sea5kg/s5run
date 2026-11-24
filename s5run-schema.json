@@ -145,7 +145,7 @@
         {
           "name": "Name",
           "type": "string",
-          "getter": "GetFileName"
+          "getter": "GetName"
         },
         {
           "name": "BufferSize",
