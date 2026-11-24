@@ -244,8 +244,7 @@ static std::string gen_method_cb(const schema_class &c, const schema_method &m,
 // Static template blocks
 // -----------------------------------------------------------------------
 
-static const char *CODEC_TEMPLATE = R"PY(
-class _Tag(IntEnum):
+static const char *WIRE_PY_TEMPLATE = R"PY(class _Tag(IntEnum):
     UNDEFINED = 0x00
     BOOL = 0x01
     INT8 = 0x02
@@ -276,13 +275,6 @@ class _Msg(IntEnum):
     STATS_REQ = 0x09
     STATS_RESP = 0x0A
     SERVER_HELLO = 0x0F
-
-
-@dataclass(frozen=True, slots=True)
-class Ref:
-    """Reference to a remote object."""
-    this_id: int
-    type: str = ""
 
 
 class _Reader:
@@ -362,6 +354,13 @@ class _Writer:
             self.u8(0x02)
             self.u32(len(raw))
         self.buf += raw
+)PY";
+
+static const char *VARIABLE_PY_TEMPLATE = R"PY(@dataclass(frozen=True, slots=True)
+class Ref:
+    """Reference to a remote object."""
+    this_id: int
+    type: str = ""
 
 
 # ---- value codec ----
@@ -436,10 +435,6 @@ def _read_array(buf: _Reader, read_elem: Callable[[], Any]) -> list:
     if buf.u8() != _Tag.ARRAY:
         raise RuntimeError("wire: expected an array")
     return [read_elem() for _ in range(buf.u32())]
-
-
-def _read_ref_array(buf: _Reader, cls: str) -> list:
-    return _read_array(buf, lambda: _instance_by_id(cls, _read_ref(buf).this_id))
 
 
 def _decode_value(buf: _Reader) -> Any:
@@ -995,8 +990,8 @@ def _register_instance(obj: S5RunObject) -> int:
     return _INSTANCE_HOLDER[0]._register_instance(obj)
 
 
-def client_version() -> str:
-    return CLIENT_VERSION
+def _read_ref_array(buf: _Reader, cls: str) -> list:
+    return _read_array(buf, lambda: _instance_by_id(cls, _read_ref(buf).this_id))
 
 
 def run_script(ctx: Context, entry: str, args: list[Any] | None = None) -> RunResult:
@@ -1049,44 +1044,118 @@ public:
 std::vector<std::string> generator_python::generate(const schema &s,
                                                     const std::string &output_dir) {
   std::vector<std::string> written;
+  std::string module = s.py() ? s.py()->get_module_name() : "";
+  if (module.empty())
+    module = "s5run_cli";
+
   ::mkdir(output_dir.c_str(), 0755);
+  std::string pkg_dir = output_dir + "/" + module;
+  ::mkdir(pkg_dir.c_str(), 0755);
 
-  std::string module = s.py()->get_module_name();
+  std::string version = s.client_version;
 
-  std::string out;
-  out += "# AUTO-GENERATED. DO NOT EDIT.\n";
-  out += "# module: " + module + "\n";
-  out += "\"\"\"Generated s5run client (" + s.client_version + "). "
-         "Inherit the base classes and register them on a Context.\"\"\"\n";
-  out += "\n";
-  out += "from __future__ import annotations\n";
-  out += "\n";
-  out += "import socket\n";
-  out += "import struct\n";
-  out += "import time\n";
-  out += "from abc import ABC, abstractmethod\n";
-  out += "from dataclasses import dataclass, field\n";
-  out += "from enum import IntEnum\n";
-  out += "from typing import Any, Callable\n";
-  out += "\n";
-  out += "CLIENT_VERSION = \"" + s.client_version + "\"\n";
-  out += "\n";
-
-  out += CODEC_TEMPLATE;
-  out += ROOTS_TEMPLATE;
+  // ---- __init__.py: public API ----
+  std::string init;
+  init += "# AUTO-GENERATED. DO NOT EDIT.\n";
+  init += "# package: " + module + "\n";
+  init += "\"\"\"Generated s5run client (" + version + "). "
+          "Inherit the base classes and register them on a Context.\"\"\"\n\n";
+  init += "CLIENT_VERSION = \"" + version + "\"\n\n\n";
+  init += "def client_version() -> str:\n";
+  init += "    return CLIENT_VERSION\n\n\n";
+  init += "from .variable import Ref\n";
+  init += "from .types import RemoteServerInfo, RunResult, S5RunFunction, S5RunObject\n";
   for (const auto &c : s.classes)
-    out += generate_schema_class(c);
+    init += "from .types import " + c.name + "\n";
   for (const auto &f : s.functions)
-    out += generate_schema_function(f);
-  out += REMOTE_SERVER_TEMPLATE;
-  out += RUN_RESULT_TEMPLATE;
-  out += generate_context(s);
+    init += "from .types import GlobalFunction_" + f.name + "\n";
+  init += "from .context import Context, run_script\n";
 
-  std::string path = output_dir + "/" + module + ".py";
-  std::ofstream f(path.c_str());
-  f << out << "\n";
-  f.close();
-  written.push_back(path);
+  // ---- wire.py: framing primitives ----
+  std::string wire;
+  wire += "# AUTO-GENERATED. DO NOT EDIT.\n";
+  wire += "\n";
+  wire += "import struct\n";
+  wire += "from enum import IntEnum\n";
+  wire += "\n";
+  wire += WIRE_PY_TEMPLATE;
+  wire += "\n";
+
+  // ---- variable.py: dynamic value codec ----
+  std::string variable;
+  variable += "# AUTO-GENERATED. DO NOT EDIT.\n";
+  variable += "\n";
+  variable += "import struct\n";
+  variable += "from dataclasses import dataclass\n";
+  variable += "from typing import Any, Callable\n";
+  variable += "\n";
+  variable += "from .wire import _Reader, _Tag, _Writer\n";
+  variable += "\n";
+  variable += VARIABLE_PY_TEMPLATE;
+  variable += "\n";
+
+  // ---- types.py: roots, schema classes, functions, results ----
+  std::string types;
+  types += "# AUTO-GENERATED. DO NOT EDIT.\n";
+  types += "\n";
+  types += "from __future__ import annotations\n";
+  types += "\n";
+  types += "from abc import ABC, abstractmethod\n";
+  types += "from dataclasses import dataclass\n";
+  types += "from typing import Any\n";
+  types += "\n";
+  types += ROOTS_TEMPLATE;
+  for (const auto &c : s.classes)
+    types += generate_schema_class(c);
+  for (const auto &f : s.functions)
+    types += generate_schema_function(f);
+  types += REMOTE_SERVER_TEMPLATE;
+  types += RUN_RESULT_TEMPLATE;
+  types += "\n";
+
+  // ---- context.py: execution context and callbacks ----
+  std::string context;
+  context += "# AUTO-GENERATED. DO NOT EDIT.\n";
+  context += "\n";
+  context += "from __future__ import annotations\n";
+  context += "\n";
+  context += "import socket\n";
+  context += "import struct\n";
+  context += "import time\n";
+  context += "from typing import Any, Callable\n";
+  context += "\n";
+  context += "from .types import RemoteServerInfo, RunResult, S5RunFunction, S5RunObject\n";
+  context += "from .variable import (\n";
+  context += "    Ref, _decode_value, _encode_value, _read_array, _read_bool, _read_byte,\n";
+  context += "    _read_count, _read_double, _read_int, _read_ref,\n";
+  context += "    _read_str_value, _value_to_string, _write_array, _write_bool, _write_byte,\n";
+  context += "    _write_double, _write_int, _write_ref, _write_ref_array,\n";
+  context += "    _write_str_value, _write_undefined,\n";
+  context += ")\n";
+  context += "from .wire import _Msg, _Reader, _Writer\n";
+  context += "\n";
+  context += generate_context(s);
+  context += "\n";
+
+  // write files
+  struct file_part {
+    const char *name;
+    const std::string *body;
+  };
+  file_part parts[] = {
+    {"__init__.py", &init},
+    {"wire.py", &wire},
+    {"variable.py", &variable},
+    {"types.py", &types},
+    {"context.py", &context},
+  };
+  for (const auto &p : parts) {
+    std::string path = pkg_dir + "/" + p.name;
+    std::ofstream f(path.c_str());
+    f << *p.body;
+    f.close();
+    written.push_back(path);
+  }
   return written;
 }
 

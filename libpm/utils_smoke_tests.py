@@ -86,6 +86,7 @@ class UtilsSmokeTests:
             # print(_dir)
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_cli")  # cpp
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_cli_example")  # cpp
+            _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "libs5run_cli_example")  # py package
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5runcli")  # go
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "src/com")  # java
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "bin")  # go, cpp
