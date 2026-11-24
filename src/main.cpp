@@ -195,7 +195,7 @@ void s5run_parse_args::print_server_usage() const {
             << std::endl;
   std::cout << "" << std::endl;
   std::cout << "Options:" << std::endl;
-  std::cout << "  --listen [host:]port  listen address (default 0.0.0.0, e.g. --listen 7777 or --listen 0.0.0.0:7777)"
+  std::cout << "  [host:]port          optional positional listen address (default 7777)"
             << std::endl;
   std::cout << "  --threads N           worker threads (default: hardware concurrency)" << std::endl;
   std::cout << "  --queue               enable job queue (results stored in sqlite)" << std::endl;
@@ -288,17 +288,17 @@ int s5run_parse_args::cmd_server() {
     } else if (arg == "--help" || arg == "-h") {
       print_server_usage();
       return 0;
+    } else if (listen.empty()) {
+      listen = arg; // positional [host:]port
     } else {
-      std::cerr << "Unknown option: "  << std::endl << std::endl;
+      std::cerr << "Unknown option: " << arg << std::endl << std::endl;
       print_server_usage();
       return 1;
     }
   }
 
-  if (listen.empty()) {
-    print_server_usage();
-    return 1;
-  }
+  if (listen.empty())
+    listen = "7777";
 
   s5run::server s;
   if (!queue_db.empty())
