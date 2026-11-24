@@ -26,5 +26,7 @@ list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/./src.wsjcpp/wsjcpp_core/wsjcpp
 list (APPEND WSJCPP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/")
 list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/__data_config_yml_path8aca03.h")
 list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/__data_config_yml_path8aca03.cpp")
+list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/__s5run_schema_json_path2ddbcf.h")
+list (APPEND WSJCPP_SOURCES "${CMAKE_SOURCE_DIR}/src/wsjcpp_resources/__s5run_schema_json_path2ddbcf.cpp")
 
 

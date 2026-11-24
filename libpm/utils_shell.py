@@ -70,7 +70,7 @@ class UtilsShell:
     """ UtilsShell """
 
     @staticmethod
-    def run_command(_command, _log=None, exit_on_error=True, print_output_on_exit=False):
+    def run_command(_command, _log=None, exit_on_error=True, print_output_on_exit=False, env=None):
         """ run_command """
         output = UtilsShellOutput(_log)
         output.debug("Run command: " + " ".join(_command))
@@ -78,7 +78,8 @@ class UtilsShell:
             _command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            shell=False
+            shell=False,
+            env=env
         ) as _proc:
             _returncode = _proc.poll()
             while _returncode is None:

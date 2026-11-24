@@ -41,6 +41,7 @@
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <iostream>
 
 namespace s5run {
 namespace generators {
@@ -238,70 +239,38 @@ static bool parse_schema_json(const nlohmann::json &j, schema &s, std::string &e
                             "schema root", error))
     return false;
   s.client_version = j.value("client-version", "0.0.0");
+  const std::set<std::string> s_langs = s.known_languages();
+  std::string allowed_langs = "";
+  for (auto it_lang = s_langs.begin(); it_lang != s_langs.end(); it_lang++) {
+    allowed_langs += *it_lang + ", ";
+  }
 
   if (j.contains("options")) {
     const auto &opts = j["options"];
-    static const std::set<std::string> k_known_langs = {
-      "cpp98", "cpp11", "go", "py", "java11", "java17", "java21"};
+
     for (const auto &kv : opts.items()) {
-      if (k_known_langs.count(kv.key()) == 0) {
+      if (s_langs.count(kv.key()) == 0) {
         error = "unknown options section '" + kv.key()
-                + "' (allowed: cpp98, cpp11, go, py, java, java11, java17, java21)";
+                + "' (allowed: " + allowed_langs + ")";
         return false;
       }
-      bool cpp_like = kv.key() == "cpp98" || kv.key() == "cpp11";
-      bool java_like = kv.key() == "java11" || kv.key() == "java17" || kv.key() == "java21";
-      bool ok_fields = cpp_like
-        ? check_unknown_fields(kv.value(), {"namespace", "output-dir", "prefix-filename"},
-                               "options." + kv.key(), error)
-        : java_like
-          ? check_unknown_fields(kv.value(), {"output-dir", "package"},
-                                 "options." + kv.key(), error)
-          : kv.key() == "go"
-            ? check_unknown_fields(kv.value(), {"output-dir", "package"},
-                                   "options." + kv.key(), error)
-            : check_unknown_fields(kv.value(), {"output-dir", "module"},
-                                   "options." + kv.key(), error);
-      if (!ok_fields)
+    }
+
+    for (auto it_lang = s_langs.begin(); it_lang != s_langs.end(); it_lang++) {
+      std::string lang = *it_lang;
+      auto opt_lang = s.options(lang);
+      if (!opt_lang) {
+        error = "not a found definition options for a lang: " + lang;
         return false;
+      }
+      if (j["options"].contains(lang)) {
+        if (!opt_lang->parse(j["options"][lang], error)) {
+          return false;
+        }
+      }
     }
   }
-  if (j.contains("options") && j["options"].contains("cpp98")) {
-    if (!s.cpp98.parse(j["options"]["cpp98"], error)) {
-      return false;
-    }
-  }
-  if (j.contains("options") && j["options"].contains("cpp11")) {
-    if (!s.cpp11.parse(j["options"]["cpp11"], error)) {
-      return false;
-    }
-  }
-  if (j.contains("options") && j["options"].contains("go")) {
-    if (!s.golang()->parse(j["options"]["go"], error)) {
-      return false;
-    }
-  }
-  if (j.contains("options") && j["options"].contains("py")) {
-    const auto &o = j["options"]["py"];
-    if (!s.py.parse(j["options"]["py"], error)) {
-      return false;
-    }
-  }
-  if (j.contains("options") && j["options"].contains("java21")) {
-    if (!s.java21.parse(j["options"]["java21"], error)) {
-      return false;
-    }
-  }
-  if (j.contains("options") && j["options"].contains("java17")) {
-    if (!s.java17.parse(j["options"]["java17"], error)) {
-      return false;
-    }
-  }
-  if (j.contains("options") && j["options"].contains("java11")) {
-    if (!s.java11.parse(j["options"]["java11"], error)) {
-      return false;
-    }
-  }
+
   if (j.contains("functions")) {
     for (const auto &fj : j["functions"]) {
       if (!check_unknown_fields(fj, {"name", "return", "arguments"}, "functions[]", error))
@@ -378,9 +347,40 @@ schema::schema() {
   m_options["java21"] = std::make_shared<schema_java_options>("java21");
 }
 
+std::set<std::string> schema::known_languages() const {
+  std::set<std::string> ret;
+  for (auto it = m_options.begin(); it != m_options.end(); ++it)
+    ret.insert(it->first);
+  return ret;
+}
+
+std::shared_ptr<schema_options> schema::options(const std::string &lang) {
+  return m_options.at(lang);
+}
+
+std::shared_ptr<schema_cpp_options> schema::cpp98() const {
+  std::shared_ptr<schema_options> o = m_options.at("cpp98");
+  return std::static_pointer_cast<schema_cpp_options>(o);
+}
+
+std::shared_ptr<schema_cpp_options> schema::cpp11() const {
+  std::shared_ptr<schema_options> o = m_options.at("cpp11");
+  return std::static_pointer_cast<schema_cpp_options>(o);
+}
+
 std::shared_ptr<schema_go_options> schema::golang() const {
   std::shared_ptr<schema_options> o = m_options.at("go");
   return std::static_pointer_cast<schema_go_options>(o);
+}
+
+std::shared_ptr<schema_py_options> schema::py() const {
+  std::shared_ptr<schema_options> o = m_options.at("py");
+  return std::static_pointer_cast<schema_py_options>(o);
+}
+
+std::shared_ptr<schema_java_options> schema::options_java(const std::string &lang) const {
+  std::shared_ptr<schema_options> o = m_options.at(lang);
+  return std::static_pointer_cast<schema_java_options>(o);
 }
 
 bool load_schema(const std::string &json_data, schema &out, std::string &error) {

@@ -53,21 +53,11 @@ import time
 from libpm import UtilsSmokeTests
 from libpm import UtilsLog
 from libpm import UtilsShell
+from libpm import FolderSwitcher
 from libpm import s5run_wire
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SERVER_BIN = os.path.join(ROOT, "s5run")
-CPP11_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp11-client")
-CPP11_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp11-client")
-CPP11_GEN_BIN = os.path.join(CPP11_CLIENT_DIR, "bin", "cpp11-client")
-CPP98_CLIENT_DIR = os.path.join(ROOT, "tests", "cpp98-client")
-CPP98_CLIENT_BUILD = os.path.join(ROOT, "tmp", "cpp98-client")
-CPP98_CLIENT_BIN = os.path.join(CPP98_CLIENT_DIR, "bin", "cpp98-client")
-JAVA21_CLIENT_DIR = os.path.join(ROOT, "tests", "java21-client")
-JAVA17_CLIENT_DIR = os.path.join(ROOT, "tests", "java17-client")
-JAVA11_CLIENT_DIR = os.path.join(ROOT, "tests", "java11-client")
-GO_CLIENT_DIR = os.path.join(ROOT, "tests", "go-client")
-GO_CLIENT_BIN = os.path.join(GO_CLIENT_DIR, "bin", "go-client")
 
 SMOKE_TESTS_LOG = os.path.join(ROOT, "smoke_tests.log")
 if os.path.isfile(SMOKE_TESTS_LOG):
@@ -82,30 +72,13 @@ class CallbackError(Exception):
 # build helpers
 # ---------------------------------------------------------------------------
 
-def _iter_files(path):
-    if os.path.isfile(path):
-        yield path
-        return
-    for dirpath, _dirnames, filenames in os.walk(path):
-        for fn in filenames:
-            yield os.path.join(dirpath, fn)
-
-
-def _newest_mtime(paths):
-    newest = 0.0
-    for p in paths:
-        if os.path.exists(p):
-            newest = max(newest, os.path.getmtime(p))
-    return newest
-
-
 def _run(cmd, what, cwd=ROOT):
     print("-- %s" % what, flush=True)
     ret = subprocess.call(cmd, cwd=cwd)
     if ret != 0:
         raise SystemExit("!!! FAIL: %s (exit %d)" % (what, ret))
 
-def ensure_generated():
+def generated_client_code():
     UtilsSmokeTests.clean_generated_outputs(LOG.get_logger())
     LOG.get_logger().info("-> Generating client's libs ...")
 
@@ -123,20 +96,82 @@ def ensure_generated():
     for _lang in _langs:
         LOG.get_logger().info(" ... generate client for %s", _lang)
         UtilsShell.run_command(
-            [SERVER_BIN, "generate", "client", "--language", _lang, "--output-dir", _todo_generate[_lang]],
+            [SERVER_BIN, "generate", "client", "--language", _lang], # , "--output-dir", _todo_generate[_lang]],
             _log=LOG.get_logger(),
             print_output_on_exit=True
         )
 
     LOG.get_logger().info("-> Generating client's libs done. [PASS]")
 
-def ensure_cpp_client():
-    inputs = _iter_files(CPP11_CLIENT_DIR)
-    if not os.path.exists(CPP11_GEN_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP11_GEN_BIN):
-        os.makedirs(os.path.join(CPP11_CLIENT_DIR, "bin"), exist_ok=True)
-        _run(["cmake", "-H" + CPP11_CLIENT_DIR, "-B" + CPP11_CLIENT_BUILD,
-              "-DCMAKE_BUILD_TYPE=Release"], "configure cpp11-client", cwd=ROOT)
-        _run(["cmake", "--build", CPP11_CLIENT_BUILD, "--config", "Release"], "build cpp11-client")
+def test_py_gen_client(port):
+    LOG.get_logger().info(" -> python client test: py-client")
+    LOG.get_logger().info(" ... py-client: scenarios")
+
+    client_dir = os.path.join(ROOT, "tests", "py-client")
+
+    with FolderSwitcher(LOG.get_logger(), client_dir) as _:
+        ret = UtilsShell.run_command(
+            [sys.executable, "-u", "test_client.py", "127.0.0.1", str(port)],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+    assert ret == 0, "py-gen-client failed with code %d" % ret
+    LOG.get_logger().info(" ... py-client: [PASS]")
+
+
+def test_cpp_gen_client(cpp_version, port):
+    LOG.get_logger().info(" -> cpp client test: %s", cpp_version)
+    client_dir = os.path.join(ROOT, "tests", cpp_version + "-client")
+    build_dir = os.path.join(ROOT, "tmp", cpp_version + "-client")
+    client_bin = os.path.join(client_dir, "bin", cpp_version + "-client")
+    with FolderSwitcher(LOG.get_logger(), client_dir) as _:
+        UtilsShell.run_command(
+            ["cmake", "-H" + client_dir, "-B" + build_dir,
+              "-DCMAKE_BUILD_TYPE=Release"],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+        UtilsShell.run_command(
+            ["cmake", "--build", build_dir, "--config", "Release"],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+
+    LOG.get_logger().info(" ... Builded client for %s [PASS]", cpp_version)
+    LOG.get_logger().info(" ... %s-client: scenarios", cpp_version)
+    ret = UtilsShell.run_command(
+        [client_bin, "127.0.0.1", str(port)],
+        _log=LOG.get_logger(),
+        print_output_on_exit=True
+    )
+    assert ret == 0, cpp_version + "-client failed with code %d" % ret
+    LOG.get_logger().info(" ... %s-client: [PASS]", cpp_version)
+
+
+def test_go_client(port):
+    LOG.get_logger().info(" -> golang client test: go-client")
+    _have_go = shutil.which("go") is not None
+    if not _have_go:
+        LOG.get_logger().info(" ... [SKIP] Go not found")
+        return
+    client_dir = os.path.join(ROOT, "tests", "go-client")
+    client_bin = os.path.join(client_dir, "bin", "go-client")
+    with FolderSwitcher(LOG.get_logger(), client_dir) as _:
+        ret = UtilsShell.run_command(
+            ["go", "build", "-o", client_bin, "./cmd_main.go"],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+        LOG.get_logger().info(" ... Builded client for go-client [PASS]")
+
+    LOG.get_logger().info(" ... go-client: scenarios")
+    ret = UtilsShell.run_command(
+        [client_bin, "127.0.0.1", str(port)],
+        _log=LOG.get_logger(),
+        print_output_on_exit=True
+    )
+    assert ret == 0, "go-client failed with code %d" % ret
+    LOG.get_logger().info(" ... go-client: [PASS]")
 
 
 def _have_jdk():
@@ -192,79 +227,32 @@ def _java_build_env(version):
     return env
 
 
-def test_py_gen_client(port):
-    print("== py-gen-client: scenarios")
-    ret = subprocess.call([sys.executable, "tests/py-client/test_client.py",
-                           "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "py-gen-client failed with code %d" % ret
-    print("  PASS")
-
-
-def ensure_cpp98_client():
-    os.makedirs(os.path.join(CPP98_CLIENT_DIR, "bin"), exist_ok=True)
-    inputs = _iter_files(CPP98_CLIENT_DIR)
-    if not os.path.exists(CPP98_CLIENT_BIN) or _newest_mtime(inputs) > os.path.getmtime(CPP98_CLIENT_BIN):
-        _run(["cmake", "-H" + CPP98_CLIENT_DIR, "-B" + CPP98_CLIENT_BUILD,
-              "-DCMAKE_BUILD_TYPE=Release"], "configure cpp98-client", cwd=ROOT)
-        _run(["cmake", "--build", CPP98_CLIENT_BUILD, "--config", "Release"], "build cpp98-client")
-
-
-def _have_go():
-    return shutil.which("go") is not None
-
-
-def test_go_client(port):
-    print("== go-client: scenarios")
-    if not _have_go():
-        print("  SKIP: Go not found")
+def test_java_client(java_version, port):
+    java_x = int(java_version.split("java")[1])
+    LOG.get_logger().info(" -> java client test: java%s", str(java_x))
+    if not _have_jdk_version(java_x):
+        print("  SKIP: JDK " + str(java_x) + " not available")
         return
-    _run(["go", "build", "-o", GO_CLIENT_BIN, "./cmd_main.go"], "build go-client", cwd=GO_CLIENT_DIR)
-    ret = subprocess.call([GO_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "go-client failed with code %d" % ret
-    print("  PASS")
-
-
-def test_cpp98_client(port):
-    print("== cpp98-client: scenarios")
-    ret = subprocess.call([CPP98_CLIENT_BIN, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "cpp98-client failed with code %d" % ret
-    print("  PASS")
-
-
-def test_java17_client(port):
-    print("== java17-client: build and run")
-    if not _have_jdk_version(17):
-        print("  SKIP: JDK 17 not available")
-        return
-    env = _java_build_env(17)
-    ret = subprocess.call(["./build_simple.sh", "127.0.0.1", str(port)],
-                          cwd=JAVA17_CLIENT_DIR, env=env)
-    assert ret == 0, "java17-client failed with code %d" % ret
-    print("  PASS")
-
-
-def test_java11_client(port):
-    print("== java11-client: build and run")
-    if not _have_jdk_version(11):
-        print("  SKIP: JDK 11 not available (no JDK 11 and javac < 11)")
-        return
-    env = _java_build_env(11)
-    ret = subprocess.call(["./build_simple.sh", "127.0.0.1", str(port)],
-                          cwd=JAVA11_CLIENT_DIR, env=env)
-    assert ret == 0, "java11-client failed with code %d" % ret
-    print("  PASS")
-
-
-def test_java21_client(port):
-    print("== java21-client: build and run")
-    if not _have_jdk_version(21):
-        print("  SKIP: JDK 21 not available")
-        return
-    env = _java_build_env(21)
-    ret = subprocess.call(["./build_simple.sh", "127.0.0.1", str(port)],
-                          cwd=JAVA21_CLIENT_DIR, env=env)
-    assert ret == 0, "java21-client failed with code %d" % ret
-    print("  PASS")
+    env = _java_build_env(java_x)
+    client_dir = os.path.join(ROOT, "tests", "java" + str(java_x) + "-client")
+    ret = -1
+    with FolderSwitcher(LOG.get_logger(), client_dir) as _:
+        ret = UtilsShell.run_command(
+            ["./build_simple.sh", "127.0.0.1", str(port)],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True,
+            env=env
+        )
+        LOG.get_logger().info(" ... Builded client for java%s [PASS]", str(java_x))
+        LOG.get_logger().info(" ... java%s-client: scenarios", str(java_x))
+        ret = UtilsShell.run_command(
+            ["java", "-jar", "s5run-client-1.0.0.jar", "127.0.0.1", str(port)],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True,
+            env=env
+        )
+    assert ret == 0, "java" + str(java_x) + "-client failed with code %d" % ret
+    LOG.get_logger().info(" ... java%s-client: [PASS]", str(java_x))
 
 
 # ---------------------------------------------------------------------------
@@ -430,15 +418,6 @@ def test_callback_error(host, port):
     print("  PASS")
 
 
-
-
-def test_cpp_gen_client(port):
-    print("== cpp11-client: scenarios")
-    ret = subprocess.call([CPP11_GEN_BIN, "127.0.0.1", str(port)], cwd=ROOT)
-    assert ret == 0, "cpp11-client failed with code %d" % ret
-    print("  PASS")
-
-
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -457,9 +436,7 @@ def main():
     LOG.get_logger().info("-> Start compiling...")
     UtilsSmokeTests.compile_s5run(LOG.get_logger())
     LOG.get_logger().info("-> Compiling done. [PASS]")
-    ensure_generated()
-    ensure_cpp_client()
-    ensure_cpp98_client()
+    generated_client_code()
 
     port = _free_port()
     proc = start_server(port)
@@ -468,13 +445,13 @@ def main():
         test_queue("127.0.0.1", port)
         test_server_stats("127.0.0.1", port)
         test_callback_error("127.0.0.1", port)
-        test_cpp_gen_client(port)
+        test_cpp_gen_client("cpp98", port)
+        test_cpp_gen_client("cpp11", port)
         test_py_gen_client(port)
         test_go_client(port)
-        test_cpp98_client(port)
-        test_java11_client(port)
-        test_java17_client(port)
-        test_java21_client(port)
+        test_java_client("java11", port)
+        test_java_client("java17", port)
+        test_java_client("java21", port)
     finally:
         stop_server(proc)
         UtilsSmokeTests.clean_binaries(LOG.get_logger())

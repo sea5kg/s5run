@@ -39,6 +39,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <set>
 #include "s5run_schema_options.h"
 
 namespace s5run {
@@ -83,13 +84,14 @@ class schema {
 public:
   schema();
   std::string client_version = "0.0.0";
-  schema_cpp_options cpp98 = {"cpp98"};
-  schema_cpp_options cpp11 = {"cpp11"};
+  std::set<std::string> known_languages() const;
+  std::shared_ptr<schema_options> options(const std::string &lang);
+  std::shared_ptr<schema_cpp_options> cpp98() const;
+  std::shared_ptr<schema_cpp_options> cpp11() const;
   std::shared_ptr<schema_go_options> golang() const;
-  schema_py_options py = {"py"};
-  schema_java_options java21 = {"java11"};
-  schema_java_options java17 = {"java17"};
-  schema_java_options java11 = {"java21"};
+  std::shared_ptr<schema_py_options> py() const;
+  std::shared_ptr<schema_java_options> options_java(const std::string &lang) const;
+
   std::vector<schema_function> functions;
   std::vector<schema_class> classes;
 

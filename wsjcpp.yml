@@ -24,7 +24,12 @@ resources:
   files:
     - filepath: "./data/config.yml"
       size: 266
-      pack-as: "binary"
+      pack-as: "text"
       modified: 1795206571
       sha1: "8662c70457f85f3b686e300eb38f45a373aa0b30"
+    - filepath: "./s5run-schema.json"
+      size: 4018
+      pack-as: "text"
+      modified: 1795485448
+      sha1: "762b6447b4799ccec6b85b5e63cb93f6f3fc320a"
 

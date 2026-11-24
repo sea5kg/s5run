@@ -1044,7 +1044,7 @@ std::vector<std::string> generator_python::generate(const schema &s,
   std::vector<std::string> written;
   ::mkdir(output_dir.c_str(), 0755);
 
-  std::string module = s.py.get_module_name();
+  std::string module = s.py()->get_module_name();
 
   std::string out;
   out += "# AUTO-GENERATED. DO NOT EDIT.\n";

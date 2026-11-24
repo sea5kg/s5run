@@ -60,8 +60,7 @@ enum java_flavor {
 };
 
 static bool j_is_scalar(const std::string &t) {
-  return t == "bool" || t == "int" || t == "uint" || t == "float" ||
-         t == "double" || t == "string" || t == "byte";
+  return t == "bool" || t == "int" || t == "uint" || t == "float" || t == "double" || t == "string" || t == "byte";
 }
 
 static bool j_is_void(const std::string &t) {
@@ -85,19 +84,28 @@ static bool j_has_convert(const std::vector<schema_argument> &args) {
 }
 
 static std::string j_scalar(const std::string &t) {
-  if (t == "bool") return "boolean";
-  if (t == "int" || t == "uint") return "long";
-  if (t == "float" || t == "double") return "double";
-  if (t == "string") return "String";
-  if (t == "byte") return "byte";
+  if (t == "bool")
+    return "boolean";
+  if (t == "int" || t == "uint")
+    return "long";
+  if (t == "float" || t == "double")
+    return "double";
+  if (t == "string")
+    return "String";
+  if (t == "byte")
+    return "byte";
   return t;
 }
 
 static std::string j_boxed(const std::string &t) {
-  if (t == "long") return "Long";
-  if (t == "boolean") return "Boolean";
-  if (t == "double") return "Double";
-  if (t == "byte") return "Byte";
+  if (t == "long")
+    return "Long";
+  if (t == "boolean")
+    return "Boolean";
+  if (t == "double")
+    return "Double";
+  if (t == "byte")
+    return "Byte";
   return t;
 }
 
@@ -113,33 +121,48 @@ static std::string j_read_expr(const std::string &t);
 
 static std::string j_suffix(const std::string &t) {
   if (j_is_scalar(t)) {
-    if (t == "bool") return "Bool";
-    if (t == "int" || t == "uint") return "Long";
-    if (t == "float" || t == "double") return "Double";
-    if (t == "string") return "Str";
-    if (t == "byte") return "Byte";
+    if (t == "bool")
+      return "Bool";
+    if (t == "int" || t == "uint")
+      return "Long";
+    if (t == "float" || t == "double")
+      return "Double";
+    if (t == "string")
+      return "Str";
+    if (t == "byte")
+      return "Byte";
   }
   return "Of" + j_suffix(j_array_inner(t));
 }
 
 static std::string j_read_expr(const std::string &t) {
   if (j_is_scalar(t)) {
-    if (t == "int" || t == "uint") return "r.readLongInt()";
-    if (t == "bool") return "r.readBool()";
-    if (t == "float" || t == "double") return "r.readDouble()";
-    if (t == "string") return "r.strValue()";
-    if (t == "byte") return "r.readByteNum()";
+    if (t == "int" || t == "uint")
+      return "r.readLongInt()";
+    if (t == "bool")
+      return "r.readBool()";
+    if (t == "float" || t == "double")
+      return "r.readDouble()";
+    if (t == "string")
+      return "r.strValue()";
+    if (t == "byte")
+      return "r.readByteNum()";
   }
   return "Wire.readList" + j_suffix(t) + "(r)";
 }
 
 static std::string j_write_stmt(const std::string &t, const std::string &expr) {
   if (j_is_scalar(t)) {
-    if (t == "int" || t == "uint") return "w.int64(" + expr + ");";
-    if (t == "bool") return "w.boolValue(" + expr + ");";
-    if (t == "float" || t == "double") return "w.f64Value(" + expr + ");";
-    if (t == "string") return "w.strValue(" + expr + ");";
-    if (t == "byte") return "w.byteValue((int) " + expr + ");";
+    if (t == "int" || t == "uint")
+      return "w.int64(" + expr + ");";
+    if (t == "bool")
+      return "w.boolValue(" + expr + ");";
+    if (t == "float" || t == "double")
+      return "w.f64Value(" + expr + ");";
+    if (t == "string")
+      return "w.strValue(" + expr + ");";
+    if (t == "byte")
+      return "w.byteValue((int) " + expr + ");";
   }
   return "Wire.writeList" + j_suffix(t) + "(w, " + expr + ");";
 }
@@ -219,8 +242,7 @@ static bool needs_refs(const schema &s) {
   return false;
 }
 
-static std::string j_replace_all(std::string s, const std::string &from,
-                                 const std::string &to) {
+static std::string j_replace_all(std::string s, const std::string &from, const std::string &to) {
   size_t pos = 0;
   while ((pos = s.find(from, pos)) != std::string::npos) {
     s.replace(pos, from.size(), to);
@@ -651,71 +673,72 @@ public interface Value {
 static std::string run_result_file_snippet(java_flavor f) {
   std::string head, fail_line, tail;
   if (f == JAVA_21 || f == JAVA_17) {
-    head =
-      "public record RunResult(\n"
-      "        boolean hasError,\n"
-      "        String error,\n"
-      "        int errorLine,\n"
-      "        long durationMs,\n"
-      "        Value value) {\n";
+    head = "public record RunResult(\n"
+           "        boolean hasError,\n"
+           "        String error,\n"
+           "        int errorLine,\n"
+           "        long durationMs,\n"
+           "        Value value) {\n";
     fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new Value.Null());";
     tail = "}\n";
   } else {
-    head =
-      "public final class RunResult {\n"
-      "    private final boolean hasError;\n"
-      "    private final String error;\n"
-      "    private final int errorLine;\n"
-      "    private final long durationMs;\n"
-      "    private final Value value;\n"
-      "\n"
-      "    public RunResult(boolean hasError, String error, int errorLine, long durationMs, Value value) {\n"
-      "        this.hasError = hasError;\n"
-      "        this.error = error;\n"
-      "        this.errorLine = errorLine;\n"
-      "        this.durationMs = durationMs;\n"
-      "        this.value = value;\n"
-      "    }\n"
-      "\n"
-      "    public boolean hasError() { return hasError; }\n"
-      "    public String error() { return error; }\n"
-      "    public int errorLine() { return errorLine; }\n"
-      "    public long durationMs() { return durationMs; }\n"
-      "    public Value value() { return value; }\n";
+    head = "public final class RunResult {\n"
+           "    private final boolean hasError;\n"
+           "    private final String error;\n"
+           "    private final int errorLine;\n"
+           "    private final long durationMs;\n"
+           "    private final Value value;\n"
+           "\n"
+           "    public RunResult(boolean hasError, String error, int errorLine, long durationMs, Value value) {\n"
+           "        this.hasError = hasError;\n"
+           "        this.error = error;\n"
+           "        this.errorLine = errorLine;\n"
+           "        this.durationMs = durationMs;\n"
+           "        this.value = value;\n"
+           "    }\n"
+           "\n"
+           "    public boolean hasError() { return hasError; }\n"
+           "    public String error() { return error; }\n"
+           "    public int errorLine() { return errorLine; }\n"
+           "    public long durationMs() { return durationMs; }\n"
+           "    public Value value() { return value; }\n";
     fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, Value.Null.INSTANCE);";
     tail = "}\n";
   }
-  return "\n" + head + "\n"
-    "    public static RunResult ok(Value value, long durationMs) {\n"
-    "        return new RunResult(false, \"\", 0, durationMs, value);\n"
-    "    }\n"
-    "\n"
-    "    public static RunResult fail(String error, long durationMs) {\n"
-    "        String msg = error == null ? \"unknown error\" : error;\n"
-    + fail_line + "\n"
-    "    }\n"
-    "\n"
-    "    static int parseErrorLine(String error) {\n"
-    "        if (error == null) return 0;\n"
-    "        int pos = 0;\n"
-    "        while (pos < error.length()) {\n"
-    "            int colon = error.indexOf(':', pos);\n"
-    "            if (colon < 0) return 0;\n"
-    "            int p1 = colon + 1;\n"
-    "            if (p1 >= error.length() || !Character.isDigit(error.charAt(p1))) {\n"
-    "                pos = p1;\n"
-    "                continue;\n"
-    "            }\n"
-    "            int p2 = p1;\n"
-    "            while (p2 < error.length() && Character.isDigit(error.charAt(p2))) p2++;\n"
-    "            if (p2 + 1 < error.length() && error.charAt(p2) == ':' && Character.isDigit(error.charAt(p2 + 1))) {\n"
-    "                return Integer.parseInt(error.substring(p1, p2));\n"
-    "            }\n"
-    "            pos = p2;\n"
-    "        }\n"
-    "        return 0;\n"
-    "    }\n"
-    + tail;
+  return "\n" + head +
+         "\n"
+         "    public static RunResult ok(Value value, long durationMs) {\n"
+         "        return new RunResult(false, \"\", 0, durationMs, value);\n"
+         "    }\n"
+         "\n"
+         "    public static RunResult fail(String error, long durationMs) {\n"
+         "        String msg = error == null ? \"unknown error\" : error;\n" +
+         fail_line +
+         "\n"
+         "    }\n"
+         "\n"
+         "    static int parseErrorLine(String error) {\n"
+         "        if (error == null) return 0;\n"
+         "        int pos = 0;\n"
+         "        while (pos < error.length()) {\n"
+         "            int colon = error.indexOf(':', pos);\n"
+         "            if (colon < 0) return 0;\n"
+         "            int p1 = colon + 1;\n"
+         "            if (p1 >= error.length() || !Character.isDigit(error.charAt(p1))) {\n"
+         "                pos = p1;\n"
+         "                continue;\n"
+         "            }\n"
+         "            int p2 = p1;\n"
+         "            while (p2 < error.length() && Character.isDigit(error.charAt(p2))) p2++;\n"
+         "            if (p2 + 1 < error.length() && error.charAt(p2) == ':' && Character.isDigit(error.charAt(p2 + "
+         "1))) {\n"
+         "                return Integer.parseInt(error.substring(p1, p2));\n"
+         "            }\n"
+         "            pos = p2;\n"
+         "        }\n"
+         "        return 0;\n"
+         "    }\n" +
+         tail;
 }
 
 static std::string dispatch_case(java_flavor f, const std::string &name) {
@@ -745,7 +768,8 @@ static std::string pending_decls(java_flavor f) {
          "        final String name;\n"
          "        final int thisId;\n"
          "        final List<String> methods;\n"
-         "        PendingObject(String name, int thisId, List<String> methods) { this.name = name; this.thisId = thisId; this.methods = methods; }\n"
+         "        PendingObject(String name, int thisId, List<String> methods) { this.name = name; this.thisId = "
+         "thisId; this.methods = methods; }\n"
          "    }";
 }
 
@@ -788,23 +812,34 @@ static std::string generate_wire(java_flavor f, const schema &s) {
     std::string inner = j_array_inner(type_str);
     std::string sfx = j_suffix(type_str);
     std::string inner_t = j_boxed(type_to_java(inner));
-    list_helpers += "\n    public static List<" + inner_t + "> readList" + sfx + "(Reader r) {\n"
-      "        if (r.u8() != T_ARRAY) throw new RuntimeException(\"wire: expected array\");\n"
-      "        int n = (int) r.u32();\n"
-      "        List<" + inner_t + "> out = new ArrayList<>(n);\n"
-      "        for (int i = 0; i < n; i++) {\n"
-      "            out.add(" + j_read_expr(inner) + ");\n"
-      "        }\n"
-      "        return out;\n"
-      "    }\n"
-      "\n"
-      "    public static void writeList" + sfx + "(Writer w, List<" + inner_t + "> v) {\n"
-      "        w.u8(T_ARRAY);\n"
-      "        w.u32(v.size());\n"
-      "        for (" + type_to_java(inner) + " e : v) {\n"
-      "            " + j_write_stmt(inner, "e") + "\n"
-      "        }\n"
-      "    }";
+    list_helpers += "\n    public static List<" + inner_t + "> readList" + sfx +
+                    "(Reader r) {\n"
+                    "        if (r.u8() != T_ARRAY) throw new RuntimeException(\"wire: expected array\");\n"
+                    "        int n = (int) r.u32();\n"
+                    "        List<" +
+                    inner_t +
+                    "> out = new ArrayList<>(n);\n"
+                    "        for (int i = 0; i < n; i++) {\n"
+                    "            out.add(" +
+                    j_read_expr(inner) +
+                    ");\n"
+                    "        }\n"
+                    "        return out;\n"
+                    "    }\n"
+                    "\n"
+                    "    public static void writeList" +
+                    sfx + "(Writer w, List<" + inner_t +
+                    "> v) {\n"
+                    "        w.u8(T_ARRAY);\n"
+                    "        w.u32(v.size());\n"
+                    "        for (" +
+                    type_to_java(inner) +
+                    " e : v) {\n"
+                    "            " +
+                    j_write_stmt(inner, "e") +
+                    "\n"
+                    "        }\n"
+                    "    }";
   }
 
   return R"JAVA(import java.io.ByteArrayOutputStream;
@@ -908,7 +943,8 @@ public final class Wire {
         public long i64() { return u64(); }
         public int readI8() { return (byte) u8(); }
         public int readI16() { return (short) u16(); }
-)JAVA" + read_long_int_snippet(f) + R"JAVA(
+)JAVA" + read_long_int_snippet(f) +
+         R"JAVA(
         public byte readByteNum() {
             if (u8() != T_UINT8) throw new RuntimeException("wire: expected a byte");
             return (byte) u8();
@@ -926,10 +962,11 @@ public final class Wire {
             return str();
         }
 
-)JAVA" + str_switch_snippet(f) + R"JAVA(
+)JAVA" + str_switch_snippet(f) +
+         R"JAVA(
     }
-)JAVA" + encode_value_snippet(f) + "\n\n" + decode_value_snippet(f) + "\n" + value_to_string_snippet(f) + "\n" +
-  list_helpers + R"JAVA(
+)JAVA" + encode_value_snippet(f) +
+         "\n\n" + decode_value_snippet(f) + "\n" + value_to_string_snippet(f) + "\n" + list_helpers + R"JAVA(
     private Wire() {}
 }
 )JAVA";
@@ -953,14 +990,19 @@ static std::string generate_schema_class(const schema_class &c) {
       names += ", ";
     names += "\"" + m.name + "\"";
   }
-  return "\npublic interface " + c.name + " extends S5RunObject {\n"
+  return "\npublic interface " + c.name +
+         " extends S5RunObject {\n"
          "    @Override\n"
-         "    default String s5runClassName() { return \"" + c.name + "\"; }\n"
+         "    default String s5runClassName() { return \"" +
+         c.name +
+         "\"; }\n"
          "\n"
          "    @Override\n"
-         "    default List<String> s5runMethodNames() { return List.of(" + names + "); }\n"
-         "\n"
-         + methods + "}\n";
+         "    default List<String> s5runMethodNames() { return List.of(" +
+         names +
+         "); }\n"
+         "\n" +
+         methods + "}\n";
 }
 
 static std::string generate_schema_function(const schema_function &f) {
@@ -971,11 +1013,16 @@ static std::string generate_schema_function(const schema_function &f) {
       args += ", ";
     args += type_to_java(a.type) + " " + a.name;
   }
-  return "\npublic interface GlobalFunction_" + f.name + " extends S5RunFunction {\n"
+  return "\npublic interface GlobalFunction_" + f.name +
+         " extends S5RunFunction {\n"
          "    @Override\n"
-         "    default String s5runFunctionName() { return \"" + f.name + "\"; }\n"
+         "    default String s5runFunctionName() { return \"" +
+         f.name +
+         "\"; }\n"
          "\n"
-         "    " + ret + " execute(" + args + ");\n"
+         "    " +
+         ret + " execute(" + args +
+         ");\n"
          "}\n";
 }
 
@@ -985,8 +1032,8 @@ static std::string generate_context(java_flavor f, const schema &s) {
     for (const auto &m : c.methods) {
       if (!method_handlers.empty())
         method_handlers += "\n";
-      method_handlers += "                handlers.put(\"" + m.name + "\", (cbId, r) -> cbm_" + c.name +
-                         "_" + m.name + "(cbId, r));";
+      method_handlers +=
+        "                handlers.put(\"" + m.name + "\", (cbId, r) -> cbm_" + c.name + "_" + m.name + "(cbId, r));";
     }
   }
 
@@ -1007,19 +1054,27 @@ static std::string generate_context(java_flavor f, const schema &s) {
     if (j_has_convert(f.arguments)) {
       head = "";
     } else {
-      head = "            if (r.u32() != " + std::to_string(f.arguments.size()) +
-             ") throw new RuntimeException(\"" + f.name + ": wrong argument count\");";
+      head = "            if (r.u32() != " + std::to_string(f.arguments.size()) + ") throw new RuntimeException(\"" +
+             f.name + ": wrong argument count\");";
     }
-    fn_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cb_" + f.name + "(int cbId, Wire.Reader r) throws Exception {\n"
-      "        " + head + "\n"
-      "        " + decode + "\n"
-      "        " + call_res + "\n"
-      "        Wire.Writer w = new Wire.Writer();\n"
-      "        w.i32(cbId);\n"
-      "        w.u8(1);\n"
-      + encode + "\n"
-      "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
-      "    }";
+    fn_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cb_" + f.name +
+                    "(int cbId, Wire.Reader r) throws Exception {\n"
+                    "        " +
+                    head +
+                    "\n"
+                    "        " +
+                    decode +
+                    "\n"
+                    "        " +
+                    call_res +
+                    "\n"
+                    "        Wire.Writer w = new Wire.Writer();\n"
+                    "        w.i32(cbId);\n"
+                    "        w.u8(1);\n" +
+                    encode +
+                    "\n"
+                    "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
+                    "    }";
     first_cb = false;
   }
 
@@ -1064,17 +1119,23 @@ static std::string generate_context(java_flavor f, const schema &s) {
       }
       m_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cbm_" + c.name + "_" + m.name +
                      "(int cbId, Wire.Reader r) throws Exception {\n"
-        "        " + head + "\n"
-        "        int thisId = (int) r.readLongInt();\n"
-        "        " + c.name + " obj = instanceById(\"" + c.name + "\", thisId);\n"
-        + decode + "\n"
-        "        " + call_res + "\n"
-        "        Wire.Writer w = new Wire.Writer();\n"
-        "        w.i32(cbId);\n"
-        "        w.u8(1);\n"
-        + encode + "\n"
-        "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
-        "    }";
+                     "        " +
+                     head +
+                     "\n"
+                     "        int thisId = (int) r.readLongInt();\n"
+                     "        " +
+                     c.name + " obj = instanceById(\"" + c.name + "\", thisId);\n" + decode +
+                     "\n"
+                     "        " +
+                     call_res +
+                     "\n"
+                     "        Wire.Writer w = new Wire.Writer();\n"
+                     "        w.i32(cbId);\n"
+                     "        w.u8(1);\n" +
+                     encode +
+                     "\n"
+                     "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
+                     "    }";
       first_cb = false;
     }
   }
@@ -1083,8 +1144,11 @@ static std::string generate_context(java_flavor f, const schema &s) {
   for (const auto &f : s.functions) {
     if (!as_helpers.empty())
       as_helpers += "\n";
-    as_helpers += "    private GlobalFunction_" + f.name + " as" + f.name + "() {\n"
-                  "        return (GlobalFunction_" + f.name + ") functions.get(\"" + f.name + "\");\n"
+    as_helpers += "    private GlobalFunction_" + f.name + " as" + f.name +
+                  "() {\n"
+                  "        return (GlobalFunction_" +
+                  f.name + ") functions.get(\"" + f.name +
+                  "\");\n"
                   "    }";
   }
 
@@ -1475,14 +1539,21 @@ public final class Context implements AutoCloseable {
 
 class generator_java : public IGenerator {
 public:
-  generator_java(java_flavor flavor) : m_flavor(flavor) {
+  generator_java(const std::string &java_xx) : m_java_xx(java_xx) {
+    if (m_java_xx == "java11") {
+      m_flavor = JAVA_11;
+    } else if (m_java_xx == "java17") {
+      m_flavor = JAVA_17;
+    } else if (m_java_xx == "java21") {
+      m_flavor = JAVA_21;
+    }
   }
 
-  std::vector<std::string> generate(const schema &s,
-                                     const std::string &output_dir) override;
+  std::vector<std::string> generate(const schema &s, const std::string &output_dir) override;
 
 private:
   java_flavor m_flavor;
+  std::string m_java_xx;
 };
 
 static std::string trim(const std::string &s) {
@@ -1503,9 +1574,13 @@ static void mkdir_p(const std::string &path) {
   ::mkdir(path.c_str(), 0755);
 }
 
-static void write_java_file(const std::string &pkg_dir, const std::string &pkg,
-                            const std::string &name, const std::string &body,
-                            std::vector<std::string> &written) {
+static void write_java_file(
+  const std::string &pkg_dir,
+  const std::string &pkg,
+  const std::string &name,
+  const std::string &body,
+  std::vector<std::string> &written
+) {
   std::string path = pkg_dir + "/" + name + ".java";
   std::ofstream f(path.c_str());
   f << "// AUTO-GENERATED. DO NOT EDIT.\n";
@@ -1517,12 +1592,11 @@ static void write_java_file(const std::string &pkg_dir, const std::string &pkg,
   written.push_back(path);
 }
 
-std::vector<std::string> generator_java::generate(const schema &s,
-                                                  const std::string &output_dir) {
+std::vector<std::string> generator_java::generate(const schema &s, const std::string &output_dir) {
+  auto options = s.options_java(m_java_xx);
+
   std::vector<std::string> written;
-  std::string pkg = (m_flavor == JAVA_21) ? s.java21.get_package_name()
-                   : (m_flavor == JAVA_17) ? s.java17.get_package_name()
-                   : s.java11.get_package_name();
+  std::string pkg = options->get_package_name();
 
   std::string pkg_dir = output_dir;
   if (!pkg.empty()) {
@@ -1536,77 +1610,98 @@ std::vector<std::string> generator_java::generate(const schema &s,
 
   write_java_file(pkg_dir, pkg, "Wire", generate_wire(m_flavor, s), written);
   write_java_file(pkg_dir, pkg, "Value", value_file_snippet(m_flavor), written);
-  write_java_file(pkg_dir, pkg, "S5RunObject",
-                  "\npublic interface S5RunObject {\n"
-                  "    String s5runClassName();\n"
-                  "    List<String> s5runMethodNames();\n"
-                  "}\n", written);
-  write_java_file(pkg_dir, pkg, "S5RunFunction",
-                  "\npublic interface S5RunFunction {\n"
-                  "    String s5runFunctionName();\n"
-                  "}\n", written);
+  write_java_file(
+    pkg_dir,
+    pkg,
+    "S5RunObject",
+    "\npublic interface S5RunObject {\n"
+    "    String s5runClassName();\n"
+    "    List<String> s5runMethodNames();\n"
+    "}\n",
+    written
+  );
+  write_java_file(
+    pkg_dir,
+    pkg,
+    "S5RunFunction",
+    "\npublic interface S5RunFunction {\n"
+    "    String s5runFunctionName();\n"
+    "}\n",
+    written
+  );
   for (const auto &c : s.classes)
     write_java_file(pkg_dir, pkg, c.name, generate_schema_class(c), written);
   for (const auto &f : s.functions)
-    write_java_file(pkg_dir, pkg, "GlobalFunction_" + f.name,
-                    generate_schema_function(f), written);
-  write_java_file(pkg_dir, pkg, "RemoteServerInfo",
-                  "\npublic final class RemoteServerInfo {\n"
-                  "    private String address = \"\";\n"
-                  "    private String apiKey = \"\";\n"
-                  "    private String host = \"\";\n"
-                  "    private int port;\n"
-                  "\n"
-                  "    public RemoteServerInfo address(String address) {\n"
-                  "        final String prefix = \"s5run://\";\n"
-                  "        if (!address.startsWith(prefix)) {\n"
-                  "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
-                  "        }\n"
-                  "        String rest = address.substring(prefix.length());\n"
-                  "        int colon = rest.lastIndexOf(':');\n"
-                  "        if (colon <= 0 || colon + 1 >= rest.length()) {\n"
-                  "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
-                  "        }\n"
-                  "        this.address = address;\n"
-                  "        this.host = rest.substring(0, colon);\n"
-                  "        this.port = Integer.parseInt(rest.substring(colon + 1));\n"
-                  "        return this;\n"
-                  "    }\n"
-                  "\n"
-                  "    public RemoteServerInfo apiKey(String apiKey) {\n"
-                  "        this.apiKey = apiKey;\n"
-                  "        return this;\n"
-                  "    }\n"
-                  "\n"
-                  "    public String getAddress() { return address; }\n"
-                  "    public String getApiKey() { return apiKey; }\n"
-                  "    public String getHost() { return host; }\n"
-                  "    public int getPort() { return port; }\n"
-                  "}\n", written);
+    write_java_file(pkg_dir, pkg, "GlobalFunction_" + f.name, generate_schema_function(f), written);
+  write_java_file(
+    pkg_dir,
+    pkg,
+    "RemoteServerInfo",
+    "\npublic final class RemoteServerInfo {\n"
+    "    private String address = \"\";\n"
+    "    private String apiKey = \"\";\n"
+    "    private String host = \"\";\n"
+    "    private int port;\n"
+    "\n"
+    "    public RemoteServerInfo address(String address) {\n"
+    "        final String prefix = \"s5run://\";\n"
+    "        if (!address.startsWith(prefix)) {\n"
+    "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
+    "        }\n"
+    "        String rest = address.substring(prefix.length());\n"
+    "        int colon = rest.lastIndexOf(':');\n"
+    "        if (colon <= 0 || colon + 1 >= rest.length()) {\n"
+    "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
+    "        }\n"
+    "        this.address = address;\n"
+    "        this.host = rest.substring(0, colon);\n"
+    "        this.port = Integer.parseInt(rest.substring(colon + 1));\n"
+    "        return this;\n"
+    "    }\n"
+    "\n"
+    "    public RemoteServerInfo apiKey(String apiKey) {\n"
+    "        this.apiKey = apiKey;\n"
+    "        return this;\n"
+    "    }\n"
+    "\n"
+    "    public String getAddress() { return address; }\n"
+    "    public String getApiKey() { return apiKey; }\n"
+    "    public String getHost() { return host; }\n"
+    "    public int getPort() { return port; }\n"
+    "}\n",
+    written
+  );
   write_java_file(pkg_dir, pkg, "RunResult", run_result_file_snippet(m_flavor), written);
   write_java_file(pkg_dir, pkg, "Context", generate_context(m_flavor, s), written);
-  write_java_file(pkg_dir, pkg, "ClientVersion",
-                  "\npublic final class ClientVersion {\n"
-                  "    public static final String VERSION = \"" + s.client_version + "\";\n"
-                  "\n"
-                  "    public static String get() {\n"
-                  "        return VERSION;\n"
-                  "    }\n"
-                  "    private ClientVersion() {}\n"
-                  "}\n", written);
+  write_java_file(
+    pkg_dir,
+    pkg,
+    "ClientVersion",
+    "\npublic final class ClientVersion {\n"
+    "    public static final String VERSION = \"" +
+      s.client_version +
+      "\";\n"
+      "\n"
+      "    public static String get() {\n"
+      "        return VERSION;\n"
+      "    }\n"
+      "    private ClientVersion() {}\n"
+      "}\n",
+    written
+  );
   return written;
 }
 
 std::shared_ptr<IGenerator> make_generator_java11() {
-  return std::make_shared<generator_java>(JAVA_11);
+  return std::make_shared<generator_java>("java11");
 }
 
 std::shared_ptr<IGenerator> make_generator_java17() {
-  return std::make_shared<generator_java>(JAVA_17);
+  return std::make_shared<generator_java>("java17");
 }
 
 std::shared_ptr<IGenerator> make_generator_java21() {
-  return std::make_shared<generator_java>(JAVA_21);
+  return std::make_shared<generator_java>("java21");
 }
 
 } // namespace generators

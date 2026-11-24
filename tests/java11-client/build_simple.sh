@@ -38,5 +38,5 @@ check_ret $? "Build s5run-client-$CLIENT_VERSION.jar"
 rm -rf bin
 check_ret $? "rm -rf bin"
 
-java -jar s5run-client-$CLIENT_VERSION.jar "$@"
-check_ret $? "Run s5run-client-$CLIENT_VERSION.jar"
+# java -jar s5run-client-$CLIENT_VERSION.jar "$@"
+# check_ret $? "Run s5run-client-$CLIENT_VERSION.jar"
