@@ -7,17 +7,17 @@ import java.io.*;
 import java.net.Socket;
 import java.util.*;
 
-public final class Context implements AutoCloseable {
+public final class S5RunContext implements AutoCloseable {
     @FunctionalInterface
     interface ThrowingHandler {
-        void handle(int cbId, Wire.Reader r) throws Exception;
+        void handle(int cbId, S5RunWire.Reader r) throws Exception;
     }
 
     private final Map<String, ThrowingHandler> handlers = new HashMap<>();
     private final Map<String, S5RunFunction> functions = new HashMap<>();
     private final Map<String, Map<Integer, S5RunObject>> instances = new HashMap<>();
     private final Map<String, List<String>> knownClasses = new HashMap<>();
-    private final List<RemoteServerInfo> servers = new ArrayList<>();
+    private final List<S5RunRemoteServerInfo> servers = new ArrayList<>();
     private final List<PendingType> pendingTypes = new ArrayList<>();
     private final List<PendingObject> pendingObjects = new ArrayList<>();
     private final List<String> pendingFunctions = new ArrayList<>();
@@ -30,7 +30,7 @@ public final class Context implements AutoCloseable {
     private record PendingType(String name, List<String> methods) {}
     private record PendingObject(String name, int thisId, List<String> methods) {}
 
-    public Context() {
+    public S5RunContext() {
                 handlers.put("GetSize", (cbId, r) -> cbm_File_GetSize(cbId, r));
                 handlers.put("ReadBytes", (cbId, r) -> cbm_File_ReadBytes(cbId, r));
                 handlers.put("GetName", (cbId, r) -> cbm_File_GetName(cbId, r));
@@ -45,25 +45,25 @@ public final class Context implements AutoCloseable {
     }
 
     public static String clientVersion() {
-        return ClientVersion.VERSION;
+        return S5RunClientVersion.VERSION;
     }
 
-    public Context setScript(String script) {
+    public S5RunContext setScript(String script) {
         this.script = script;
         return this;
     }
 
-    public Context addServer(RemoteServerInfo server) {
+    public S5RunContext addServer(S5RunRemoteServerInfo server) {
         Objects.requireNonNull(server, "server");
         servers.add(server);
         return this;
     }
 
-    public Context addClass(S5RunObject sample) {
+    public S5RunContext addClass(S5RunObject sample) {
         return addClass(sample.s5runClassName(), sample.s5runMethodNames());
     }
 
-    private Context addClass(String name, List<String> methods) {
+    private S5RunContext addClass(String name, List<String> methods) {
         if (socket != null) {
             try {
                 sendRegisterType(name, methods);
@@ -76,7 +76,7 @@ public final class Context implements AutoCloseable {
         return this;
     }
 
-    public Context addObject(S5RunObject obj) {
+    public S5RunContext addObject(S5RunObject obj) {
         String cls = obj.s5runClassName();
         int id = ++nextThisId;
         instances.computeIfAbsent(cls, k -> new HashMap<>()).put(id, obj);
@@ -92,7 +92,7 @@ public final class Context implements AutoCloseable {
         return this;
     }
 
-    public Context addFunction(S5RunFunction fn) {
+    public S5RunContext addFunction(S5RunFunction fn) {
         functions.put(fn.s5runFunctionName(), fn);
         String name = fn.s5runFunctionName();
         handlers.put(name, (cbId, r) -> dispatchByName(name, cbId, r));
@@ -112,34 +112,34 @@ public final class Context implements AutoCloseable {
     // public entry point
     // ------------------------------------------------------------------
 
-    public static RunResult runScript(Context ctx, String entry, List<S5RunVariable> args) {
+    public static S5RunResult runScript(S5RunContext ctx, String entry, List<S5RunVariable> args) {
         long started = System.currentTimeMillis();
         try {
             ctx.connect();
             ctx.flushPending();
-            Wire.Writer w = new Wire.Writer();
+            S5RunWire.Writer w = new S5RunWire.Writer();
             w.str(ctx.script);
             w.str(entry);
             w.u32(args.size());
-            for (S5RunVariable a : args) Wire.encodeValue(w, a);
-            ctx.sendMessage(Wire.M_EXEC_REQ, w.toByteArray());
+            for (S5RunVariable a : args) S5RunWire.encodeValue(w, a);
+            ctx.sendMessage(S5RunWire.M_EXEC_REQ, w.toByteArray());
             while (true) {
                 Frame f = ctx.readFrame();
-                if (f.msgType == Wire.M_CALLBACK_REQ) {
+                if (f.msgType == S5RunWire.M_CALLBACK_REQ) {
                     ctx.dispatchCallback(f.body);
                     continue;
                 }
-                if (f.msgType == Wire.M_EXEC_RESP) {
-                    Wire.Reader r = new Wire.Reader(f.body);
+                if (f.msgType == S5RunWire.M_EXEC_RESP) {
+                    S5RunWire.Reader r = new S5RunWire.Reader(f.body);
                     if (r.u8() == 0) {
                         throw new RuntimeException(r.str());
                     }
-                    return RunResult.ok(Wire.decodeValue(r), System.currentTimeMillis() - started);
+                    return S5RunResult.ok(S5RunWire.decodeValue(r), System.currentTimeMillis() - started);
                 }
                 throw new RuntimeException("s5run: unexpected message type");
             }
         } catch (Exception e) {
-            return RunResult.fail(e.getMessage(), System.currentTimeMillis() - started);
+            return S5RunResult.fail(e.getMessage(), System.currentTimeMillis() - started);
         }
     }
 
@@ -148,86 +148,86 @@ public final class Context implements AutoCloseable {
     // ------------------------------------------------------------------
 
 
-    private void cb_GetFile(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetFile(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("GetFile: wrong argument count");
                     String filepath = r.strValue();
         var res = asGetFile().execute(filepath);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             int objId = registerInstance(res);
-            w.u8(Wire.T_REF);
+            w.u8(S5RunWire.T_REF);
             w.i32(objId);
             w.str("File");
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_GetFileSize(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetFileSize(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("GetFileSize: wrong argument count");
                     int refId_file = readRefId(r);
             File file = instanceById("File", refId_file);
         var res = asGetFileSize().execute(file);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.int64(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_GetTimeNow(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetTimeNow(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 0) throw new RuntimeException("GetTimeNow: wrong argument count");
         
         var res = asGetTimeNow().execute();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.int64(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_HasFile(int cbId, Wire.Reader r) throws Exception {
+    private void cb_HasFile(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("HasFile: wrong argument count");
                     String filepath = r.strValue();
         var res = asHasFile().execute(filepath);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.boolValue(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_GetFileList(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetFileList(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("GetFileList: wrong argument count");
                     String filepath = r.strValue();
         var res = asGetFileList().execute(filepath);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            Wire.writeListOfStr(w, res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            S5RunWire.writeListOfStr(w, res);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_GetOpenedFiles(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetOpenedFiles(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 0) throw new RuntimeException("GetOpenedFiles: wrong argument count");
         
         var res = asGetOpenedFiles().execute();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_ARRAY);
+            w.u8(S5RunWire.T_ARRAY);
             w.u32(res.size());
             for (File item : res) {
                 int id = registerInstance(item);
-                w.u8(Wire.T_REF);
+                w.u8(S5RunWire.T_REF);
                 w.i32(id);
                 w.str("File");
             }
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_CloseFiles(int cbId, Wire.Reader r) throws Exception {
+    private void cb_CloseFiles(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("CloseFiles: wrong argument count");
-                    if (r.u8() != Wire.T_ARRAY) throw new RuntimeException("wire: expected array");
+                    if (r.u8() != S5RunWire.T_ARRAY) throw new RuntimeException("wire: expected array");
             int cnt_files = (int) r.u32();
             List<File> files = new ArrayList<>(cnt_files);
             for (int i = 0; i < cnt_files; i++) {
@@ -236,115 +236,115 @@ public final class Context implements AutoCloseable {
                 files.add(obj);
             }
         asCloseFiles().execute(files);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_GetPi(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetPi(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 0) throw new RuntimeException("GetPi: wrong argument count");
         
         var res = asGetPi().execute();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.f64Value(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cb_GetServerPort(int cbId, Wire.Reader r) throws Exception {
+    private void cb_GetServerPort(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 0) throw new RuntimeException("GetServerPort: wrong argument count");
         
         var res = asGetServerPort().execute();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.int64(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
 
-    private void cbm_File_GetSize(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_File_GetSize(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("File.GetSize: wrong argument count");
         int thisId = (int) r.readLongInt();
         File obj = instanceById("File", thisId);
 
         var res = obj.GetSize();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.int64(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_File_ReadBytes(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_File_ReadBytes(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 2) throw new RuntimeException("File.ReadBytes: wrong argument count");
         int thisId = (int) r.readLongInt();
         File obj = instanceById("File", thisId);
             long readBytes = r.readLongInt();
         var res = obj.ReadBytes(readBytes);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            Wire.writeListOfByte(w, res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            S5RunWire.writeListOfByte(w, res);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_File_GetName(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_File_GetName(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("File.GetName: wrong argument count");
         int thisId = (int) r.readLongInt();
         File obj = instanceById("File", thisId);
 
         var res = obj.GetName();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.strValue(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_File_GetBufferSize(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_File_GetBufferSize(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 1) throw new RuntimeException("File.GetBufferSize: wrong argument count");
         int thisId = (int) r.readLongInt();
         File obj = instanceById("File", thisId);
 
         var res = obj.GetBufferSize();
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
             w.int64(res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_File_SetBufferSize(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_File_SetBufferSize(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 2) throw new RuntimeException("File.SetBufferSize: wrong argument count");
         int thisId = (int) r.readLongInt();
         File obj = instanceById("File", thisId);
             long bufferSize = r.readLongInt();
         obj.SetBufferSize(bufferSize);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_FileSystem_GetList(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_FileSystem_GetList(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 2) throw new RuntimeException("FileSystem.GetList: wrong argument count");
         int thisId = (int) r.readLongInt();
         FileSystem obj = instanceById("FileSystem", thisId);
             String filepath = r.strValue();
         var res = obj.GetList(filepath);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            Wire.writeListOfStr(w, res);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            S5RunWire.writeListOfStr(w, res);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_console_log(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_console_log(int cbId, S5RunWire.Reader r) throws Exception {
                     long n = r.u32();
             n -= 1;
         int thisId = (int) r.readLongInt();
@@ -352,16 +352,16 @@ public final class Context implements AutoCloseable {
             long n_ignored = 0;
             List<String> args = new ArrayList<>((int) n);
             for (long i = 0; i < n; i++)
-                args.add(valueToString(Wire.decodeValue(r)));
+                args.add(valueToString(S5RunWire.decodeValue(r)));
         obj.log(args);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_console_warning(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_console_warning(int cbId, S5RunWire.Reader r) throws Exception {
                     long n = r.u32();
             n -= 1;
         int thisId = (int) r.readLongInt();
@@ -369,16 +369,16 @@ public final class Context implements AutoCloseable {
             long n_ignored = 0;
             List<String> args = new ArrayList<>((int) n);
             for (long i = 0; i < n; i++)
-                args.add(valueToString(Wire.decodeValue(r)));
+                args.add(valueToString(S5RunWire.decodeValue(r)));
         obj.warning(args);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_console_error(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_console_error(int cbId, S5RunWire.Reader r) throws Exception {
                     long n = r.u32();
             n -= 1;
         int thisId = (int) r.readLongInt();
@@ -386,40 +386,40 @@ public final class Context implements AutoCloseable {
             long n_ignored = 0;
             List<String> args = new ArrayList<>((int) n);
             for (long i = 0; i < n; i++)
-                args.add(valueToString(Wire.decodeValue(r)));
+                args.add(valueToString(S5RunWire.decodeValue(r)));
         obj.error(args);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_KeyValueStorage_SetValueByKey(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_KeyValueStorage_SetValueByKey(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 3) throw new RuntimeException("KeyValueStorage.SetValueByKey: wrong argument count");
         int thisId = (int) r.readLongInt();
         KeyValueStorage obj = instanceById("KeyValueStorage", thisId);
             String name = r.strValue();
-            S5RunVariable value = Wire.decodeValue(r);
+            S5RunVariable value = S5RunWire.decodeValue(r);
         obj.SetValueByKey(name, value);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
-    private void cbm_KeyValueStorage_GetValueByKey(int cbId, Wire.Reader r) throws Exception {
+    private void cbm_KeyValueStorage_GetValueByKey(int cbId, S5RunWire.Reader r) throws Exception {
                     if (r.u32() != 2) throw new RuntimeException("KeyValueStorage.GetValueByKey: wrong argument count");
         int thisId = (int) r.readLongInt();
         KeyValueStorage obj = instanceById("KeyValueStorage", thisId);
             String name = r.strValue();
         obj.GetValueByKey(name);
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(Wire.T_UNDEFINED);
-        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            w.u8(S5RunWire.T_UNDEFINED);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 
     private GlobalFunction_GetFile asGetFile() {
@@ -450,7 +450,7 @@ public final class Context implements AutoCloseable {
         return (GlobalFunction_GetServerPort) functions.get("GetServerPort");
     }
 
-    private void dispatchByName(String name, int cbId, Wire.Reader r) throws Exception {
+    private void dispatchByName(String name, int cbId, S5RunWire.Reader r) throws Exception {
         switch (name) {
             case "GetFile" -> cb_GetFile(cbId, r);
             case "GetFileSize" -> cb_GetFileSize(cbId, r);
@@ -466,26 +466,26 @@ public final class Context implements AutoCloseable {
     }
 
     private void dispatchCallback(byte[] body) throws Exception {
-        Wire.Reader r = new Wire.Reader(body);
+        S5RunWire.Reader r = new S5RunWire.Reader(body);
         int cbId = r.i32();
         String method = r.str();
         ThrowingHandler handler = handlers.get(method);
         if (handler == null) {
-            Wire.Writer w = new Wire.Writer();
+            S5RunWire.Writer w = new S5RunWire.Writer();
             w.i32(cbId);
             w.u8(0);
             w.str("unknown method: " + method);
-            sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
             return;
         }
         try {
             handler.handle(cbId, r);
         } catch (Exception e) {
-            Wire.Writer w = new Wire.Writer();
+            S5RunWire.Writer w = new S5RunWire.Writer();
             w.i32(cbId);
             w.u8(0);
             w.str(String.valueOf(e.getMessage()));
-            sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
         }
     }
 
@@ -504,15 +504,15 @@ public final class Context implements AutoCloseable {
         return id;
     }
 
-    private int readRefId(Wire.Reader r) {
-        if (r.u8() != Wire.T_REF) throw new RuntimeException("wire: expected an object reference");
+    private int readRefId(S5RunWire.Reader r) {
+        if (r.u8() != S5RunWire.T_REF) throw new RuntimeException("wire: expected an object reference");
         int id = r.i32();
         r.str(); // skip the type name
         return id;
     }
 
     private static String valueToString(S5RunVariable v) {
-        return Wire.valueToString(v);
+        return S5RunWire.valueToString(v);
     }
 
     // ------------------------------------------------------------------
@@ -537,7 +537,7 @@ public final class Context implements AutoCloseable {
             }
             if (bestLoad < 0) throw new RuntimeException("s5run: all servers are unreachable");
         }
-        RemoteServerInfo srv = servers.get(best);
+        S5RunRemoteServerInfo srv = servers.get(best);
         socket = new Socket(srv.getHost(), srv.getPort());
         socket.setTcpNoDelay(true);
         socket.setSoTimeout(10000);
@@ -552,7 +552,7 @@ public final class Context implements AutoCloseable {
         int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
         int msgType = head[4] & 0xFF;
         byte[] body = in.readNBytes(len - 1);
-        if (msgType != Wire.M_SERVER_HELLO || body.length < len - 1)
+        if (msgType != S5RunWire.M_SERVER_HELLO || body.length < len - 1)
             throw new RuntimeException("s5run: expected server hello");
         String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
         String[] parts = text.split(" ");
@@ -564,7 +564,7 @@ public final class Context implements AutoCloseable {
                     + " is not supported (client supports 2)");
     }
 
-    private static long probeServerLoad(RemoteServerInfo server) {
+    private static long probeServerLoad(S5RunRemoteServerInfo server) {
         try (Socket probe = new Socket()) {
             probe.connect(new java.net.InetSocketAddress(server.getHost(), server.getPort()), 2000);
             probe.setTcpNoDelay(true);
@@ -572,14 +572,14 @@ public final class Context implements AutoCloseable {
             OutputStream po = probe.getOutputStream();
             InputStream pi = probe.getInputStream();
             readHello(pi, po);
-            writeFrame(po, Wire.M_STATS_REQ, new byte[0]);
+            writeFrame(po, S5RunWire.M_STATS_REQ, new byte[0]);
             byte[] head = pi.readNBytes(5);
             if (head.length < 5) return -1;
             int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
             int msgType = head[4] & 0xFF;
             byte[] body = pi.readNBytes(len - 1);
-            if (msgType != Wire.M_STATS_RESP || body.length < 16) return -1;
-            Wire.Reader r = new Wire.Reader(body);
+            if (msgType != S5RunWire.M_STATS_RESP || body.length < 16) return -1;
+            S5RunWire.Reader r = new S5RunWire.Reader(body);
             r.u32(); // threads
             long busy = r.u32();
             long queued = r.u32();
@@ -605,38 +605,38 @@ public final class Context implements AutoCloseable {
     }
 
     private void sendRegisterType(String name, List<String> methods) throws Exception {
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
-        sendMessage(Wire.M_REGISTER_TYPE, w.toByteArray());
+        sendMessage(S5RunWire.M_REGISTER_TYPE, w.toByteArray());
         expectRegisterResp("register_type(" + name + ")");
     }
 
     private void sendRegisterObject(String name, int thisId, List<String> methods) throws Exception {
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.i32(thisId);
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
-        sendMessage(Wire.M_REGISTER_OBJ, w.toByteArray());
+        sendMessage(S5RunWire.M_REGISTER_OBJ, w.toByteArray());
         expectRegisterResp("register_object(" + name + ")");
     }
 
     private void sendRegisterFunction(String name) throws Exception {
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
-        sendMessage(Wire.M_REGISTER_FUNC, w.toByteArray());
+        sendMessage(S5RunWire.M_REGISTER_FUNC, w.toByteArray());
         expectRegisterResp("register_function(" + name + ")");
     }
 
     private void expectRegisterResp(String what) throws Exception {
         Frame f = readFrame();
-        if (f.msgType != Wire.M_REGISTER_RESP) {
+        if (f.msgType != S5RunWire.M_REGISTER_RESP) {
             throw new RuntimeException("s5run: " + what + " failed");
         }
-        Wire.Reader r = new Wire.Reader(f.body);
+        S5RunWire.Reader r = new S5RunWire.Reader(f.body);
         if (r.u8() == 0) {
             throw new RuntimeException("s5run: " + what + " error: " + r.str());
         }

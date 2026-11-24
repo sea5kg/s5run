@@ -158,8 +158,8 @@ static std::string j_read_expr(const std::string &t) {
       return "r.readByteNum()";
   }
   if (j_is_dynamic(t))
-    return "Wire.decodeValue(r)";
-  return "Wire.readList" + j_suffix(t) + "(r)";
+    return "S5RunWire.decodeValue(r)";
+  return "S5RunWire.readList" + j_suffix(t) + "(r)";
 }
 
 static std::string j_write_stmt(const std::string &t, const std::string &expr) {
@@ -176,8 +176,8 @@ static std::string j_write_stmt(const std::string &t, const std::string &expr) {
       return "w.byteValue((int) " + expr + ");";
   }
   if (j_is_dynamic(t))
-    return "Wire.encodeValue(w, " + expr + ");";
-  return "Wire.writeList" + j_suffix(t) + "(w, " + expr + ");";
+    return "S5RunWire.encodeValue(w, " + expr + ");";
+  return "S5RunWire.writeList" + j_suffix(t) + "(w, " + expr + ");";
 }
 
 // -----------------------------------------------------------------------
@@ -265,7 +265,7 @@ static std::string j_replace_all(std::string s, const std::string &from, const s
 }
 
 // -----------------------------------------------------------------------
-// Context decode/encode blocks (per-schema, shared by all flavors)
+// S5RunContext decode/encode blocks (per-schema, shared by all flavors)
 // -----------------------------------------------------------------------
 
 static std::string decode_args(const j_method_like &fm) {
@@ -275,7 +275,7 @@ static std::string decode_args(const j_method_like &fm) {
     lines.push_back("            long n_" + a.name + " = r.u32();");
     lines.push_back("            List<String> " + a.name + " = new ArrayList<>((int) n_" + a.name + ");");
     lines.push_back("            for (long i = 0; i < n_" + a.name + "; i++)");
-    lines.push_back("                " + a.name + ".add(valueToString(Wire.decodeValue(r)));");
+    lines.push_back("                " + a.name + ".add(valueToString(S5RunWire.decodeValue(r)));");
     std::string out;
     for (size_t i = 0; i < lines.size(); ++i) {
       if (i > 0)
@@ -288,7 +288,7 @@ static std::string decode_args(const j_method_like &fm) {
     const std::string &t = a.type;
     if (j_is_array(t) && j_is_ref(j_array_inner(t))) {
       std::string cls = j_array_inner(t);
-      lines.push_back("            if (r.u8() != Wire.T_ARRAY) throw new RuntimeException(\"wire: expected array\");");
+      lines.push_back("            if (r.u8() != S5RunWire.T_ARRAY) throw new RuntimeException(\"wire: expected array\");");
       lines.push_back("            int cnt_" + a.name + " = (int) r.u32();");
       lines.push_back("            List<" + cls + "> " + a.name + " = new ArrayList<>(cnt_" + a.name + ");");
       lines.push_back("            for (int i = 0; i < cnt_" + a.name + "; i++) {");
@@ -324,15 +324,15 @@ static std::string call_args(const j_method_like &fm) {
 
 static std::string encode_result(const j_method_like &fm) {
   if (j_is_void(fm.return_type))
-    return "            w.u8(Wire.T_UNDEFINED);";
+    return "            w.u8(S5RunWire.T_UNDEFINED);";
   const std::string &t = fm.return_type;
   if (j_is_array(t) && j_is_ref(j_array_inner(t))) {
     std::string cls = j_array_inner(t);
-    std::string out = "            w.u8(Wire.T_ARRAY);\n";
+    std::string out = "            w.u8(S5RunWire.T_ARRAY);\n";
     out += "            w.u32(res.size());\n";
     out += "            for (" + cls + " item : res) {\n";
     out += "                int id = registerInstance(item);\n";
-    out += "                w.u8(Wire.T_REF);\n";
+    out += "                w.u8(S5RunWire.T_REF);\n";
     out += "                w.i32(id);\n";
     out += "                w.str(\"" + cls + "\");\n";
     out += "            }";
@@ -340,7 +340,7 @@ static std::string encode_result(const j_method_like &fm) {
   }
   if (j_is_ref(t)) {
     std::string out = "            int objId = registerInstance(res);\n";
-    out += "            w.u8(Wire.T_REF);\n";
+    out += "            w.u8(S5RunWire.T_REF);\n";
     out += "            w.i32(objId);\n";
     out += "            w.str(\"" + t + "\");";
     return out;
@@ -686,23 +686,23 @@ public interface S5RunVariable {
 static std::string run_result_file_snippet(java_flavor f) {
   std::string head, fail_line, tail;
   if (f == JAVA_21 || f == JAVA_17) {
-    head = "public record RunResult(\n"
+    head = "public record S5RunResult(\n"
            "        boolean hasError,\n"
            "        String error,\n"
            "        int errorLine,\n"
            "        long durationMs,\n"
            "        S5RunVariable value) {\n";
-    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new S5RunVariable.Null());";
+    fail_line = "        return new S5RunResult(true, msg, parseErrorLine(msg), durationMs, new S5RunVariable.Null());";
     tail = "}\n";
   } else {
-    head = "public final class RunResult {\n"
+    head = "public final class S5RunResult {\n"
            "    private final boolean hasError;\n"
            "    private final String error;\n"
            "    private final int errorLine;\n"
            "    private final long durationMs;\n"
            "    private final S5RunVariable value;\n"
            "\n"
-           "    public RunResult(boolean hasError, String error, int errorLine, long durationMs, S5RunVariable value) {\n"
+           "    public S5RunResult(boolean hasError, String error, int errorLine, long durationMs, S5RunVariable value) {\n"
            "        this.hasError = hasError;\n"
            "        this.error = error;\n"
            "        this.errorLine = errorLine;\n"
@@ -715,16 +715,16 @@ static std::string run_result_file_snippet(java_flavor f) {
            "    public int errorLine() { return errorLine; }\n"
            "    public long durationMs() { return durationMs; }\n"
            "    public S5RunVariable value() { return value; }\n";
-    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, S5RunVariable.Null.INSTANCE);";
+    fail_line = "        return new S5RunResult(true, msg, parseErrorLine(msg), durationMs, S5RunVariable.Null.INSTANCE);";
     tail = "}\n";
   }
   return "\n" + head +
          "\n"
-         "    public static RunResult ok(S5RunVariable value, long durationMs) {\n"
-         "        return new RunResult(false, \"\", 0, durationMs, value);\n"
+         "    public static S5RunResult ok(S5RunVariable value, long durationMs) {\n"
+         "        return new S5RunResult(false, \"\", 0, durationMs, value);\n"
          "    }\n"
          "\n"
-         "    public static RunResult fail(String error, long durationMs) {\n"
+         "    public static S5RunResult fail(String error, long durationMs) {\n"
          "        String msg = error == null ? \"unknown error\" : error;\n" +
          fail_line +
          "\n"
@@ -860,7 +860,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-public final class Wire {
+public final class S5RunWire {
     public static final int
         T_UNDEFINED = 0x00, T_BOOL = 0x01, T_INT8 = 0x02, T_INT16 = 0x03,
         T_INT32 = 0x04, T_INT64 = 0x05, T_UINT8 = 0x06, T_UINT16 = 0x07,
@@ -980,7 +980,7 @@ public final class Wire {
     }
 )JAVA" + encode_value_snippet(f) +
          "\n\n" + decode_value_snippet(f) + "\n" + value_to_string_snippet(f) + "\n" + list_helpers + R"JAVA(
-    private Wire() {}
+    private S5RunWire() {}
 }
 )JAVA";
 }
@@ -1059,7 +1059,7 @@ static std::string generate_context(java_flavor f, const schema &s) {
     std::string call_res, encode, head;
     if (j_is_void(fm.return_type)) {
       call_res = "as" + f.name + "().execute(" + call + ");";
-      encode = "            w.u8(Wire.T_UNDEFINED);";
+      encode = "            w.u8(S5RunWire.T_UNDEFINED);";
     } else {
       call_res = "var res = as" + f.name + "().execute(" + call + ");";
       encode = encode_result(fm);
@@ -1071,7 +1071,7 @@ static std::string generate_context(java_flavor f, const schema &s) {
              f.name + ": wrong argument count\");";
     }
     fn_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cb_" + f.name +
-                    "(int cbId, Wire.Reader r) throws Exception {\n"
+                    "(int cbId, S5RunWire.Reader r) throws Exception {\n"
                     "        " +
                     head +
                     "\n"
@@ -1081,12 +1081,12 @@ static std::string generate_context(java_flavor f, const schema &s) {
                     "        " +
                     call_res +
                     "\n"
-                    "        Wire.Writer w = new Wire.Writer();\n"
+                    "        S5RunWire.Writer w = new S5RunWire.Writer();\n"
                     "        w.i32(cbId);\n"
                     "        w.u8(1);\n" +
                     encode +
                     "\n"
-                    "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
+                    "        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());\n"
                     "    }";
     first_cb = false;
   }
@@ -1108,7 +1108,7 @@ static std::string generate_context(java_flavor f, const schema &s) {
       std::string call_res, encode;
       if (j_is_void(m.return_type)) {
         call_res = "obj." + m.name + "(" + call + ");";
-        encode = "            w.u8(Wire.T_UNDEFINED);";
+        encode = "            w.u8(S5RunWire.T_UNDEFINED);";
       } else {
         call_res = "var res = obj." + m.name + "(" + call + ");";
         encode = encode_result(fm);
@@ -1131,7 +1131,7 @@ static std::string generate_context(java_flavor f, const schema &s) {
         decode = rewritten;
       }
       m_callbacks += std::string(first_cb ? "\n" : "\n\n") + "    private void cbm_" + c.name + "_" + m.name +
-                     "(int cbId, Wire.Reader r) throws Exception {\n"
+                     "(int cbId, S5RunWire.Reader r) throws Exception {\n"
                      "        " +
                      head +
                      "\n"
@@ -1142,12 +1142,12 @@ static std::string generate_context(java_flavor f, const schema &s) {
                      "        " +
                      call_res +
                      "\n"
-                     "        Wire.Writer w = new Wire.Writer();\n"
+                     "        S5RunWire.Writer w = new S5RunWire.Writer();\n"
                      "        w.i32(cbId);\n"
                      "        w.u8(1);\n" +
                      encode +
                      "\n"
-                     "        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());\n"
+                     "        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());\n"
                      "    }";
       first_cb = false;
     }
@@ -1176,17 +1176,17 @@ static std::string generate_context(java_flavor f, const schema &s) {
 import java.net.Socket;
 import java.util.*;
 
-public final class Context implements AutoCloseable {
+public final class S5RunContext implements AutoCloseable {
     @FunctionalInterface
     interface ThrowingHandler {
-        void handle(int cbId, Wire.Reader r) throws Exception;
+        void handle(int cbId, S5RunWire.Reader r) throws Exception;
     }
 
     private final Map<String, ThrowingHandler> handlers = new HashMap<>();
     private final Map<String, S5RunFunction> functions = new HashMap<>();
     private final Map<String, Map<Integer, S5RunObject>> instances = new HashMap<>();
     private final Map<String, List<String>> knownClasses = new HashMap<>();
-    private final List<RemoteServerInfo> servers = new ArrayList<>();
+    private final List<S5RunRemoteServerInfo> servers = new ArrayList<>();
     private final List<PendingType> pendingTypes = new ArrayList<>();
     private final List<PendingObject> pendingObjects = new ArrayList<>();
     private final List<String> pendingFunctions = new ArrayList<>();
@@ -1199,31 +1199,31 @@ public final class Context implements AutoCloseable {
 )JAVA";
   out += pending_decls(f) + R"JAVA(
 
-    public Context() {
+    public S5RunContext() {
 )JAVA";
   out += method_handlers + R"JAVA(
     }
 
     public static String clientVersion() {
-        return ClientVersion.VERSION;
+        return S5RunClientVersion.VERSION;
     }
 
-    public Context setScript(String script) {
+    public S5RunContext setScript(String script) {
         this.script = script;
         return this;
     }
 
-    public Context addServer(RemoteServerInfo server) {
+    public S5RunContext addServer(S5RunRemoteServerInfo server) {
         Objects.requireNonNull(server, "server");
         servers.add(server);
         return this;
     }
 
-    public Context addClass(S5RunObject sample) {
+    public S5RunContext addClass(S5RunObject sample) {
         return addClass(sample.s5runClassName(), sample.s5runMethodNames());
     }
 
-    private Context addClass(String name, List<String> methods) {
+    private S5RunContext addClass(String name, List<String> methods) {
         if (socket != null) {
             try {
                 sendRegisterType(name, methods);
@@ -1236,7 +1236,7 @@ public final class Context implements AutoCloseable {
         return this;
     }
 
-    public Context addObject(S5RunObject obj) {
+    public S5RunContext addObject(S5RunObject obj) {
         String cls = obj.s5runClassName();
         int id = ++nextThisId;
         instances.computeIfAbsent(cls, k -> new HashMap<>()).put(id, obj);
@@ -1252,7 +1252,7 @@ public final class Context implements AutoCloseable {
         return this;
     }
 
-    public Context addFunction(S5RunFunction fn) {
+    public S5RunContext addFunction(S5RunFunction fn) {
         functions.put(fn.s5runFunctionName(), fn);
         String name = fn.s5runFunctionName();
         handlers.put(name, (cbId, r) -> dispatchByName(name, cbId, r));
@@ -1272,34 +1272,34 @@ public final class Context implements AutoCloseable {
     // public entry point
     // ------------------------------------------------------------------
 
-    public static RunResult runScript(Context ctx, String entry, List<S5RunVariable> args) {
+    public static S5RunResult runScript(S5RunContext ctx, String entry, List<S5RunVariable> args) {
         long started = System.currentTimeMillis();
         try {
             ctx.connect();
             ctx.flushPending();
-            Wire.Writer w = new Wire.Writer();
+            S5RunWire.Writer w = new S5RunWire.Writer();
             w.str(ctx.script);
             w.str(entry);
             w.u32(args.size());
-            for (S5RunVariable a : args) Wire.encodeValue(w, a);
-            ctx.sendMessage(Wire.M_EXEC_REQ, w.toByteArray());
+            for (S5RunVariable a : args) S5RunWire.encodeValue(w, a);
+            ctx.sendMessage(S5RunWire.M_EXEC_REQ, w.toByteArray());
             while (true) {
                 Frame f = ctx.readFrame();
-                if (f.msgType == Wire.M_CALLBACK_REQ) {
+                if (f.msgType == S5RunWire.M_CALLBACK_REQ) {
                     ctx.dispatchCallback(f.body);
                     continue;
                 }
-                if (f.msgType == Wire.M_EXEC_RESP) {
-                    Wire.Reader r = new Wire.Reader(f.body);
+                if (f.msgType == S5RunWire.M_EXEC_RESP) {
+                    S5RunWire.Reader r = new S5RunWire.Reader(f.body);
                     if (r.u8() == 0) {
                         throw new RuntimeException(r.str());
                     }
-                    return RunResult.ok(Wire.decodeValue(r), System.currentTimeMillis() - started);
+                    return S5RunResult.ok(S5RunWire.decodeValue(r), System.currentTimeMillis() - started);
                 }
                 throw new RuntimeException("s5run: unexpected message type");
             }
         } catch (Exception e) {
-            return RunResult.fail(e.getMessage(), System.currentTimeMillis() - started);
+            return S5RunResult.fail(e.getMessage(), System.currentTimeMillis() - started);
         }
     }
 
@@ -1315,7 +1315,7 @@ public final class Context implements AutoCloseable {
   out += as_helpers;
   out += R"JAVA(
 
-    private void dispatchByName(String name, int cbId, Wire.Reader r) throws Exception {
+    private void dispatchByName(String name, int cbId, S5RunWire.Reader r) throws Exception {
         switch (name) {
 )JAVA";
   out += cases + "\n";
@@ -1324,26 +1324,26 @@ public final class Context implements AutoCloseable {
     }
 
     private void dispatchCallback(byte[] body) throws Exception {
-        Wire.Reader r = new Wire.Reader(body);
+        S5RunWire.Reader r = new S5RunWire.Reader(body);
         int cbId = r.i32();
         String method = r.str();
         ThrowingHandler handler = handlers.get(method);
         if (handler == null) {
-            Wire.Writer w = new Wire.Writer();
+            S5RunWire.Writer w = new S5RunWire.Writer();
             w.i32(cbId);
             w.u8(0);
             w.str("unknown method: " + method);
-            sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
             return;
         }
         try {
             handler.handle(cbId, r);
         } catch (Exception e) {
-            Wire.Writer w = new Wire.Writer();
+            S5RunWire.Writer w = new S5RunWire.Writer();
             w.i32(cbId);
             w.u8(0);
             w.str(String.valueOf(e.getMessage()));
-            sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+            sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
         }
     }
 
@@ -1362,15 +1362,15 @@ public final class Context implements AutoCloseable {
         return id;
     }
 
-    private int readRefId(Wire.Reader r) {
-        if (r.u8() != Wire.T_REF) throw new RuntimeException("wire: expected an object reference");
+    private int readRefId(S5RunWire.Reader r) {
+        if (r.u8() != S5RunWire.T_REF) throw new RuntimeException("wire: expected an object reference");
         int id = r.i32();
         r.str(); // skip the type name
         return id;
     }
 
     private static String valueToString(S5RunVariable v) {
-        return Wire.valueToString(v);
+        return S5RunWire.valueToString(v);
     }
 
     // ------------------------------------------------------------------
@@ -1395,7 +1395,7 @@ public final class Context implements AutoCloseable {
             }
             if (bestLoad < 0) throw new RuntimeException("s5run: all servers are unreachable");
         }
-        RemoteServerInfo srv = servers.get(best);
+        S5RunRemoteServerInfo srv = servers.get(best);
         socket = new Socket(srv.getHost(), srv.getPort());
         socket.setTcpNoDelay(true);
         socket.setSoTimeout(10000);
@@ -1410,7 +1410,7 @@ public final class Context implements AutoCloseable {
         int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
         int msgType = head[4] & 0xFF;
         byte[] body = in.readNBytes(len - 1);
-        if (msgType != Wire.M_SERVER_HELLO || body.length < len - 1)
+        if (msgType != S5RunWire.M_SERVER_HELLO || body.length < len - 1)
             throw new RuntimeException("s5run: expected server hello");
         String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
         String[] parts = text.split(" ");
@@ -1422,7 +1422,7 @@ public final class Context implements AutoCloseable {
                     + " is not supported (client supports 2)");
     }
 
-    private static long probeServerLoad(RemoteServerInfo server) {
+    private static long probeServerLoad(S5RunRemoteServerInfo server) {
         try (Socket probe = new Socket()) {
             probe.connect(new java.net.InetSocketAddress(server.getHost(), server.getPort()), 2000);
             probe.setTcpNoDelay(true);
@@ -1430,14 +1430,14 @@ public final class Context implements AutoCloseable {
             OutputStream po = probe.getOutputStream();
             InputStream pi = probe.getInputStream();
             readHello(pi, po);
-            writeFrame(po, Wire.M_STATS_REQ, new byte[0]);
+            writeFrame(po, S5RunWire.M_STATS_REQ, new byte[0]);
             byte[] head = pi.readNBytes(5);
             if (head.length < 5) return -1;
             int len = ((head[0] & 0xFF) << 24) | ((head[1] & 0xFF) << 16) | ((head[2] & 0xFF) << 8) | (head[3] & 0xFF);
             int msgType = head[4] & 0xFF;
             byte[] body = pi.readNBytes(len - 1);
-            if (msgType != Wire.M_STATS_RESP || body.length < 16) return -1;
-            Wire.Reader r = new Wire.Reader(body);
+            if (msgType != S5RunWire.M_STATS_RESP || body.length < 16) return -1;
+            S5RunWire.Reader r = new S5RunWire.Reader(body);
             r.u32(); // threads
             long busy = r.u32();
             long queued = r.u32();
@@ -1458,38 +1458,38 @@ public final class Context implements AutoCloseable {
     }
 
     private void sendRegisterType(String name, List<String> methods) throws Exception {
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
-        sendMessage(Wire.M_REGISTER_TYPE, w.toByteArray());
+        sendMessage(S5RunWire.M_REGISTER_TYPE, w.toByteArray());
         expectRegisterResp("register_type(" + name + ")");
     }
 
     private void sendRegisterObject(String name, int thisId, List<String> methods) throws Exception {
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.i32(thisId);
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
-        sendMessage(Wire.M_REGISTER_OBJ, w.toByteArray());
+        sendMessage(S5RunWire.M_REGISTER_OBJ, w.toByteArray());
         expectRegisterResp("register_object(" + name + ")");
     }
 
     private void sendRegisterFunction(String name) throws Exception {
-        Wire.Writer w = new Wire.Writer();
+        S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
-        sendMessage(Wire.M_REGISTER_FUNC, w.toByteArray());
+        sendMessage(S5RunWire.M_REGISTER_FUNC, w.toByteArray());
         expectRegisterResp("register_function(" + name + ")");
     }
 
     private void expectRegisterResp(String what) throws Exception {
         Frame f = readFrame();
-        if (f.msgType != Wire.M_REGISTER_RESP) {
+        if (f.msgType != S5RunWire.M_REGISTER_RESP) {
             throw new RuntimeException("s5run: " + what + " failed");
         }
-        Wire.Reader r = new Wire.Reader(f.body);
+        S5RunWire.Reader r = new S5RunWire.Reader(f.body);
         if (r.u8() == 0) {
             throw new RuntimeException("s5run: " + what + " error: " + r.str());
         }
@@ -1621,7 +1621,7 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
   }
   mkdir_p(pkg_dir);
 
-  write_java_file(pkg_dir, pkg, "Wire", generate_wire(m_flavor, s), written);
+  write_java_file(pkg_dir, pkg, "S5RunWire", generate_wire(m_flavor, s), written);
   write_java_file(pkg_dir, pkg, "S5RunVariable", value_file_snippet(m_flavor), written);
   write_java_file(
     pkg_dir,
@@ -1649,14 +1649,14 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
   write_java_file(
     pkg_dir,
     pkg,
-    "RemoteServerInfo",
-    "\npublic final class RemoteServerInfo {\n"
+    "S5RunRemoteServerInfo",
+    "\npublic final class S5RunRemoteServerInfo {\n"
     "    private String address = \"\";\n"
     "    private String apiKey = \"\";\n"
     "    private String host = \"\";\n"
     "    private int port;\n"
     "\n"
-    "    public RemoteServerInfo address(String address) {\n"
+    "    public S5RunRemoteServerInfo address(String address) {\n"
     "        final String prefix = \"s5run://\";\n"
     "        if (!address.startsWith(prefix)) {\n"
     "            throw new IllegalArgumentException(\"expected format s5run://host:port\");\n"
@@ -1672,7 +1672,7 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
     "        return this;\n"
     "    }\n"
     "\n"
-    "    public RemoteServerInfo apiKey(String apiKey) {\n"
+    "    public S5RunRemoteServerInfo apiKey(String apiKey) {\n"
     "        this.apiKey = apiKey;\n"
     "        return this;\n"
     "    }\n"
@@ -1684,13 +1684,13 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
     "}\n",
     written
   );
-  write_java_file(pkg_dir, pkg, "RunResult", run_result_file_snippet(m_flavor), written);
-  write_java_file(pkg_dir, pkg, "Context", generate_context(m_flavor, s), written);
+  write_java_file(pkg_dir, pkg, "S5RunResult", run_result_file_snippet(m_flavor), written);
+  write_java_file(pkg_dir, pkg, "S5RunContext", generate_context(m_flavor, s), written);
   write_java_file(
     pkg_dir,
     pkg,
-    "ClientVersion",
-    "\npublic final class ClientVersion {\n"
+    "S5RunClientVersion",
+    "\npublic final class S5RunClientVersion {\n"
     "    public static final String VERSION = \"" +
       s.client_version +
       "\";\n"
@@ -1698,7 +1698,7 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
       "    public static String get() {\n"
       "        return VERSION;\n"
       "    }\n"
-      "    private ClientVersion() {}\n"
+      "    private S5RunClientVersion() {}\n"
       "}\n",
     written
   );

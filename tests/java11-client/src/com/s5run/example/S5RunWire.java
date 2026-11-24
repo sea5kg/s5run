@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-public final class Wire {
+public final class S5RunWire {
     public static final int
         T_UNDEFINED = 0x00, T_BOOL = 0x01, T_INT8 = 0x02, T_INT16 = 0x03,
         T_INT32 = 0x04, T_INT64 = 0x05, T_UINT8 = 0x06, T_UINT16 = 0x07,
@@ -106,15 +106,15 @@ public final class Wire {
         public int readI16() { return (short) u16(); }
         public long readLongInt() {
             int tag = u8();
-            return switch (tag) {
-                case T_INT8 -> (byte) u8();
-                case T_INT16 -> (short) u16();
-                case T_INT32, T_UINT32 -> (long) i32();
-                case T_INT64, T_UINT64 -> i64();
-                case T_UINT8 -> u8();
-                case T_UINT16 -> u16();
-                default -> throw new RuntimeException("wire: expected an integer");
-            };
+            switch (tag) {
+                case T_INT8: return (byte) u8();
+                case T_INT16: return (short) u16();
+                case T_INT32: case T_UINT32: return (long) i32();
+                case T_INT64: case T_UINT64: return i64();
+                case T_UINT8: return u8();
+                case T_UINT16: return u16();
+                default: throw new RuntimeException("wire: expected an integer");
+            }
         }
         public byte readByteNum() {
             if (u8() != T_UINT8) throw new RuntimeException("wire: expected a byte");
@@ -135,12 +135,13 @@ public final class Wire {
 
         public String str() {
             int lenSize = u8();
-            int n = switch (lenSize) {
-                case 0x00 -> u8();
-                case 0x01 -> u16();
-                case 0x02 -> (int) u32();
-                default -> throw new RuntimeException("wire: bad string length size");
-            };
+            int n;
+            switch (lenSize) {
+                case 0x00: n = u8(); break;
+                case 0x01: n = u16(); break;
+                case 0x02: n = (int) u32(); break;
+                default: throw new RuntimeException("wire: bad string length size");
+            }
             byte[] b = new byte[n];
             buf.get(b);
             return new String(b, StandardCharsets.UTF_8);
@@ -150,26 +151,29 @@ public final class Wire {
     public static void encodeValue(Writer w, S5RunVariable v) {
         if (v instanceof S5RunVariable.Null) {
             w.u8(T_UNDEFINED);
-        } else if (v instanceof S5RunVariable.Bool b) {
-            w.u8(T_BOOL); w.bool(b.v());
-        } else if (v instanceof S5RunVariable.Int i) {
-            w.int64(i.v());
-        } else if (v instanceof S5RunVariable.Dbl d) {
-            w.u8(T_FLOAT64); w.f64(d.v());
-        } else if (v instanceof S5RunVariable.Str s) {
-            w.strValue(s.v());
-        } else if (v instanceof S5RunVariable.Arr a) {
+        } else if (v instanceof S5RunVariable.Bool) {
+            w.u8(T_BOOL); w.bool(((S5RunVariable.Bool) v).v());
+        } else if (v instanceof S5RunVariable.Int) {
+            w.int64(((S5RunVariable.Int) v).v());
+        } else if (v instanceof S5RunVariable.Dbl) {
+            w.u8(T_FLOAT64); w.f64(((S5RunVariable.Dbl) v).v());
+        } else if (v instanceof S5RunVariable.Str) {
+            w.strValue(((S5RunVariable.Str) v).v());
+        } else if (v instanceof S5RunVariable.Arr) {
+            S5RunVariable.Arr a = (S5RunVariable.Arr) v;
             w.u8(T_ARRAY);
             w.u32(a.v().size());
             for (S5RunVariable e : a.v()) encodeValue(w, e);
-        } else if (v instanceof S5RunVariable.Obj o) {
+        } else if (v instanceof S5RunVariable.Obj) {
+            S5RunVariable.Obj o = (S5RunVariable.Obj) v;
             w.u8(T_OBJECT);
             w.u32(o.v().size());
-            for (var en : o.v().entrySet()) {
+            for (Map.Entry<String, S5RunVariable> en : o.v().entrySet()) {
                 w.strValue(en.getKey());
                 encodeValue(w, en.getValue());
             }
-        } else if (v instanceof S5RunVariable.Ref rf) {
+        } else if (v instanceof S5RunVariable.Ref) {
+            S5RunVariable.Ref rf = (S5RunVariable.Ref) v;
             w.u8(T_REF);
             w.i32(rf.thisId());
             w.str(rf.type());
@@ -178,41 +182,41 @@ public final class Wire {
 
     public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
-        return switch (tag) {
-            case T_UNDEFINED -> new S5RunVariable.Null();
-            case T_BOOL -> new S5RunVariable.Bool(r.readBoolRaw());
-            case T_INT8 -> new S5RunVariable.Int(r.readI8());
-            case T_INT16 -> new S5RunVariable.Int(r.readI16());
-            case T_INT32, T_UINT32 -> new S5RunVariable.Int(r.i32());
-            case T_INT64, T_UINT64 -> new S5RunVariable.Int(r.i64());
-            case T_UINT8 -> new S5RunVariable.Int(r.u8());
-            case T_UINT16 -> new S5RunVariable.Int(r.u16());
-            case T_FLOAT32 -> new S5RunVariable.Dbl(r.f32());
-            case T_FLOAT64 -> new S5RunVariable.Dbl(r.f64());
-            case T_STRING -> new S5RunVariable.Str(r.str());
-            case T_ARRAY -> {
+        switch (tag) {
+            case T_UNDEFINED: return S5RunVariable.Null.INSTANCE;
+            case T_BOOL: return new S5RunVariable.Bool(r.readBoolRaw());
+            case T_INT8: return new S5RunVariable.Int(r.readI8());
+            case T_INT16: return new S5RunVariable.Int(r.readI16());
+            case T_INT32: case T_UINT32: return new S5RunVariable.Int(r.i32());
+            case T_INT64: case T_UINT64: return new S5RunVariable.Int(r.i64());
+            case T_UINT8: return new S5RunVariable.Int(r.u8());
+            case T_UINT16: return new S5RunVariable.Int(r.u16());
+            case T_FLOAT32: return new S5RunVariable.Dbl(r.f32());
+            case T_FLOAT64: return new S5RunVariable.Dbl(r.f64());
+            case T_STRING: return new S5RunVariable.Str(r.str());
+            case T_ARRAY: {
                 int n = (int) r.u32();
                 List<S5RunVariable> a = new ArrayList<>(n);
                 for (int i = 0; i < n; i++) a.add(decodeValue(r));
-                yield new S5RunVariable.Arr(a);
+                return new S5RunVariable.Arr(a);
             }
-            case T_OBJECT -> {
+            case T_OBJECT: {
                 int n = (int) r.u32();
                 Map<String, S5RunVariable> o = new LinkedHashMap<>();
                 for (int i = 0; i < n; i++) o.put(r.strValue(), decodeValue(r));
-                yield new S5RunVariable.Obj(o);
+                return new S5RunVariable.Obj(o);
             }
-            case T_REF -> new S5RunVariable.Ref(r.i32(), r.str());
-            default -> throw new RuntimeException("wire: unknown value tag " + tag);
-        };
+            case T_REF: return new S5RunVariable.Ref(r.i32(), r.str());
+            default: throw new RuntimeException("wire: unknown value tag " + tag);
+        }
     }
 
     public static String valueToString(S5RunVariable v) {
         if (v instanceof S5RunVariable.Null) return "null";
-        if (v instanceof S5RunVariable.Bool b) return Boolean.toString(b.v());
-        if (v instanceof S5RunVariable.Int i) return Long.toString(i.v());
-        if (v instanceof S5RunVariable.Dbl d) return Double.toString(d.v());
-        if (v instanceof S5RunVariable.Str s) return s.v();
+        if (v instanceof S5RunVariable.Bool) return Boolean.toString(((S5RunVariable.Bool) v).v());
+        if (v instanceof S5RunVariable.Int) return Long.toString(((S5RunVariable.Int) v).v());
+        if (v instanceof S5RunVariable.Dbl) return Double.toString(((S5RunVariable.Dbl) v).v());
+        if (v instanceof S5RunVariable.Str) return ((S5RunVariable.Str) v).v();
         throw new RuntimeException("wire: expected a scalar argument");
     }
 
@@ -250,5 +254,5 @@ public final class Wire {
             w.strValue(e);
         }
     }
-    private Wire() {}
+    private S5RunWire() {}
 }

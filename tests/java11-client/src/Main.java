@@ -158,8 +158,8 @@ public class Main {
         int port = argv.length > 1 ? Integer.parseInt(argv[1]) : 7777;
         address = "s5run://" + host + ":" + port;
 
-        if (!Context.clientVersion().equals("1.0.0")) {
-            throw new RuntimeException("unexpected client version: " + Context.clientVersion());
+        if (!S5RunContext.clientVersion().equals("1.0.0")) {
+            throw new RuntimeException("unexpected client version: " + S5RunContext.clientVersion());
         }
 
         happyPath();
@@ -171,7 +171,7 @@ public class Main {
 
     static void happyPath() {
         System.out.println("== java11-client: happy path");
-        try (Context ctx = new Context()
+        try (S5RunContext ctx = new S5RunContext()
                 .addClass(new MyFile(1024))
                 .addFunction(new MyGetFile())
                 .addFunction(new MyGetFileSize())
@@ -182,10 +182,10 @@ public class Main {
                 .addFunction(new MyGetServerPort())
                 .addObject(new MyFileSystem())
                 .addObject(new MyConsole())
-                .addServer(new RemoteServerInfo().address(address).apiKey("some api key runner"))
+                .addServer(new S5RunRemoteServerInfo().address(address).apiKey("some api key runner"))
                 .setScript(K_SCRIPT)) {
 
-        RunResult result = Context.runScript(ctx, "main", List.of(new S5RunVariable.Str("test.txt")));
+        S5RunResult result = S5RunContext.runScript(ctx, "main", List.of(new S5RunVariable.Str("test.txt")));
         if (result.hasError()) {
             throw new RuntimeException("unexpected error: " + result.error());
         }
@@ -208,14 +208,14 @@ public class Main {
 
     static void primitivesWithTwoServers() {
         System.out.println("== java11-client: primitives (two servers)");
-        try (Context ctx = new Context()
+        try (S5RunContext ctx = new S5RunContext()
                 .addFunction(new MyGetPi())
                 .addFunction(new MyGetServerPort())
-                .addServer(new RemoteServerInfo().address(address))
-                .addServer(new RemoteServerInfo().address(address)) // same: exercises load balancing
+                .addServer(new S5RunRemoteServerInfo().address(address))
+                .addServer(new S5RunRemoteServerInfo().address(address)) // same: exercises load balancing
                 .setScript("function main() { return { pi: GetPi(), port: GetServerPort() }; }")) {
 
-        RunResult result = Context.runScript(ctx, "main", List.of());
+        S5RunResult result = S5RunContext.runScript(ctx, "main", List.of());
         if (result.hasError()) {
             throw new RuntimeException("unexpected error: " + result.error());
         }
@@ -229,12 +229,12 @@ public class Main {
 
     static void errorPath() {
         System.out.println("== java11-client: error path");
-        try (Context ctx = new Context()
+        try (S5RunContext ctx = new S5RunContext()
                 .addFunction(new MyHasFile())
-                .addServer(new RemoteServerInfo().address(address))
+                .addServer(new S5RunRemoteServerInfo().address(address))
                 .setScript("function main() {\n  return HasFile(\"x\");\n}")) {
 
-        RunResult result = Context.runScript(ctx, "main", List.of());
+        S5RunResult result = S5RunContext.runScript(ctx, "main", List.of());
         if (!result.hasError()) {
             throw new RuntimeException("expected 'boom-hasfile' error");
         }

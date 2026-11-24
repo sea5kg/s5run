@@ -4,16 +4,16 @@ package s5runcli
 
 import "fmt"
 
-// Value is any script argument/result value.
-type Value interface{ isValue() }
+// Variable is any script argument/result value.
+type Variable interface{ isValue() }
 
 type Null struct{}
 type Bool bool
 type Int int64
 type Float float64
 type Str string
-type Arr []Value
-type Obj map[string]Value
+type Arr []Variable
+type Obj map[string]Variable
 
 // Ref references a remote object.
 type Ref struct {
@@ -30,7 +30,7 @@ func (Arr) isValue()   {}
 func (Obj) isValue()   {}
 func (Ref) isValue()   {}
 
-func encodeValue(w *writer, v Value) {
+func encodeValue(w *writer, v Variable) {
 	switch t := v.(type) {
 	case Null:
 		w.u8(tagUndefined)
@@ -43,7 +43,7 @@ func encodeValue(w *writer, v Value) {
 	case Str:
 		w.strValue(string(t))
 	case Arr:
-		writeArrayOf(w, t, func(e Value) { encodeValue(w, e) })
+		writeArrayOf(w, t, func(e Variable) { encodeValue(w, e) })
 	case Obj:
 		w.u8(tagObject)
 		w.u32(uint32(len(t)))
@@ -58,7 +58,7 @@ func encodeValue(w *writer, v Value) {
 	}
 }
 
-func decodeValue(r *reader) Value {
+func decodeValue(r *reader) Variable {
 	tag := r.u8()
 	switch tag {
 	case tagUndefined:
@@ -72,7 +72,7 @@ func decodeValue(r *reader) Value {
 		return Float(readDouble(r))
 	case tagArray:
 		r.pos--
-		return Arr(readArrayOf(r, func() Value { return decodeValue(r) }))
+		return Arr(readArrayOf(r, func() Variable { return decodeValue(r) }))
 	case tagObject:
 		out := Obj{}
 		for i := r.u32(); i > 0; i-- {
@@ -90,7 +90,7 @@ func decodeValue(r *reader) Value {
 	}
 }
 
-func valueToString(v Value) string {
+func valueToString(v Variable) string {
 	switch t := v.(type) {
 	case Null:
 		return "null"

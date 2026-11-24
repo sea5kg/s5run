@@ -648,7 +648,7 @@ func parseErrorLine(errMsg string) int {
 }
 
 // RunScript executes the context script; errors land in RunResult.
-func RunScript(ctx *Context, entry string, args []Value) *RunResult {
+func RunScript(ctx *Context, entry string, args []Variable) *RunResult {
 	started := time.Now()
 	fail := func(err error) *RunResult {
 		return &RunResult{HasError: true, Error: err.Error(), ErrorLine: parseErrorLine(err.Error())}

@@ -1,13 +1,13 @@
 // AUTO-GENERATED. DO NOT EDIT.
 package com.s5run.example;
 
-public final class RemoteServerInfo {
+public final class S5RunRemoteServerInfo {
     private String address = "";
     private String apiKey = "";
     private String host = "";
     private int port;
 
-    public RemoteServerInfo address(String address) {
+    public S5RunRemoteServerInfo address(String address) {
         final String prefix = "s5run://";
         if (!address.startsWith(prefix)) {
             throw new IllegalArgumentException("expected format s5run://host:port");
@@ -23,7 +23,7 @@ public final class RemoteServerInfo {
         return this;
     }
 
-    public RemoteServerInfo apiKey(String apiKey) {
+    public S5RunRemoteServerInfo apiKey(String apiKey) {
         this.apiKey = apiKey;
         return this;
     }

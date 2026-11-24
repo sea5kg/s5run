@@ -1,14 +1,14 @@
 // AUTO-GENERATED. DO NOT EDIT.
 package com.s5run.example;
 
-public final class RunResult {
+public final class S5RunResult {
     private final boolean hasError;
     private final String error;
     private final int errorLine;
     private final long durationMs;
     private final S5RunVariable value;
 
-    public RunResult(boolean hasError, String error, int errorLine, long durationMs, S5RunVariable value) {
+    public S5RunResult(boolean hasError, String error, int errorLine, long durationMs, S5RunVariable value) {
         this.hasError = hasError;
         this.error = error;
         this.errorLine = errorLine;
@@ -22,13 +22,13 @@ public final class RunResult {
     public long durationMs() { return durationMs; }
     public S5RunVariable value() { return value; }
 
-    public static RunResult ok(S5RunVariable value, long durationMs) {
-        return new RunResult(false, "", 0, durationMs, value);
+    public static S5RunResult ok(S5RunVariable value, long durationMs) {
+        return new S5RunResult(false, "", 0, durationMs, value);
     }
 
-    public static RunResult fail(String error, long durationMs) {
+    public static S5RunResult fail(String error, long durationMs) {
         String msg = error == null ? "unknown error" : error;
-        return new RunResult(true, msg, parseErrorLine(msg), durationMs, S5RunVariable.Null.INSTANCE);
+        return new S5RunResult(true, msg, parseErrorLine(msg), durationMs, S5RunVariable.Null.INSTANCE);
     }
 
     static int parseErrorLine(String error) {

@@ -54,7 +54,7 @@ type RunResult struct {
 	Error      string
 	ErrorLine  int
 	DurationMs int64
-	Value      Value
+	Value      Variable
 }
 
 // ClientVersion returns the generated client version.
@@ -129,7 +129,7 @@ func (ConsoleBase) S5RunMethodNames() []string {
 // KeyValueStorage is the schema class 'KeyValueStorage' - implement it and register.
 type KeyValueStorage interface {
 	S5RunObject
-	SetValueByKey(name string, value Value)
+	SetValueByKey(name string, value Variable)
 	GetValueByKey(name string)
 }
 

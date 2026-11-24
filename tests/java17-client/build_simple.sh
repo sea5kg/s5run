@@ -28,7 +28,7 @@ fi
 javac $RELEASE_FLAG -d bin $(find ./src -name "*.java")
 check_ret $? "Compile"
 
-CLIENT_VERSION=$(grep -o 'VERSION = "[^"]*"' $(find ./src -name "ClientVersion.java") | grep -o '[0-9][^"]*')
+CLIENT_VERSION=$(grep -o 'VERSION = "[^"]*"' $(find ./src -name "S5RunClientVersion.java") | grep -o '[0-9][^"]*')
 check_ret $? "Detect client version"
 
 jar -cmf manifest.mf s5run-client-$CLIENT_VERSION.jar -C bin .

@@ -96,7 +96,7 @@ static std::string go_scalar_type(const std::string &t) {
   if (t == "float" || t == "double") return "float64";
   if (t == "string") return "string";
   if (t == "byte") return "byte";
-  if (t == "var") return "Value";
+  if (t == "var") return "Variable";
   return t;
 }
 
@@ -458,16 +458,16 @@ var _ = fmt.Sprintf // keep fmt for debugging
 
 static const char *VALUE_TEMPLATE = R"GO(import "fmt"
 
-// Value is any script argument/result value.
-type Value interface{ isValue() }
+// Variable is any script argument/result value.
+type Variable interface{ isValue() }
 
 type Null struct{}
 type Bool bool
 type Int int64
 type Float float64
 type Str string
-type Arr []Value
-type Obj map[string]Value
+type Arr []Variable
+type Obj map[string]Variable
 
 // Ref references a remote object.
 type Ref struct {
@@ -484,7 +484,7 @@ func (Arr) isValue()   {}
 func (Obj) isValue()   {}
 func (Ref) isValue()   {}
 
-func encodeValue(w *writer, v Value) {
+func encodeValue(w *writer, v Variable) {
 	switch t := v.(type) {
 	case Null:
 		w.u8(tagUndefined)
@@ -497,7 +497,7 @@ func encodeValue(w *writer, v Value) {
 	case Str:
 		w.strValue(string(t))
 	case Arr:
-		writeArrayOf(w, t, func(e Value) { encodeValue(w, e) })
+		writeArrayOf(w, t, func(e Variable) { encodeValue(w, e) })
 	case Obj:
 		w.u8(tagObject)
 		w.u32(uint32(len(t)))
@@ -512,7 +512,7 @@ func encodeValue(w *writer, v Value) {
 	}
 }
 
-func decodeValue(r *reader) Value {
+func decodeValue(r *reader) Variable {
 	tag := r.u8()
 	switch tag {
 	case tagUndefined:
@@ -526,7 +526,7 @@ func decodeValue(r *reader) Value {
 		return Float(readDouble(r))
 	case tagArray:
 		r.pos--
-		return Arr(readArrayOf(r, func() Value { return decodeValue(r) }))
+		return Arr(readArrayOf(r, func() Variable { return decodeValue(r) }))
 	case tagObject:
 		out := Obj{}
 		for i := r.u32(); i > 0; i-- {
@@ -544,7 +544,7 @@ func decodeValue(r *reader) Value {
 	}
 }
 
-func valueToString(v Value) string {
+func valueToString(v Variable) string {
 	switch t := v.(type) {
 	case Null:
 		return "null"
@@ -622,7 +622,7 @@ type RunResult struct {
 	Error      string
 	ErrorLine  int
 	DurationMs int64
-	Value      Value
+	Value      Variable
 }
 
 // ClientVersion returns the generated client version.
@@ -1166,7 +1166,7 @@ func parseErrorLine(errMsg string) int {
 }
 
 // RunScript executes the context script; errors land in RunResult.
-func RunScript(ctx *Context, entry string, args []Value) *RunResult {
+func RunScript(ctx *Context, entry string, args []Variable) *RunResult {
 	started := time.Now()
 	fail := func(err error) *RunResult {
 		return &RunResult{HasError: true, Error: err.Error(), ErrorLine: parseErrorLine(err.Error())}
@@ -1251,7 +1251,7 @@ std::vector<std::string> generator_golang::generate(const schema &s,
   ::mkdir(output_dir.c_str(), 0755);
 
   write_go_file(output_dir, pkg, "wire", WIRE_TEMPLATE, written);
-  write_go_file(output_dir, pkg, "value", VALUE_TEMPLATE, written);
+  write_go_file(output_dir, pkg, "variable", VALUE_TEMPLATE, written);
   write_go_file(output_dir, pkg, "types", generate_types(s), written);
   write_go_file(output_dir, pkg, "context", generate_context(s), written);
 
