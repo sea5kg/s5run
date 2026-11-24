@@ -35,37 +35,37 @@
  ***********************************************************************************/
 
 #include "s5run_client.h"
-#include "../protocol/s5run_channel.h"
-#include "../protocol/s5run_wire.h"
-#include "../s5run_globals.h"
-#include "../server/s5run_value_wire.h"
+#include "protocol/s5run_channel.h"
+#include "protocol/s5run_wire.h"
+#include "s5run_globals.h"
+#include "server/s5run_value_wire.h"
 
 #include <chrono>
 #include <cstdio>
 
 namespace s5run {
 
-std::string value_to_display_string(const Value &v) {
+std::string value_to_display_string(const variable &v) {
   switch (v.kind()) {
-  case Value::K_NULL:
+  case variable::K_NULL:
     return "null";
-  case Value::K_BOOL:
+  case variable::K_BOOL:
     return v.as_bool() ? "true" : "false";
-  case Value::K_INT: {
+  case variable::K_INT: {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v.as_int()));
     return buf;
   }
-  case Value::K_DOUBLE: {
+  case variable::K_DOUBLE: {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%g", v.as_double());
     return buf;
   }
-  case Value::K_STRING:
+  case variable::K_STRING:
     return v.as_string();
-  case Value::K_ARRAY: {
+  case variable::K_ARRAY: {
     std::string out = "[";
-    const ValueArray &arr = v.as_array();
+    const variable_array &arr = v.as_array();
     for (size_t i = 0; i < arr.size(); ++i) {
       if (i > 0)
         out += ", ";
@@ -74,9 +74,9 @@ std::string value_to_display_string(const Value &v) {
     out += "]";
     return out;
   }
-  case Value::K_OBJECT: {
+  case variable::K_OBJECT: {
     std::string out = "{";
-    const ValueObject &obj = v.as_object();
+    const variable_object &obj = v.as_object();
     bool first = true;
     for (const auto &kv : obj) {
       if (!first)
@@ -87,7 +87,7 @@ std::string value_to_display_string(const Value &v) {
     out += "}";
     return out;
   }
-  case Value::K_REF:
+  case variable::K_REF:
     return "[ref " + v.as_ref().type + "#" + std::to_string(v.as_ref().this_id) + "]";
   }
   return "<unknown>";
@@ -184,7 +184,7 @@ void client_context::send_register_object(const std::string &name, int32_t this_
     throw std::runtime_error("register_object(" + name + "): " + r.get_string());
 }
 
-void client_context::send_callback_ok(int32_t cb_id, const Value &result) {
+void client_context::send_callback_ok(int32_t cb_id, const variable &result) {
   wire::Writer w;
   w.put_i32(cb_id);
   w.put_u8(1);
@@ -210,7 +210,7 @@ void client_context::dispatch_callback(const std::vector<uint8_t> &body) {
     // args[0] is the this_id of the target object
     if (argc < 1)
       throw std::runtime_error(method + ": expected this_id");
-    Value this_v = value_from_wire(r);
+    variable this_v = value_from_wire(r);
     if (!this_v.is_int())
       throw std::runtime_error(method + ": bad this_id");
 
@@ -228,14 +228,14 @@ void client_context::dispatch_callback(const std::vector<uint8_t> &body) {
     else
       throw std::runtime_error("console: unknown method: " + method);
 
-    send_callback_ok(cb_id, Value()); // undefined/null result
+    send_callback_ok(cb_id, variable()); // undefined/null result
   } catch (const std::exception &e) {
     send_callback_error(cb_id, e.what());
   }
 }
 
 run_result client_context::run(const std::string &script, const std::string &entry,
-                               const std::vector<Value> &args) {
+                               const std::vector<variable> &args) {
   if (m_channel == nullptr)
     throw std::runtime_error("client_context: not connected");
 

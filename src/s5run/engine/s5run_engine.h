@@ -54,19 +54,19 @@ using JsValue = void *;
 struct ExecResult {
   bool ok = false;
   std::string error;
-  s5run::Value value;
+  s5run::variable value;
 };
 
 // Simple callback: the engine converts JS args to values, calls the
 // handler, then converts the result back to a JS value.
-using CallbackHandler = std::function<s5run::Value(
-    const std::string &method, const std::vector<s5run::Value> &args)>;
+using CallbackHandler = std::function<s5run::variable(
+    const std::string &method, const std::vector<s5run::variable> &args)>;
 
 // JS callback: the handler receives an opaque context and must return
 // an opaque value, typically produced by make_object(). The engine
 // takes ownership of the returned handle and releases it after use.
 using JsCallbackHandler = std::function<JsValue(
-    JsContext ctx, const std::vector<s5run::Value> &args)>;
+    JsContext ctx, const std::vector<s5run::variable> &args)>;
 
 class IScriptEngine {
 public:
@@ -92,10 +92,10 @@ public:
   // items and releases them after use.
   virtual JsValue make_array(JsContext ctx, size_t count, const JsValue *items) = 0;
 
-  virtual JsValue make_value(JsContext ctx, const s5run::Value &v) = 0;
+  virtual JsValue make_value(JsContext ctx, const s5run::variable &v) = 0;
 
   virtual ExecResult execute(const std::string &script, const std::string &entry,
-                             const std::vector<s5run::Value> &args) = 0;
+                             const std::vector<s5run::variable> &args) = 0;
 };
 
 std::shared_ptr<IScriptEngine> make_quickjs_engine();

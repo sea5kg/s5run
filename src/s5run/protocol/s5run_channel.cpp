@@ -36,7 +36,7 @@
 
 #include "s5run_channel.h"
 #include "s5run_protocol.h"
-#include "../s5run_globals.h"
+#include "s5run_globals.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>

@@ -35,6 +35,7 @@
  ***********************************************************************************/
 
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -46,9 +47,113 @@
 #include "generators/s5run_generators.h"
 #include "server/s5run_server.h"
 
-static std::string g_bin = "s5run";
+#ifndef WSJCPP_APP_VERSION
+#define WSJCPP_APP_VERSION "unknown"
+#endif
 
-static void print_banner() {
+// -----------------------------------------------------------------------
+// Command (with aliases)
+// -----------------------------------------------------------------------
+
+class s5run_parse_command {
+public:
+  s5run_parse_command(const std::vector<std::string> &alias_names, const std::string &description);
+  std::string name() const;
+  std::vector<std::string> names() const;
+  std::string description() const;
+  bool match(const std::string &arg) const;
+
+private:
+  std::vector<std::string> m_alias_names;
+  std::string m_description;
+};
+
+s5run_parse_command::s5run_parse_command(
+  const std::vector<std::string> &alias_names, const std::string &description
+)
+    : m_alias_names(alias_names), m_description(description) {
+}
+
+std::string s5run_parse_command::name() const {
+  return m_alias_names[0];
+}
+
+std::vector<std::string> s5run_parse_command::names() const {
+  return m_alias_names;
+}
+
+std::string s5run_parse_command::description() const {
+  return m_description;
+}
+
+bool s5run_parse_command::match(const std::string &arg) const {
+  for (size_t i = 0; i < m_alias_names.size(); ++i) {
+    if (m_alias_names[i] == arg)
+      return true;
+  }
+  return false;
+}
+
+// -----------------------------------------------------------------------
+// Application: parse args and dispatch commands
+// -----------------------------------------------------------------------
+
+class s5run_parse_args {
+public:
+  s5run_parse_args(int argc, char **argv);
+
+  void print_banner() const;
+  void print_usage() const;
+  int exec();
+
+private:
+  void print_server_usage() const;
+  void print_generate_usage() const;
+  void print_run_usage() const;
+
+  int cmd_version();
+  int cmd_help();
+  int cmd_server();
+  int cmd_generate();
+  int cmd_run();
+
+  const std::string *next_value(const std::string &option);
+
+  std::string m_command_exec;
+  std::vector<std::string> m_arguments;
+  std::string m_version;
+  std::string m_bin;
+  std::vector<s5run_parse_command> m_commands;
+};
+
+s5run_parse_args::s5run_parse_args(int argc, char **argv)
+    : m_version(WSJCPP_APP_VERSION), m_bin("s5run") {
+  m_commands.push_back(s5run_parse_command({"server"}, "Start the script server"));
+  m_commands.push_back(s5run_parse_command({"generate"}, "Generate client or provider code"));
+  m_commands.push_back(s5run_parse_command({"run"}, "Run a script against a server"));
+  m_commands.push_back(s5run_parse_command({"version", "--version", "-v"}, "Print version"));
+  m_commands.push_back(s5run_parse_command({"help", "--help", "-h"}, "Show this help"));
+
+  if (argc > 0 && argv[0] && argv[0][0] != '\0')
+    m_bin = argv[0];
+
+  if (argc > 1)
+    m_command_exec = std::string(argv[1]);
+
+  for (int i = 2; i < argc; ++i)
+    m_arguments.push_back(std::string(argv[i]));
+}
+
+// Returns the value following `option` in the arguments, or nullptr.
+const std::string *s5run_parse_args::next_value(const std::string &option) {
+  for (size_t i = 0; i < m_arguments.size(); ++i) {
+    if (m_arguments[i] == option && i + 1 < m_arguments.size())
+      return &m_arguments[i + 1];
+  }
+  return nullptr;
+}
+
+void s5run_parse_args::print_banner() const {
   std::cout << std::endl;
   std::cout << "           ░░░░░░░                            " << std::endl;
   std::cout << "          ░██▓▓▓▓▒                            " << std::endl;
@@ -60,78 +165,108 @@ static void print_banner() {
   std::cout << std::endl;
 }
 
-static void print_usage() {
-  std::cout << "s5run " << WSJCPP_APP_VERSION << " - remote script execution server" << std::endl;
-  std::cout << "\n" << std::endl;
-  std::cout << "Usage:\n" << std::endl;
-  std::cout << "  " << g_bin << " <command> [options]\n" << std::endl;
-  std::cout << "\n" << std::endl;
-  std::cout << "Commands:\n" << std::endl;
-  std::cout << "  server     Start the script server\n" << std::endl;
-  std::cout << "  generate   Generate client or provider code\n" << std::endl;
-  std::cout << "  run        Run a script against a server\n" << std::endl;
-  std::cout << "  version    Print version\n" << std::endl;
-  std::cout << "  help       Show this help\n" << std::endl;
-  std::cout << "\n" << std::endl;
-  std::cout << "Run '" << g_bin << " help <command>' for command details." << std::endl;
+void s5run_parse_args::print_usage() const {
+  std::cout << "s5run " << m_version << " - remote script execution server" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Usage:" << std::endl;
+  std::cout << "  " << m_bin << " <command> [options]" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Commands:" << std::endl;
+
+  size_t max_name = 0;
+  for (size_t i = 0; i < m_commands.size(); ++i)
+    max_name = std::max(max_name, m_commands[i].name().size());
+  for (size_t i = 0; i < m_commands.size(); ++i) {
+    std::cout << "  " << m_commands[i].name();
+    for (size_t p = m_commands[i].name().size(); p < max_name; ++p)
+      std::cout << " ";
+    std::cout << "    " << m_commands[i].description() << std::endl;
+  }
+
+  std::cout << "" << std::endl;
+  std::cout << "Run '" << m_bin << " help <command>' for command details." << std::endl;
 }
 
-static void print_server_usage() {
-  std::printf(
-    "s5run server - start the script server\n"
-    "\n"
-    "Usage:\n"
-    "  %s server --listen [host:]port [--threads N] [--queue] [--db PATH] [--ttl SECONDS]\n"
-    "\n"
-    "Options:\n"
-    "  --listen [host:]port  listen address (default 0.0.0.0, e.g. --listen 7777 or --listen 0.0.0.0:7777)\n"
-    "  --threads N           worker threads (default: hardware concurrency)\n"
-    "  --queue               enable job queue (results stored in sqlite)\n"
-    "  --db PATH             job queue database (default s5run-queue.sqlite3)\n"
-    "  --ttl SECONDS         how long to keep job results (default 3600)\n",
-    g_bin.c_str()
-  );
+void s5run_parse_args::print_server_usage() const {
+  std::cout << "s5run server - start the script server" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Usage:" << std::endl;
+  std::cout << "  " << m_bin << " server --listen [host:]port [--threads N] [--queue] [--db PATH] [--ttl SECONDS]"
+            << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout << "  --listen [host:]port  listen address (default 0.0.0.0, e.g. --listen 7777 or --listen 0.0.0.0:7777)"
+            << std::endl;
+  std::cout << "  --threads N           worker threads (default: hardware concurrency)" << std::endl;
+  std::cout << "  --queue               enable job queue (results stored in sqlite)" << std::endl;
+  std::cout << "  --db PATH             job queue database (default s5run-queue.sqlite3)" << std::endl;
+  std::cout << "  --ttl SECONDS         how long to keep job results (default 3600)" << std::endl;
 }
 
-static void print_generate_usage() {
-  std::printf(
-    "s5run generate - generate client or provider code\n"
-    "\n"
-    "Usage:\n"
-    "  %s generate client   --language LANG [--output-dir DIR] [--schema FILE]\n"
-    "  %s generate provider --language LANG [--output-dir DIR] [--schema FILE]\n"
-    "  %s generate --list\n"
-    "\n"
-    "Options:\n"
-    "  --language LANG  target language (cpp98, cpp11, go, py, java11, java17, java21)\n"
-    "  --output-dir DIR where to write generated files (default: options.<lang>.output-dir from schema)\n"
-    "  --schema FILE    schema file (default s5run-schema.json)\n"
-    "  --list           list available generators\n",
-    g_bin.c_str(),
-    g_bin.c_str(),
-    g_bin.c_str()
-  );
+void s5run_parse_args::print_generate_usage() const {
+  std::cout << "s5run generate - generate client or provider code" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Usage:" << std::endl;
+  std::cout << "  " << m_bin << " generate client   --language LANG [--output-dir DIR] [--schema FILE]" << std::endl;
+  std::cout << "  " << m_bin << " generate provider --language LANG [--output-dir DIR] [--schema FILE]" << std::endl;
+  std::cout << "  " << m_bin << " generate --list" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout << "  --language LANG  target language (cpp98, cpp11, go, py, java11, java17, java21)" << std::endl;
+  std::cout << "  --output-dir DIR where to write generated files (default: options.<lang>.output-dir from schema)"
+            << std::endl;
+  std::cout << "  --schema FILE    schema file (default s5run-schema.json)" << std::endl;
+  std::cout << "  --list           list available generators" << std::endl;
 }
 
-static void print_run_usage() {
-  std::printf(
-    "s5run run - run a script against a server\n"
-    "\n"
-    "Usage:\n"
-    "  %s run <host:port> [--script FILE] [--provider SPEC] [--api-key KEY] [args...]\n"
-    "  cat script.js | %s run <host:port> [args...]\n"
-    "\n"
-    "Options:\n"
-    "  --script FILE     script file to execute (default: stdin)\n"
-    "  --provider SPEC   remote context provider: \"host:port,name1,name2\"\n"
-    "  --api-key KEY     api key for authentication (stub)\n"
-    "  args...           arguments passed to the script entry point\n",
-    g_bin.c_str(),
-    g_bin.c_str()
-  );
+void s5run_parse_args::print_run_usage() const {
+
+  std::cout << m_bin << " run - run a script against a server" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Usage:" << std::endl;
+  std::cout << "  " << m_bin << " run <host:port> [FILE] [--provider SPEC] [--api-key KEY] [args...]" << std::endl;
+  std::cout << "  cat script.js | " << m_bin << " run <host:port> [args...]" << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout << "  FILE              script file to execute (default: stdin)" << std::endl;
+  std::cout << "  --provider SPEC   remote context provider: \"host:port,name1,name2\"" << std::endl;
+  std::cout << "  --api-key KEY     api key for authentication (stub)" << std::endl;
+  std::cout << "  args...           arguments passed to the script entry point" << std::endl;
 }
 
-static int cmd_server(int argc, char **argv) {
+// -----------------------------------------------------------------------
+// Commands
+// -----------------------------------------------------------------------
+
+int s5run_parse_args::cmd_version() {
+  std::cout << "s5run " << m_version << std::endl;
+  return 0;
+}
+
+int s5run_parse_args::cmd_help() {
+  if (!m_arguments.empty()) {
+    const std::string &sub = m_arguments[0];
+    if (sub == "server") {
+      print_server_usage();
+      return 0;
+    }
+    if (sub == "generate") {
+      print_generate_usage();
+      return 0;
+    }
+    if (sub == "run") {
+      print_run_usage();
+      return 0;
+    }
+    if (sub == "version") {
+      return cmd_version();
+    }
+  }
+  print_usage();
+  return 0;
+}
+
+int s5run_parse_args::cmd_server() {
   std::string listen;
   size_t threads = std::thread::hardware_concurrency();
   if (threads == 0)
@@ -139,23 +274,23 @@ static int cmd_server(int argc, char **argv) {
   std::string queue_db;
   int queue_ttl = 3600;
 
-  for (int i = 2; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "--listen" && i + 1 < argc) {
-      listen = argv[++i];
-    } else if (arg == "--threads" && i + 1 < argc) {
-      threads = static_cast<size_t>(std::atoi(argv[++i]));
+  for (size_t i = 0; i < m_arguments.size(); ++i) {
+    const std::string &arg = m_arguments[i];
+    if (arg == "--listen" && i + 1 < m_arguments.size()) {
+      listen = m_arguments[++i];
+    } else if (arg == "--threads" && i + 1 < m_arguments.size()) {
+      threads = static_cast<size_t>(std::atoi(m_arguments[++i].c_str()));
     } else if (arg == "--queue") {
       queue_db = "srun-queue.sqlite3";
-    } else if (arg == "--db" && i + 1 < argc) {
-      queue_db = argv[++i];
-    } else if (arg == "--ttl" && i + 1 < argc) {
-      queue_ttl = std::atoi(argv[++i]);
+    } else if (arg == "--db" && i + 1 < m_arguments.size()) {
+      queue_db = m_arguments[++i];
+    } else if (arg == "--ttl" && i + 1 < m_arguments.size()) {
+      queue_ttl = std::atoi(m_arguments[++i].c_str());
     } else if (arg == "--help" || arg == "-h") {
       print_server_usage();
       return 0;
     } else {
-      std::fprintf(stderr, "Unknown option: %s\n\n", arg.c_str());
+      std::cerr << "Unknown option: "  << std::endl << std::endl;
       print_server_usage();
       return 1;
     }
@@ -172,51 +307,51 @@ static int cmd_server(int argc, char **argv) {
   return s.run(listen, threads);
 }
 
-static int cmd_generate(int argc, char **argv) {
-  if (argc < 3) {
+int s5run_parse_args::cmd_generate() {
+  if (m_arguments.empty()) {
     print_generate_usage();
     return 1;
   }
 
-  std::string subcommand = argv[2];
+  std::string subcommand = m_arguments[0];
   std::string language;
   std::string output_dir;
   std::string schema_file = "s5run-schema.json";
 
   if (subcommand == "--list" || subcommand == "list") {
     auto all = s5run::generators::all();
-    std::printf("available generators:\n");
+    std::cout << "available generators:" << std::endl;
     for (const auto &kv : all)
-      std::printf("  %s\n", kv.first.c_str());
+      std::cout << "  " << kv.first << std::endl;
     return 0;
   }
 
   if (subcommand != "client" && subcommand != "provider") {
-    std::fprintf(stderr, "Unknown generate subcommand: %s\n\n", subcommand.c_str());
+    std::cerr << "Unknown generate subcommand: " << subcommand << std::endl << std::endl;
     print_generate_usage();
     return 1;
   }
 
-  for (int i = 3; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "--language" && i + 1 < argc) {
-      language = argv[++i];
-    } else if (arg == "--output-dir" && i + 1 < argc) {
-      output_dir = argv[++i];
-    } else if (arg == "--schema" && i + 1 < argc) {
-      schema_file = argv[++i];
+  for (size_t i = 1; i < m_arguments.size(); ++i) {
+    const std::string &arg = m_arguments[i];
+    if (arg == "--language" && i + 1 < m_arguments.size()) {
+      language = m_arguments[++i];
+    } else if (arg == "--output-dir" && i + 1 < m_arguments.size()) {
+      output_dir = m_arguments[++i];
+    } else if (arg == "--schema" && i + 1 < m_arguments.size()) {
+      schema_file = m_arguments[++i];
     } else if (arg == "--help" || arg == "-h") {
       print_generate_usage();
       return 0;
     } else {
-      std::fprintf(stderr, "Unknown option: %s\n\n", arg.c_str());
+      std::cerr << "Unknown option: " << arg << std::endl << std::endl;
       print_generate_usage();
       return 1;
     }
   }
 
   if (language.empty()) {
-    std::fprintf(stderr, "--language is required\n\n");
+    std::cerr << "--language is required" << std::endl << std::endl;
     print_generate_usage();
     return 1;
   }
@@ -224,14 +359,14 @@ static int cmd_generate(int argc, char **argv) {
   s5run::generators::schema schema;
   std::string schema_error;
   if (!s5run::generators::load_schema_from_file(schema_file, schema, schema_error)) {
-    std::fprintf(stderr, "schema: %s\n", schema_error.c_str());
+    std::cerr << "schema: " << schema_error << std::endl;
     return 1;
   }
   auto all_generators = s5run::generators::all();
 
   if (all_generators.count(language) == 0) {
-    std::fprintf(stderr, "unknown generator: %s\n", language.c_str());
-    std::fprintf(stderr, "run '%s generate --list' for available generators\n", g_bin.c_str());
+    std::cerr << "unknown generator: " << language << std::endl;
+    std::cerr << "run '" << m_bin << " generate --list' for available generators" << std::endl;
     return 1;
   }
 
@@ -242,78 +377,55 @@ static int cmd_generate(int argc, char **argv) {
       output_dir = options->get_output_dir();
   }
   if (output_dir.empty()) {
-    std::fprintf(stderr, "output-dir is not specified: "
-                         "use --output-dir or options.%s.output-dir in the schema\n\n",
-                 language.c_str());
+    std::cerr << "output-dir is not specified: "
+      << "use --output-dir or options." << language << ".output-dir in the schema"
+      << std::endl<< std::endl;
     print_generate_usage();
     return 1;
   }
 
   if (subcommand == "provider") {
-    std::fprintf(stderr, "generate provider: not implemented yet\n");
+    std::cerr << "generate provider: not implemented yet" << std::endl << std::endl;
     return 1;
   }
 
   auto gen = all_generators[language];
   auto files = gen->generate(schema, output_dir);
   for (const auto &f : files)
-    std::printf("generated: %s\n", f.c_str());
+    std::cout << "generated: " << f << std::endl;
   return 0;
 }
 
-static s5run::Value parse_script_arg(const std::string &raw) {
-  // int?
-  if (!raw.empty()) {
-    char *end = nullptr;
-    long long v = std::strtoll(raw.c_str(), &end, 10);
-    if (end && *end == '\0')
-      return s5run::Value((int64_t)v);
-  }
-  // bool?
-  if (raw == "true")
-    return s5run::Value(true);
-  if (raw == "false")
-    return s5run::Value(false);
-  // double?
-  if (!raw.empty()) {
-    char *end = nullptr;
-    double d = std::strtod(raw.c_str(), &end);
-    if (end && *end == '\0')
-      return s5run::Value(d);
-  }
-  return s5run::Value(raw);
-}
-
-static int cmd_run(int argc, char **argv) {
-  if (argc < 3) {
+int s5run_parse_args::cmd_run() {
+  if (m_arguments.empty()) {
     print_run_usage();
     return 1;
   }
 
-  std::string host_port = argv[2];
+  std::string host_port = m_arguments[0];
   std::string script_file;
   std::string api_key;
   std::vector<std::string> providers;
-  std::vector<s5run::Value> script_args;
+  std::vector<s5run::variable> script_args;
 
-  for (int i = 3; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "--script" && i + 1 < argc) {
-      script_file = argv[++i];
-    } else if (arg == "--provider" && i + 1 < argc) {
-      providers.push_back(argv[++i]);
-    } else if (arg == "--api-key" && i + 1 < argc) {
-      api_key = argv[++i];
+  for (size_t i = 1; i < m_arguments.size(); ++i) {
+    const std::string &arg = m_arguments[i];
+    if (arg == "--script" && i + 1 < m_arguments.size()) {
+      script_file = m_arguments[++i];
+    } else if (arg == "--provider" && i + 1 < m_arguments.size()) {
+      providers.push_back(m_arguments[++i]);
+    } else if (arg == "--api-key" && i + 1 < m_arguments.size()) {
+      api_key = m_arguments[++i];
     } else if (arg == "--help" || arg == "-h") {
       print_run_usage();
       return 0;
     } else {
-      script_args.push_back(parse_script_arg(arg));
+      script_args.push_back(s5run::variable::parse_script_arg(arg));
     }
   }
 
   if (!api_key.empty()) {
-    std::fprintf(stderr, "run: --api-key is a stub, not implemented yet\n");
+    std::cerr << "run: --api-key is a stub, not implemented yet" << std::endl;
   }
 
   // Read script from file or stdin
@@ -321,7 +433,7 @@ static int cmd_run(int argc, char **argv) {
   if (!script_file.empty()) {
     FILE *f = std::fopen(script_file.c_str(), "rb");
     if (!f) {
-      std::fprintf(stderr, "run: cannot open script file: %s\n", script_file.c_str());
+      std::cerr << "run: cannot open script file: " << script_file << std::endl;
       return 1;
     }
     char buf[4096];
@@ -335,14 +447,14 @@ static int cmd_run(int argc, char **argv) {
   }
 
   if (script.empty()) {
-    std::fprintf(stderr, "run: empty script\n");
+    std::cerr << "run: empty script" << std::endl;
     return 1;
   }
 
   if (!providers.empty()) {
-    std::fprintf(stderr, "run: --provider is a stub, not implemented yet\n");
+    std::cerr << "run: --provider is a stub, not implemented yet" << std::endl;
     for (const auto &p : providers)
-      std::fprintf(stderr, "  provider: %s\n", p.c_str());
+      std::cerr << "  provider: " << p << std::endl;
   }
 
   // host:port
@@ -354,7 +466,7 @@ static int cmd_run(int argc, char **argv) {
     port = (uint16_t)std::atoi(host_port.substr(colon + 1).c_str());
   }
   if (host.empty() || port == 0) {
-    std::fprintf(stderr, "run: invalid server address: %s\n", host_port.c_str());
+    std::cerr << "run: invalid server address: " << host_port << std::endl;
     return 1;
   }
 
@@ -363,70 +475,64 @@ static int cmd_run(int argc, char **argv) {
     ctx.connect(host, port);
     ctx.register_console(nullptr);
   } catch (const std::exception &e) {
-    std::fprintf(stderr, "run: %s\n", e.what());
+    std::cerr << "run: " << e.what() << std::endl;
     return 1;
   }
 
   s5run::run_result result = ctx.run(script, "main", script_args);
 
   if (!result.ok) {
-    std::fprintf(stderr, "run error: %s\n", result.error.c_str());
-    std::fprintf(stderr, "  duration: %.1f ms\n", result.duration_ms);
+    std::cerr << "run error: " << result.error << std::endl;
+    std::cerr << "  duration: " << result.duration_ms << "ms" << std::endl;
     return 1;
   }
 
-  std::printf("%s\n", s5run::value_to_display_string(result.value).c_str());
-  std::fprintf(stderr, "  duration: %.1f ms\n", result.duration_ms);
+  
+  std::cout << s5run::value_to_display_string(result.value) << std::endl;
+  std::cout << "  duration: " << result.duration_ms << "ms" << std::endl;
   return 0;
 }
 
+// -----------------------------------------------------------------------
+// Dispatch
+// -----------------------------------------------------------------------
+
+int s5run_parse_args::exec() {
+  if (m_command_exec.empty())
+    return -1;
+
+  // version: without banner
+  if (m_command_exec == "version" || m_command_exec == "--version" || m_command_exec == "-v")
+    return cmd_version();
+
+  // everything else: banner first
+  print_banner();
+
+  if (m_command_exec == "help" || m_command_exec == "--help" || m_command_exec == "-h")
+    return cmd_help();
+
+  if (m_command_exec == "server")
+    return cmd_server();
+
+  if (m_command_exec == "generate")
+    return cmd_generate();
+
+  if (m_command_exec == "run")
+    return cmd_run();
+
+  std::cerr << "Unknown command: " << m_command_exec << std::endl << std::endl;
+  print_usage();
+  return 1;
+}
+
 int main(int argc, char **argv) {
-  if (argc > 0 && argv[0] && argv[0][0] != '\0')
-    g_bin = argv[0];
+  s5run_parse_args app(argc, argv);
+
   if (argc < 2) {
-    print_banner();
-    print_usage();
+    app.print_banner();
+    app.print_usage();
     return 1;
   }
 
-  std::string command = argv[1];
-
-  if (command == "server") {
-    return cmd_server(argc, argv);
-  }
-  if (command == "generate") {
-    return cmd_generate(argc, argv);
-  }
-  if (command == "run") {
-    return cmd_run(argc, argv);
-  }
-  if (command == "version" || command == "--version" || command == "-v") {
-    std::printf("s5run v0.2.0\n");
-    return 0;
-  }
-  if (command == "help" || command == "--help" || command == "-h") {
-    if (argc > 2) {
-      std::string sub = argv[2];
-      if (sub == "server") {
-        print_server_usage();
-        return 0;
-      }
-      if (sub == "generate") {
-        print_generate_usage();
-        return 0;
-      }
-      if (sub == "run") {
-        print_run_usage();
-        return 0;
-      }
-    }
-    print_banner();
-    print_usage();
-    return 0;
-  }
-
-  print_banner();
-  std::fprintf(stderr, "Unknown command: %s\n\n", command.c_str());
-  print_usage();
-  return 1;
+  return app.exec();
 }

@@ -55,6 +55,10 @@ static bool is_scalar_type(const std::string &t) {
          t == "double" || t == "string" || t == "byte";
 }
 
+static bool is_dynamic_type(const std::string &t) {
+  return t == "var";
+}
+
 static bool is_void(const std::string &t) {
   return t == "void";
 }
@@ -68,7 +72,7 @@ static std::string array_inner(const std::string &t) {
 }
 
 static bool is_ref_type(const std::string &t) {
-  return !is_scalar_type(t) && !is_void(t) && !is_array_type(t);
+  return !is_scalar_type(t) && !is_dynamic_type(t) && !is_void(t) && !is_array_type(t);
 }
 
 static bool has_convert(const std::vector<schema_argument> &args) {
@@ -80,6 +84,7 @@ static std::string py_scalar_type(const std::string &t) {
   if (t == "int" || t == "uint" || t == "byte") return "int";
   if (t == "float" || t == "double") return "float";
   if (t == "string") return "str";
+  if (t == "var") return "Any";
   return t;
 }
 
@@ -95,6 +100,7 @@ static std::string py_reader(const std::string &t) {
   if (t == "float" || t == "double") return "_read_double(buf)";
   if (t == "string") return "_read_str_value(buf)";
   if (t == "byte") return "_read_byte(buf)";
+  if (t == "var") return "_decode_value(buf)";
   return t;
 }
 
@@ -104,11 +110,12 @@ static std::string py_writer_expr(const std::string &t, const std::string &expr)
   if (t == "float" || t == "double") return "_write_double(out, " + expr + ")";
   if (t == "string") return "_write_str_value(out, " + expr + ")";
   if (t == "byte") return "_write_byte(out, " + expr + ")";
+  if (t == "var") return "_encode_value(out, " + expr + ")";
   return expr;
 }
 
 static std::string read_stmt(const std::string &t, const std::string &name) {
-  if (is_scalar_type(t))
+  if (is_scalar_type(t) || is_dynamic_type(t))
     return name + " = " + py_reader(t);
   std::string inner = array_inner(t);
   std::string elem = is_scalar_type(inner) ? py_reader(inner) : "None";
@@ -116,7 +123,7 @@ static std::string read_stmt(const std::string &t, const std::string &name) {
 }
 
 static std::string write_stmt(const std::string &t, const std::string &expr) {
-  if (is_scalar_type(t))
+  if (is_scalar_type(t) || is_dynamic_type(t))
     return py_writer_expr(t, expr);
   std::string inner = array_inner(t);
   return "_write_array(out, " + expr + ", lambda e: " + py_writer_expr(inner, "e") + ")";

@@ -50,12 +50,12 @@ class channel;
 struct run_result {
   bool ok = false;
   std::string error;
-  Value value;
+  variable value;
   double duration_ms = 0.0;
 };
 
 // Convert a wire value to a display string (for console methods and result printing).
-std::string value_to_display_string(const Value &v);
+std::string value_to_display_string(const variable &v);
 
 // Built-in console object: log -> stdout, warning/error -> stderr.
 // Inherit and override to customize.
@@ -90,12 +90,12 @@ public:
 
   // Run a script on the server and pump callbacks until it finishes.
   run_result run(const std::string &script, const std::string &entry,
-                 const std::vector<Value> &args);
+                 const std::vector<variable> &args);
 
 private:
   void send_register_object(const std::string &name, int32_t this_id,
                             const std::vector<std::string> &methods);
-  void send_callback_ok(int32_t cb_id, const Value &result);
+  void send_callback_ok(int32_t cb_id, const variable &result);
   void send_callback_error(int32_t cb_id, const std::string &error);
   void dispatch_callback(const std::vector<uint8_t> &body);
 

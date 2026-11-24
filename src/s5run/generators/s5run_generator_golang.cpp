@@ -55,6 +55,10 @@ static bool is_scalar_type(const std::string &t) {
          t == "double" || t == "string" || t == "byte";
 }
 
+static bool is_dynamic_type(const std::string &t) {
+  return t == "var";
+}
+
 static bool is_void(const std::string &t) {
   return t == "void";
 }
@@ -68,7 +72,7 @@ static std::string array_inner(const std::string &t) {
 }
 
 static bool is_ref_type(const std::string &t) {
-  return !is_scalar_type(t) && !is_void(t) && !is_array_type(t);
+  return !is_scalar_type(t) && !is_dynamic_type(t) && !is_void(t) && !is_array_type(t);
 }
 
 static bool has_convert(const std::vector<schema_argument> &args) {
@@ -92,6 +96,7 @@ static std::string go_scalar_type(const std::string &t) {
   if (t == "float" || t == "double") return "float64";
   if (t == "string") return "string";
   if (t == "byte") return "byte";
+  if (t == "var") return "Value";
   return t;
 }
 
@@ -107,6 +112,7 @@ static std::string go_reader(const std::string &t) {
   if (t == "float" || t == "double") return "readDouble(r)";
   if (t == "string") return "readStrValue(r)";
   if (t == "byte") return "readByte(r)";
+  if (t == "var") return "decodeValue(r)";
   return t;
 }
 
@@ -117,6 +123,7 @@ static std::string go_writer_expr(const std::string &t, const std::string &expr)
   if (t == "float" || t == "double") return "writeDouble(w, " + expr + ")";
   if (t == "string") return "writeStrValue(w, " + expr + ")";
   if (t == "byte") return "writeByte(w, " + expr + ")";
+  if (t == "var") return "encodeValue(w, " + expr + ")";
   return expr;
 }
 

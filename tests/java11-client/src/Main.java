@@ -185,19 +185,19 @@ public class Main {
                 .addServer(new RemoteServerInfo().address(address).apiKey("some api key runner"))
                 .setScript(K_SCRIPT)) {
 
-        RunResult result = Context.runScript(ctx, "main", List.of(new Value.Str("test.txt")));
+        RunResult result = Context.runScript(ctx, "main", List.of(new S5RunVariable.Str("test.txt")));
         if (result.hasError()) {
             throw new RuntimeException("unexpected error: " + result.error());
         }
         System.out.println("  duration: " + result.durationMs() + " ms");
 
-        var obj = ((Value.Obj) result.value()).v();
-        check(((Value.Int) obj.get("size")).v() == 1024, "size");
-        check(((Value.Int) obj.get("sizeByRef")).v() == 1024, "sizeByRef");
-        check(((Value.Int) obj.get("openedCount")).v() == 2, "openedCount");
-        check(((Value.Int) obj.get("openedSum")).v() == 300, "openedSum");
-        check(((Value.Int) obj.get("fileListCount")).v() == 3, "fileListCount");
-        check(((Value.Int) obj.get("time")).v() == 1737000000L, "time");
+        var obj = ((S5RunVariable.Obj) result.value()).v();
+        check(((S5RunVariable.Int) obj.get("size")).v() == 1024, "size");
+        check(((S5RunVariable.Int) obj.get("sizeByRef")).v() == 1024, "sizeByRef");
+        check(((S5RunVariable.Int) obj.get("openedCount")).v() == 2, "openedCount");
+        check(((S5RunVariable.Int) obj.get("openedSum")).v() == 300, "openedSum");
+        check(((S5RunVariable.Int) obj.get("fileListCount")).v() == 3, "fileListCount");
+        check(((S5RunVariable.Int) obj.get("time")).v() == 1737000000L, "time");
         check(MyGetFile.lastPath.equals("test.txt"), "GetFile path");
         check(MyFileSystem.lastPath.equals("test.txt"), "FileSystem.GetList path");
         check(MyConsole.logs.get(0).equals("hello test.txt 1 2"), "console.log");
@@ -219,10 +219,10 @@ public class Main {
         if (result.hasError()) {
             throw new RuntimeException("unexpected error: " + result.error());
         }
-        var obj = ((Value.Obj) result.value()).v();
-        double pi = ((Value.Dbl) obj.get("pi")).v();
+        var obj = ((S5RunVariable.Obj) result.value()).v();
+        double pi = ((S5RunVariable.Dbl) obj.get("pi")).v();
         check(pi > 3.13 && pi < 3.15, "pi");
-        check(((Value.Int) obj.get("port")).v() == 8080, "port");
+        check(((S5RunVariable.Int) obj.get("port")).v() == 8080, "port");
         System.out.println("  PASS");
         }
     }

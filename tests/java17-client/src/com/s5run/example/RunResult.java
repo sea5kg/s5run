@@ -6,15 +6,15 @@ public record RunResult(
         String error,
         int errorLine,
         long durationMs,
-        Value value) {
+        S5RunVariable value) {
 
-    public static RunResult ok(Value value, long durationMs) {
+    public static RunResult ok(S5RunVariable value, long durationMs) {
         return new RunResult(false, "", 0, durationMs, value);
     }
 
     public static RunResult fail(String error, long durationMs) {
         String msg = error == null ? "unknown error" : error;
-        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new Value.Null());
+        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new S5RunVariable.Null());
     }
 
     static int parseErrorLine(String error) {

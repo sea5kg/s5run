@@ -136,6 +136,20 @@ public:
     virtual void error(const std::vector<std::string> & args) = 0;
 };
 
+class KeyValueStorage : public s5run_object {
+public:
+    std::string s5run_class_name() const override { return "KeyValueStorage"; }
+    std::vector<std::string> s5run_method_names() const override {
+        std::vector<std::string> out_;
+        out_.push_back("SetValueByKey");
+        out_.push_back("GetValueByKey");
+        return out_;
+    }
+    virtual ~KeyValueStorage() {}
+    virtual void SetValueByKey(const std::string & name, const value & value) = 0;
+    virtual void GetValueByKey(const std::string & name) = 0;
+};
+
 class s5run_function {
 public:
     virtual ~s5run_function() {}

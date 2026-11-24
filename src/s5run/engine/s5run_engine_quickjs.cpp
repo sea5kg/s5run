@@ -107,38 +107,38 @@ inline void free_handle(JsValue h) {
 // JSON <-> JSValue helpers
 // ---------------------------------------------------------------
 
-s5run::Value js_to_value(JSContext *ctx, JSValueConst v) {
+s5run::variable js_to_value(JSContext *ctx, JSValueConst v) {
   if (JS_IsNull(v) || JS_IsUndefined(v))
-    return s5run::Value();
+    return s5run::variable();
   if (JS_IsBool(v))
-    return s5run::Value((bool)JS_ToBool(ctx, v));
+    return s5run::variable((bool)JS_ToBool(ctx, v));
   if (JS_IsNumber(v)) {
     double d = 0;
     JS_ToFloat64(ctx, &d, v);
     if (d == (double)(int64_t)d)
-      return s5run::Value((int64_t)d);
-    return s5run::Value(d);
+      return s5run::variable((int64_t)d);
+    return s5run::variable(d);
   }
   if (JS_IsString(v)) {
     const char *s = JS_ToCString(ctx, v);
     std::string out = s ? s : "";
     if (s)
       JS_FreeCString(ctx, s);
-    return s5run::Value(out);
+    return s5run::variable(out);
   }
   if (JS_IsArray(v)) {
     JSValue len_val = JS_GetPropertyStr(ctx, v, "length");
     uint32_t len = 0;
     JS_ToUint32(ctx, &len, len_val);
     JS_FreeValue(ctx, len_val);
-    s5run::ValueArray out;
+    s5run::variable_array out;
     out.reserve(len);
     for (uint32_t i = 0; i < len; ++i) {
       JSValue elem = JS_GetPropertyUint32(ctx, v, i);
       out.push_back(js_to_value(ctx, elem));
       JS_FreeValue(ctx, elem);
     }
-    return s5run::Value(out);
+    return s5run::variable(out);
   }
   if (JS_IsObject(v)) {
     JSValue marker = JS_GetPropertyStr(ctx, v, "__s5run_this_id");
@@ -146,14 +146,14 @@ s5run::Value js_to_value(JSContext *ctx, JSValueConst v) {
       double d = 0;
       JS_ToFloat64(ctx, &d, marker);
       JS_FreeValue(ctx, marker);
-      return s5run::Value(s5run::ObjectRef((int)d, ""));
+      return s5run::variable(s5run::ObjectRef((int)d, ""));
     }
     JS_FreeValue(ctx, marker);
 
     JSPropertyEnum *tab = nullptr;
     uint32_t len = 0;
     if (JS_GetOwnPropertyNames(ctx, &tab, &len, v, JS_GPN_STRING_MASK) < 0)
-      return s5run::Value();
+      return s5run::variable();
     if (len == 1) {
       const char *name = JS_AtomToCString(ctx, tab[0].atom);
       bool is_this_id = name && strcmp(name, "this_id") == 0;
@@ -165,12 +165,12 @@ s5run::Value js_to_value(JSContext *ctx, JSValueConst v) {
           JS_ToFloat64(ctx, &d, id_val);
           JS_FreeValue(ctx, id_val);
           JS_FreePropertyEnum(ctx, tab, len);
-          return s5run::Value(s5run::ObjectRef((int)d, ""));
+          return s5run::variable(s5run::ObjectRef((int)d, ""));
         }
         JS_FreeValue(ctx, id_val);
       }
     }
-    s5run::ValueObject out;
+    s5run::variable_object out;
     for (uint32_t i = 0; i < len; ++i) {
       const char *name = JS_AtomToCString(ctx, tab[i].atom);
       if (!name)
@@ -183,25 +183,25 @@ s5run::Value js_to_value(JSContext *ctx, JSValueConst v) {
       JS_FreeValue(ctx, prop);
     }
     JS_FreePropertyEnum(ctx, tab, len);
-    return s5run::Value(out);
+    return s5run::variable(out);
   }
-  return s5run::Value();
+  return s5run::variable();
 }
 
-JSValue value_to_js(JSContext *ctx, const s5run::Value &v) {
+JSValue value_to_js(JSContext *ctx, const s5run::variable &v) {
   switch (v.kind()) {
-  case s5run::Value::K_NULL:
+  case s5run::variable::K_NULL:
     return JS_NULL;
-  case s5run::Value::K_BOOL:
+  case s5run::variable::K_BOOL:
     return JS_NewBool(ctx, v.as_bool());
-  case s5run::Value::K_INT:
+  case s5run::variable::K_INT:
     return JS_NewInt64(ctx, v.as_int());
-  case s5run::Value::K_DOUBLE:
+  case s5run::variable::K_DOUBLE:
     return JS_NewFloat64(ctx, v.as_double());
-  case s5run::Value::K_STRING:
+  case s5run::variable::K_STRING:
     return JS_NewStringLen(ctx, v.as_string().data(), v.as_string().size());
-  case s5run::Value::K_ARRAY: {
-    const s5run::ValueArray &a = v.as_array();
+  case s5run::variable::K_ARRAY: {
+    const s5run::variable_array &a = v.as_array();
     JSValue arr = JS_NewArray(ctx);
     if (JS_IsException(arr))
       return arr;
@@ -215,8 +215,8 @@ JSValue value_to_js(JSContext *ctx, const s5run::Value &v) {
     }
     return arr;
   }
-  case s5run::Value::K_OBJECT: {
-    const s5run::ValueObject &o = v.as_object();
+  case s5run::variable::K_OBJECT: {
+    const s5run::variable_object &o = v.as_object();
     JSValue obj = JS_NewObject(ctx);
     if (JS_IsException(obj))
       return obj;
@@ -230,7 +230,7 @@ JSValue value_to_js(JSContext *ctx, const s5run::Value &v) {
     }
     return obj;
   }
-  case s5run::Value::K_REF: {
+  case s5run::variable::K_REF: {
     // Represent an ObjectRef as {"this_id": N} in JS.
     JSValue obj = JS_NewObject(ctx);
     if (JS_IsException(obj))
@@ -349,7 +349,7 @@ public:
     return to_handle(arr);
   }
 
-  JsValue make_value(JsContext ctx_handle, const s5run::Value &v) override {
+  JsValue make_value(JsContext ctx_handle, const s5run::variable &v) override {
     JSContext *ctx = to_ctx(ctx_handle);
     return to_handle(value_to_js(ctx, v));
   }
@@ -365,7 +365,7 @@ public:
   }
 
   ExecResult execute(const std::string &script, const std::string &entry,
-                     const std::vector<s5run::Value> &args) override {
+                     const std::vector<s5run::variable> &args) override {
     ExecResult res;
 
     JSValue eval_res = JS_Eval(ctx_.get(), script.data(), script.size(), "<script>", JS_EVAL_TYPE_GLOBAL);
@@ -420,7 +420,7 @@ public:
   }
 
   // Used by the trampolines.
-  s5run::Value dispatch_simple(const std::string &method, const std::vector<s5run::Value> &args) {
+  s5run::variable dispatch_simple(const std::string &method, const std::vector<s5run::variable> &args) {
     auto it = simple_callbacks_.find(method);
     if (it == simple_callbacks_.end())
       throw std::runtime_error("callback not registered: " + method);
@@ -493,13 +493,13 @@ private:
     if (!cctx)
       return JS_ThrowTypeError(ctx, "invalid callback context");
 
-    std::vector<s5run::Value> args;
+    std::vector<s5run::variable> args;
     args.reserve(argc);
     for (int i = 0; i < argc; ++i)
       args.push_back(js_to_value(ctx, argv[i]));
 
     try {
-      s5run::Value r = eng->dispatch_simple(cctx->method, args);
+      s5run::variable r = eng->dispatch_simple(cctx->method, args);
       return value_to_js(ctx, r);
     } catch (const std::exception &e) {
       return JS_ThrowInternalError(ctx, "%s", e.what());
@@ -517,7 +517,7 @@ private:
     if (!cctx)
       return JS_ThrowTypeError(ctx, "invalid callback context");
 
-    std::vector<s5run::Value> args;
+    std::vector<s5run::variable> args;
     args.reserve(argc);
     for (int i = 0; i < argc; ++i)
       args.push_back(js_to_value(ctx, argv[i]));
@@ -548,14 +548,14 @@ private:
     if (!mctx)
       return JS_ThrowTypeError(ctx, "invalid method context");
 
-    std::vector<s5run::Value> args;
+    std::vector<s5run::variable> args;
     args.reserve(1 + argc);
-    args.push_back(s5run::Value((int64_t)mctx->this_id));
+    args.push_back(s5run::variable((int64_t)mctx->this_id));
     for (int i = 0; i < argc; ++i)
       args.push_back(js_to_value(ctx, argv[i]));
 
     try {
-      s5run::Value r = eng->dispatch_simple(mctx->method, args);
+      s5run::variable r = eng->dispatch_simple(mctx->method, args);
       return value_to_js(ctx, r);
     } catch (const std::exception &e) {
       return JS_ThrowInternalError(ctx, "%s", e.what());

@@ -198,6 +198,33 @@
           }
         }
       ]
+    },
+    {
+      "name": "KeyValueStorage",
+      "methods": [
+        {
+          "name": "SetValueByKey",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "name"
+            },
+            {
+              "type": "var",
+              "name": "value"
+            }
+          ]
+        },
+        {
+          "name": "GetValueByKey",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "name"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -60,7 +60,8 @@ private:
 
 static bool is_ref(const std::string &t) {
   return t != "bool" && t != "int" && t != "uint" && t != "float" && t != "double" &&
-         t != "string" && t != "byte" && t != "void" && t.substr(0, 6) != "array<";
+         t != "string" && t != "byte" && t != "var" && t != "void" &&
+         t.substr(0, 6) != "array<";
 }
 static std::string cpp11_type(const std::string &t) {
   if (t == "bool") return "bool";
@@ -68,6 +69,7 @@ static std::string cpp11_type(const std::string &t) {
   if (t == "float" || t == "double") return "double";
   if (t == "string") return "std::string";
   if (t == "byte") return "uint8_t";
+  if (t == "var") return "value";
   if (t.substr(0, 6) == "array<") {
     std::string inner = t.substr(6, t.size() - 7);
     if (is_ref(inner))
@@ -79,7 +81,7 @@ static std::string cpp11_type(const std::string &t) {
 
 static std::string cpp11_shared(const std::string &t) {
   if (t == "bool" || t == "int" || t == "uint" || t == "float" || t == "double" ||
-      t == "string" || t == "byte" || t == "void")
+      t == "string" || t == "byte" || t == "var" || t == "void")
     return cpp11_type(t);
   if (t.substr(0, 6) == "array<")
     return "std::vector<" + cpp11_shared(t.substr(6, t.size() - 7)) + ">";
@@ -91,6 +93,7 @@ static std::string cpp11_param(const std::string &t) {
   if (is_ref(t)) return "const std::shared_ptr<" + t + "> &";
   std::string ct = cpp11_type(t);
   if (ct.substr(0, 5) == "std::") return "const " + ct + " &";
+  if (ct == "value") return "const " + ct + " &";
   return ct;
 }
 static bool has_convert(const std::vector<schema_argument> &args) {
@@ -1023,6 +1026,13 @@ static void emit_decode_args(std::string &out, const std::vector<schema_argument
         out += "                throw std::runtime_error(\"" + owner + ": unknown object reference\");\n";
         out += "            a_" + a.name + ".push_back(a_it->second);\n";
         out += "        }\n";
+      } else if (inner == "var") {
+        out += "        if (r.get_u8() != T_ARRAY) throw std::runtime_error(\"wire: expected array\");\n";
+        out += "        uint32_t cnt_" + a.name + " = r.get_u32();\n";
+        out += "        std::vector<value> a_" + a.name + ";\n";
+        out += "        a_" + a.name + ".reserve(cnt_" + a.name + ");\n";
+        out += "        for (uint32_t i = 0; i < cnt_" + a.name + "; ++i)\n";
+        out += "            a_" + a.name + ".push_back(decode_value(r));\n";
       } else {
         out += "        std::vector<" + cpp11_type(inner) + "> a_" + a.name + " = read_" + inner + "(r);\n";
       }
@@ -1039,6 +1049,7 @@ static void emit_decode_args(std::string &out, const std::vector<schema_argument
       else if (a.type == "float" || a.type == "double") fn = "read_double(r)";
       else if (a.type == "string") fn = "read_string(r)";
       else if (a.type == "byte") fn = "read_byte(r)";
+      else if (a.type == "var") fn = "decode_value(r)";
       else fn = "read_" + a.type + "(r)";
       out += "        " + cpp11_type(a.type) + " a_" + a.name + " = " + fn + ";\n";
     }
@@ -1061,6 +1072,8 @@ static void emit_encode_result(std::string &out, const std::string &ret) {
     out += "        write_string(w, res);\n";
   } else if (ret == "byte") {
     out += "        write_byte(w, res);\n";
+  } else if (ret == "var") {
+    out += "        encode_value(w, res);\n";
   } else if (ret.substr(0, 6) == "array<") {
     std::string inner = ret.substr(6, ret.size() - 7);
     if (is_ref(inner)) {
@@ -1076,6 +1089,7 @@ static void emit_encode_result(std::string &out, const std::string &ret) {
       else if (inner == "float" || inner == "double") fn = "write_double(w, res[i])";
       else if (inner == "string") fn = "write_string(w, res[i])";
       else if (inner == "byte") fn = "write_byte(w, res[i])";
+      else if (inner == "var") fn = "encode_value(w, res[i])";
       out += "        w.put_u8(T_ARRAY); w.put_u32((uint32_t)res.size());\n";
       out += "        for (size_t i = 0; i < res.size(); ++i)\n";
       out += "            " + fn + ";\n";

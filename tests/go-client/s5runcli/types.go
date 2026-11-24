@@ -126,6 +126,21 @@ func (ConsoleBase) S5RunMethodNames() []string {
 }
 
 
+// KeyValueStorage is the schema class 'KeyValueStorage' - implement it and register.
+type KeyValueStorage interface {
+	S5RunObject
+	SetValueByKey(name string, value Value)
+	GetValueByKey(name string)
+}
+
+type KeyValueStorageBase struct{}
+
+func (KeyValueStorageBase) S5RunClassName() string { return "KeyValueStorage" }
+func (KeyValueStorageBase) S5RunMethodNames() []string {
+	return []string{"SetValueByKey", "GetValueByKey"}
+}
+
+
 // GlobalFunctionGetFile is the global function 'GetFile'.
 type GlobalFunctionGetFile interface {
 	S5RunFunction

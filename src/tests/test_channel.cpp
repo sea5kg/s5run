@@ -31,9 +31,9 @@ struct detach_guard {
 };
 
 using s5run::channel;
-using s5run::Value;
-using s5run::ValueArray;
-using s5run::ValueObject;
+using s5run::variable;
+using s5run::variable_array;
+using s5run::variable_object;
 using s5run::ObjectRef;
 
 // -----------------------------------------------------------------------
@@ -55,7 +55,7 @@ void send_register_ok(int fd) {
   s5run::write_message(fd, s5run::M_REGISTER_RESP, w.data());
 }
 
-void send_exec_result(int fd, const Value &value) {
+void send_exec_result(int fd, const variable &value) {
   wire::Writer w;
   w.put_u8(1);
   s5run::value_to_wire(value, w);
@@ -70,7 +70,7 @@ void send_exec_error(int fd, const std::string &error) {
 }
 
 void send_callback(int fd, int32_t cb_id, const std::string &method,
-                   const std::vector<Value> &args) {
+                   const std::vector<variable> &args) {
   wire::Writer w;
   w.put_i32(cb_id);
   w.put_string(method);
@@ -160,15 +160,15 @@ static void test_send_recv() {
       throw std::runtime_error("expected M_EXEC_REQ");
 
     // Send a callback
-    send_callback(sv[0], 1, "GetSize", {Value((int64_t)42)});
+    send_callback(sv[0], 1, "GetSize", {variable((int64_t)42)});
     // Receive the callback response
     if (!server_recv(sv[0], t, b) || t != s5run::M_CALLBACK_RESP)
       throw std::runtime_error("expected M_CALLBACK_RESP");
 
     // Send the exec result
-    ValueObject obj;
-    obj["answer"] = Value((int64_t)42);
-    send_exec_result(sv[0], Value(obj));
+    variable_object obj;
+    obj["answer"] = variable((int64_t)42);
+    send_exec_result(sv[0], variable(obj));
 
     // Read until EOF
     while (server_recv(sv[0], t, b)) {}
@@ -208,7 +208,7 @@ static void test_send_recv() {
       wire::Writer cb_resp;
       cb_resp.put_i32(cb_id);
       cb_resp.put_u8(1);
-      s5run::value_to_wire(Value((int64_t)42), cb_resp);
+      s5run::value_to_wire(variable((int64_t)42), cb_resp);
       ch.send(s5run::M_CALLBACK_RESP, cb_resp.data());
     }
 
@@ -218,7 +218,7 @@ static void test_send_recv() {
     {
       wire::Reader r(body.data(), body.size());
       CHECK(r.get_u8() == 1);
-      Value result = s5run::value_from_wire(r);
+      variable result = s5run::value_from_wire(r);
       CHECK(result.is_object());
       CHECK(result.as_object().at("answer").as_int() == 42);
     }
@@ -246,10 +246,10 @@ static void test_send_and_expect_skips_callbacks() {
     server_recv(sv[0], t, b);
 
     // Send callback BEFORE the exec result
-    send_callback(sv[0], 7, "Log", {Value(std::string("hello"))});
+    send_callback(sv[0], 7, "Log", {variable(std::string("hello"))});
 
     // Then send the exec result
-    send_exec_result(sv[0], Value((int64_t)99));
+    send_exec_result(sv[0], variable((int64_t)99));
 
     while (server_recv(sv[0], t, b)) {}
     ::close(sv[0]);

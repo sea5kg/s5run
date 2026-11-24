@@ -40,16 +40,16 @@
 
 namespace s5run {
 
-void value_to_wire(const Value &v, wire::Writer &w) {
+void value_to_wire(const variable &v, wire::Writer &w) {
   switch (v.kind()) {
-  case Value::K_NULL:
+  case variable::K_NULL:
     w.put_u8(wire::T_UNDEFINED);
     return;
-  case Value::K_BOOL:
+  case variable::K_BOOL:
     w.put_u8(wire::T_BOOL);
     w.put_u8(v.as_bool() ? 1 : 0);
     return;
-  case Value::K_INT: {
+  case variable::K_INT: {
     int64_t i = v.as_int();
     if (i >= INT8_MIN && i <= INT8_MAX) {
       w.put_u8(wire::T_INT8);
@@ -66,15 +66,15 @@ void value_to_wire(const Value &v, wire::Writer &w) {
     }
     return;
   }
-  case Value::K_DOUBLE:
+  case variable::K_DOUBLE:
     w.put_u8(wire::T_FLOAT64);
     w.put_f64(v.as_double());
     return;
-  case Value::K_STRING:
+  case variable::K_STRING:
     w.put_u8(wire::T_STRING);
     w.put_string(v.as_string());
     return;
-  case Value::K_ARRAY: {
+  case variable::K_ARRAY: {
     w.put_u8(wire::T_ARRAY);
     const auto &a = v.as_array();
     w.put_u32((uint32_t)a.size());
@@ -82,7 +82,7 @@ void value_to_wire(const Value &v, wire::Writer &w) {
       value_to_wire(e, w);
     return;
   }
-  case Value::K_OBJECT: {
+  case variable::K_OBJECT: {
     w.put_u8(wire::T_OBJECT);
     const auto &o = v.as_object();
     w.put_u32((uint32_t)o.size());
@@ -93,7 +93,7 @@ void value_to_wire(const Value &v, wire::Writer &w) {
     }
     return;
   }
-  case Value::K_REF:
+  case variable::K_REF:
     w.put_u8(wire::T_REF);
     w.put_i32(v.as_ref().this_id);
     w.put_string(v.as_ref().type);
@@ -101,46 +101,46 @@ void value_to_wire(const Value &v, wire::Writer &w) {
   }
 }
 
-Value value_from_wire(wire::Reader &r) {
+variable value_from_wire(wire::Reader &r) {
   uint8_t tag = r.get_u8();
   switch (tag) {
   case wire::T_UNDEFINED:
-    return Value();
+    return variable();
   case wire::T_BOOL:
-    return Value(r.get_u8() != 0);
+    return variable(r.get_u8() != 0);
   case wire::T_INT8:
-    return Value((int64_t)r.get_i8());
+    return variable((int64_t)r.get_i8());
   case wire::T_INT16:
-    return Value((int64_t)r.get_i16());
+    return variable((int64_t)r.get_i16());
   case wire::T_INT32:
-    return Value((int64_t)r.get_i32());
+    return variable((int64_t)r.get_i32());
   case wire::T_INT64:
-    return Value((int64_t)r.get_i64());
+    return variable((int64_t)r.get_i64());
   case wire::T_UINT8:
-    return Value((int64_t)r.get_u8());
+    return variable((int64_t)r.get_u8());
   case wire::T_UINT16:
-    return Value((int64_t)r.get_u16());
+    return variable((int64_t)r.get_u16());
   case wire::T_UINT32:
-    return Value((int64_t)r.get_u32());
+    return variable((int64_t)r.get_u32());
   case wire::T_UINT64:
-    return Value((int64_t)r.get_u64());
+    return variable((int64_t)r.get_u64());
   case wire::T_FLOAT32:
-    return Value((double)r.get_f32());
+    return variable((double)r.get_f32());
   case wire::T_FLOAT64:
-    return Value(r.get_f64());
+    return variable(r.get_f64());
   case wire::T_STRING:
-    return Value(r.get_string());
+    return variable(r.get_string());
   case wire::T_ARRAY: {
     uint32_t n = r.get_u32();
-    ValueArray a;
+    variable_array a;
     a.reserve(n);
     for (uint32_t i = 0; i < n; ++i)
       a.push_back(value_from_wire(r));
-    return Value(a);
+    return variable(a);
   }
   case wire::T_OBJECT: {
     uint32_t n = r.get_u32();
-    ValueObject o;
+    variable_object o;
     for (uint32_t i = 0; i < n; ++i) {
       uint8_t k_tag = r.get_u8();
       if (k_tag != wire::T_STRING)
@@ -148,12 +148,12 @@ Value value_from_wire(wire::Reader &r) {
       std::string key = r.get_string();
       o[key] = value_from_wire(r);
     }
-    return Value(o);
+    return variable(o);
   }
   case wire::T_REF: {
     int32_t this_id = r.get_i32();
     std::string type = r.get_string();
-    return Value(ObjectRef(this_id, type));
+    return variable(ObjectRef(this_id, type));
   }
   default:
     throw std::runtime_error("wire: unknown value tag");

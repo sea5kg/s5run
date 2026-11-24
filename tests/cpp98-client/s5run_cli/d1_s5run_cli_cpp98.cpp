@@ -525,9 +525,12 @@ private:
     void cbm_console_log(i32 cb_id, Reader &r);
     void cbm_console_warning(i32 cb_id, Reader &r);
     void cbm_console_error(i32 cb_id, Reader &r);
+    void cbm_KeyValueStorage_SetValueByKey(i32 cb_id, Reader &r);
+    void cbm_KeyValueStorage_GetValueByKey(i32 cb_id, Reader &r);
     i32 register_instance_File(base_context_class_File *obj);
     i32 register_instance_FileSystem(base_context_class_FileSystem *obj);
     i32 register_instance_console(base_context_class_console *obj);
+    i32 register_instance_KeyValueStorage(base_context_class_KeyValueStorage *obj);
     void store_instance(const std::string &cls, i32 id, s5run_object *obj);
     void dispatch_callback(const std::vector<u8> &body);
     void connect(); void disconnect(); void flush_pending();
@@ -558,6 +561,7 @@ private:
     std::map<i32, base_context_class_File *> m_instances_File;
     std::map<i32, base_context_class_FileSystem *> m_instances_FileSystem;
     std::map<i32, base_context_class_console *> m_instances_console;
+    std::map<i32, base_context_class_KeyValueStorage *> m_instances_KeyValueStorage;
 };
 
 
@@ -639,6 +643,7 @@ void context::context_impl::store_instance(const std::string &cls, i32 id, s5run
     if (cls == "File") { m_instances_File[id] = (base_context_class_File *)obj; return; }
     if (cls == "FileSystem") { m_instances_FileSystem[id] = (base_context_class_FileSystem *)obj; return; }
     if (cls == "console") { m_instances_console[id] = (base_context_class_console *)obj; return; }
+    if (cls == "KeyValueStorage") { m_instances_KeyValueStorage[id] = (base_context_class_KeyValueStorage *)obj; return; }
     throw std::runtime_error("add_object: unknown class: " + cls);
 }
 
@@ -657,6 +662,12 @@ i32 context::context_impl::register_instance_FileSystem(base_context_class_FileS
 i32 context::context_impl::register_instance_console(base_context_class_console *obj) {
     i32 id = ++m_next_this_id;
     m_instances_console[id] = obj;
+    return id;
+}
+
+i32 context::context_impl::register_instance_KeyValueStorage(base_context_class_KeyValueStorage *obj) {
+    i32 id = ++m_next_this_id;
+    m_instances_KeyValueStorage[id] = obj;
     return id;
 }
 
@@ -917,6 +928,35 @@ void context::context_impl::cbm_console_error(i32 cb_id, Reader &r) {
 }
 
 
+void context::context_impl::cbm_KeyValueStorage_SetValueByKey(i32 cb_id, Reader &r) {
+    u32 n = r.get_u32();
+    if (n != 3) throw std::runtime_error("KeyValueStorage.SetValueByKey: wrong argument count");
+    i32 this_id = (i32)read_int(r);
+    std::map<i32, base_context_class_KeyValueStorage *>::const_iterator it = m_instances_KeyValueStorage.find(this_id);
+    if (it == m_instances_KeyValueStorage.end()) throw std::runtime_error("KeyValueStorage: unknown this_id");
+    std::string a_name = read_string(r);
+    value a_value = decode_value(r);
+    it->second->SetValueByKey(a_name, a_value);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+    w.put_u8(T_UNDEFINED);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
+void context::context_impl::cbm_KeyValueStorage_GetValueByKey(i32 cb_id, Reader &r) {
+    u32 n = r.get_u32();
+    if (n != 2) throw std::runtime_error("KeyValueStorage.GetValueByKey: wrong argument count");
+    i32 this_id = (i32)read_int(r);
+    std::map<i32, base_context_class_KeyValueStorage *>::const_iterator it = m_instances_KeyValueStorage.find(this_id);
+    if (it == m_instances_KeyValueStorage.end()) throw std::runtime_error("KeyValueStorage: unknown this_id");
+    std::string a_name = read_string(r);
+    it->second->GetValueByKey(a_name);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+    w.put_u8(T_UNDEFINED);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
 void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
     Reader r(body.empty() ? 0 : &body[0], body.size());
     i32 cb_id = r.get_i32();
@@ -940,6 +980,8 @@ void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
         if (method == "log") { cbm_console_log(cb_id, r); return; }
         if (method == "warning") { cbm_console_warning(cb_id, r); return; }
         if (method == "error") { cbm_console_error(cb_id, r); return; }
+        if (method == "SetValueByKey") { cbm_KeyValueStorage_SetValueByKey(cb_id, r); return; }
+        if (method == "GetValueByKey") { cbm_KeyValueStorage_GetValueByKey(cb_id, r); return; }
     } catch (const std::exception &e) {
         Writer w; w.put_i32(cb_id); w.put_u8(0); w.put_string(e.what());
         send_message(M_CALLBACK_RESP, w.data());

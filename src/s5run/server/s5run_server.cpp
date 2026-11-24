@@ -77,7 +77,7 @@ public:
   explicit ClientChannel(int fd) : fd_(fd) {
   }
 
-  Value call(const std::string &method, const std::vector<Value> &args) {
+  variable call(const std::string &method, const std::vector<variable> &args) {
     int32_t id = ++last_id_;
     wire::Writer w;
     w.put_i32(id);
@@ -220,7 +220,7 @@ void client_handler::handle_job_submit(const std::vector<uint8_t> &body, int fd)
     wire::Writer w;
     w.put_u32(count);
     for (uint32_t i = 0; i < count; ++i) {
-      Value v = value_from_wire(r);
+      variable v = value_from_wire(r);
       value_to_wire(v, w);
     }
     args_blob = w.data();
@@ -267,9 +267,9 @@ void client_handler::handle_register_function(engine::IScriptEngine *eng, const 
   std::string name = r.get_string();
 
   eng->register_js_callback(
-    name, [this, eng, name](engine::JsContext ctx, const std::vector<Value> &jargs) -> engine::JsValue {
+    name, [this, eng, name](engine::JsContext ctx, const std::vector<variable> &jargs) -> engine::JsValue {
       ClientChannel channel(m_fd);
-      Value resp = channel.call(name, jargs);
+      variable resp = channel.call(name, jargs);
       if (resp.is_ref()) {
         auto it = m_object_types.find(resp.as_ref().type);
         if (it == m_object_types.end())
@@ -345,7 +345,7 @@ void client_handler::register_method_callbacks(
   engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<std::string> &methods
 ) {
   for (const auto &method : methods) {
-    eng->register_callback(method, [&channel](const std::string &cb_method, const std::vector<Value> &args) {
+    eng->register_callback(method, [&channel](const std::string &cb_method, const std::vector<variable> &args) {
       return channel.call(cb_method, args);
     });
   }
@@ -356,7 +356,7 @@ void client_handler::handle_exec(engine::IScriptEngine *eng, const std::vector<u
   std::string script = r.get_string();
   std::string entry = r.get_string();
   uint32_t count = r.get_u32();
-  std::vector<Value> args;
+  std::vector<variable> args;
   args.reserve(count);
   for (uint32_t i = 0; i < count; ++i)
     args.push_back(value_from_wire(r));
@@ -470,7 +470,7 @@ int server::run(const std::string &listen_address, int threads) {
           std::this_thread::sleep_for(std::chrono::milliseconds(100));
           continue;
         }
-        std::vector<Value> args;
+        std::vector<variable> args;
         try {
           wire::Reader r(job.args.data(), job.args.size());
           uint32_t count = r.get_u32();

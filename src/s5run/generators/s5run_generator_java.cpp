@@ -75,8 +75,12 @@ static std::string j_array_inner(const std::string &t) {
   return t.substr(6, t.size() - 7);
 }
 
+static bool j_is_dynamic(const std::string &t) {
+  return t == "var";
+}
+
 static bool j_is_ref(const std::string &t) {
-  return !j_is_scalar(t) && !j_is_void(t) && !j_is_array(t);
+  return !j_is_scalar(t) && !j_is_dynamic(t) && !j_is_void(t) && !j_is_array(t);
 }
 
 static bool j_has_convert(const std::vector<schema_argument> &args) {
@@ -110,6 +114,8 @@ static std::string j_boxed(const std::string &t) {
 }
 
 static std::string type_to_java(const std::string &t) {
+  if (j_is_dynamic(t))
+    return "S5RunVariable";
   if (j_is_array(t)) {
     std::string inner = type_to_java(j_array_inner(t));
     return "List<" + j_boxed(inner) + ">";
@@ -120,6 +126,9 @@ static std::string type_to_java(const std::string &t) {
 static std::string j_read_expr(const std::string &t);
 
 static std::string j_suffix(const std::string &t) {
+  if (j_is_dynamic(t)) {
+    return "S5RunVariable";
+  }
   if (j_is_scalar(t)) {
     if (t == "bool")
       return "Bool";
@@ -148,6 +157,8 @@ static std::string j_read_expr(const std::string &t) {
     if (t == "byte")
       return "r.readByteNum()";
   }
+  if (j_is_dynamic(t))
+    return "Wire.decodeValue(r)";
   return "Wire.readList" + j_suffix(t) + "(r)";
 }
 
@@ -164,6 +175,8 @@ static std::string j_write_stmt(const std::string &t, const std::string &expr) {
     if (t == "byte")
       return "w.byteValue((int) " + expr + ");";
   }
+  if (j_is_dynamic(t))
+    return "Wire.encodeValue(w, " + expr + ");";
   return "Wire.writeList" + j_suffix(t) + "(w, " + expr + ");";
 }
 
@@ -355,19 +368,19 @@ static std::string frame_decl(java_flavor f);
 static std::string encode_value_snippet(java_flavor f) {
   if (f == JAVA_21) {
     return R"JAVA(
-    public static void encodeValue(Writer w, Value v) {
+    public static void encodeValue(Writer w, S5RunVariable v) {
         switch (v) {
-            case Value.Null n -> w.u8(T_UNDEFINED);
-            case Value.Bool b -> { w.u8(T_BOOL); w.bool(b.v()); }
-            case Value.Int i -> w.int64(i.v());
-            case Value.Dbl d -> { w.u8(T_FLOAT64); w.f64(d.v()); }
-            case Value.Str s -> w.strValue(s.v());
-            case Value.Arr a -> {
+            case S5RunVariable.Null n -> w.u8(T_UNDEFINED);
+            case S5RunVariable.Bool b -> { w.u8(T_BOOL); w.bool(b.v()); }
+            case S5RunVariable.Int i -> w.int64(i.v());
+            case S5RunVariable.Dbl d -> { w.u8(T_FLOAT64); w.f64(d.v()); }
+            case S5RunVariable.Str s -> w.strValue(s.v());
+            case S5RunVariable.Arr a -> {
                 w.u8(T_ARRAY);
                 w.u32(a.v().size());
-                for (Value e : a.v()) encodeValue(w, e);
+                for (S5RunVariable e : a.v()) encodeValue(w, e);
             }
-            case Value.Obj o -> {
+            case S5RunVariable.Obj o -> {
                 w.u8(T_OBJECT);
                 w.u32(o.v().size());
                 for (var en : o.v().entrySet()) {
@@ -375,7 +388,7 @@ static std::string encode_value_snippet(java_flavor f) {
                     encodeValue(w, en.getValue());
                 }
             }
-            case Value.Ref rf -> {
+            case S5RunVariable.Ref rf -> {
                 w.u8(T_REF);
                 w.i32(rf.thisId());
                 w.str(rf.type());
@@ -385,29 +398,29 @@ static std::string encode_value_snippet(java_flavor f) {
   }
   if (f == JAVA_17) {
     return R"JAVA(
-    public static void encodeValue(Writer w, Value v) {
-        if (v instanceof Value.Null) {
+    public static void encodeValue(Writer w, S5RunVariable v) {
+        if (v instanceof S5RunVariable.Null) {
             w.u8(T_UNDEFINED);
-        } else if (v instanceof Value.Bool b) {
+        } else if (v instanceof S5RunVariable.Bool b) {
             w.u8(T_BOOL); w.bool(b.v());
-        } else if (v instanceof Value.Int i) {
+        } else if (v instanceof S5RunVariable.Int i) {
             w.int64(i.v());
-        } else if (v instanceof Value.Dbl d) {
+        } else if (v instanceof S5RunVariable.Dbl d) {
             w.u8(T_FLOAT64); w.f64(d.v());
-        } else if (v instanceof Value.Str s) {
+        } else if (v instanceof S5RunVariable.Str s) {
             w.strValue(s.v());
-        } else if (v instanceof Value.Arr a) {
+        } else if (v instanceof S5RunVariable.Arr a) {
             w.u8(T_ARRAY);
             w.u32(a.v().size());
-            for (Value e : a.v()) encodeValue(w, e);
-        } else if (v instanceof Value.Obj o) {
+            for (S5RunVariable e : a.v()) encodeValue(w, e);
+        } else if (v instanceof S5RunVariable.Obj o) {
             w.u8(T_OBJECT);
             w.u32(o.v().size());
             for (var en : o.v().entrySet()) {
                 w.strValue(en.getKey());
                 encodeValue(w, en.getValue());
             }
-        } else if (v instanceof Value.Ref rf) {
+        } else if (v instanceof S5RunVariable.Ref rf) {
             w.u8(T_REF);
             w.i32(rf.thisId());
             w.str(rf.type());
@@ -415,32 +428,32 @@ static std::string encode_value_snippet(java_flavor f) {
     })JAVA";
   }
   return R"JAVA(
-    public static void encodeValue(Writer w, Value v) {
-        if (v instanceof Value.Null) {
+    public static void encodeValue(Writer w, S5RunVariable v) {
+        if (v instanceof S5RunVariable.Null) {
             w.u8(T_UNDEFINED);
-        } else if (v instanceof Value.Bool) {
-            w.u8(T_BOOL); w.bool(((Value.Bool) v).v());
-        } else if (v instanceof Value.Int) {
-            w.int64(((Value.Int) v).v());
-        } else if (v instanceof Value.Dbl) {
-            w.u8(T_FLOAT64); w.f64(((Value.Dbl) v).v());
-        } else if (v instanceof Value.Str) {
-            w.strValue(((Value.Str) v).v());
-        } else if (v instanceof Value.Arr) {
-            Value.Arr a = (Value.Arr) v;
+        } else if (v instanceof S5RunVariable.Bool) {
+            w.u8(T_BOOL); w.bool(((S5RunVariable.Bool) v).v());
+        } else if (v instanceof S5RunVariable.Int) {
+            w.int64(((S5RunVariable.Int) v).v());
+        } else if (v instanceof S5RunVariable.Dbl) {
+            w.u8(T_FLOAT64); w.f64(((S5RunVariable.Dbl) v).v());
+        } else if (v instanceof S5RunVariable.Str) {
+            w.strValue(((S5RunVariable.Str) v).v());
+        } else if (v instanceof S5RunVariable.Arr) {
+            S5RunVariable.Arr a = (S5RunVariable.Arr) v;
             w.u8(T_ARRAY);
             w.u32(a.v().size());
-            for (Value e : a.v()) encodeValue(w, e);
-        } else if (v instanceof Value.Obj) {
-            Value.Obj o = (Value.Obj) v;
+            for (S5RunVariable e : a.v()) encodeValue(w, e);
+        } else if (v instanceof S5RunVariable.Obj) {
+            S5RunVariable.Obj o = (S5RunVariable.Obj) v;
             w.u8(T_OBJECT);
             w.u32(o.v().size());
-            for (Map.Entry<String, Value> en : o.v().entrySet()) {
+            for (Map.Entry<String, S5RunVariable> en : o.v().entrySet()) {
                 w.strValue(en.getKey());
                 encodeValue(w, en.getValue());
             }
-        } else if (v instanceof Value.Ref) {
-            Value.Ref rf = (Value.Ref) v;
+        } else if (v instanceof S5RunVariable.Ref) {
+            S5RunVariable.Ref rf = (S5RunVariable.Ref) v;
             w.u8(T_REF);
             w.i32(rf.thisId());
             w.str(rf.type());
@@ -451,99 +464,99 @@ static std::string encode_value_snippet(java_flavor f) {
 static std::string value_to_string_snippet(java_flavor f) {
   if (f == JAVA_21) {
     return R"JAVA(
-    public static String valueToString(Value v) {
+    public static String valueToString(S5RunVariable v) {
         return switch (v) {
-            case Value.Null n -> "null";
-            case Value.Bool b -> Boolean.toString(b.v());
-            case Value.Int i -> Long.toString(i.v());
-            case Value.Dbl d -> Double.toString(d.v());
-            case Value.Str s -> s.v();
+            case S5RunVariable.Null n -> "null";
+            case S5RunVariable.Bool b -> Boolean.toString(b.v());
+            case S5RunVariable.Int i -> Long.toString(i.v());
+            case S5RunVariable.Dbl d -> Double.toString(d.v());
+            case S5RunVariable.Str s -> s.v();
             default -> throw new RuntimeException("wire: expected a scalar argument");
         };
     })JAVA";
   }
   if (f == JAVA_17) {
     return R"JAVA(
-    public static String valueToString(Value v) {
-        if (v instanceof Value.Null) return "null";
-        if (v instanceof Value.Bool b) return Boolean.toString(b.v());
-        if (v instanceof Value.Int i) return Long.toString(i.v());
-        if (v instanceof Value.Dbl d) return Double.toString(d.v());
-        if (v instanceof Value.Str s) return s.v();
+    public static String valueToString(S5RunVariable v) {
+        if (v instanceof S5RunVariable.Null) return "null";
+        if (v instanceof S5RunVariable.Bool b) return Boolean.toString(b.v());
+        if (v instanceof S5RunVariable.Int i) return Long.toString(i.v());
+        if (v instanceof S5RunVariable.Dbl d) return Double.toString(d.v());
+        if (v instanceof S5RunVariable.Str s) return s.v();
         throw new RuntimeException("wire: expected a scalar argument");
     })JAVA";
   }
   return R"JAVA(
-    public static String valueToString(Value v) {
-        if (v instanceof Value.Null) return "null";
-        if (v instanceof Value.Bool) return Boolean.toString(((Value.Bool) v).v());
-        if (v instanceof Value.Int) return Long.toString(((Value.Int) v).v());
-        if (v instanceof Value.Dbl) return Double.toString(((Value.Dbl) v).v());
-        if (v instanceof Value.Str) return ((Value.Str) v).v();
+    public static String valueToString(S5RunVariable v) {
+        if (v instanceof S5RunVariable.Null) return "null";
+        if (v instanceof S5RunVariable.Bool) return Boolean.toString(((S5RunVariable.Bool) v).v());
+        if (v instanceof S5RunVariable.Int) return Long.toString(((S5RunVariable.Int) v).v());
+        if (v instanceof S5RunVariable.Dbl) return Double.toString(((S5RunVariable.Dbl) v).v());
+        if (v instanceof S5RunVariable.Str) return ((S5RunVariable.Str) v).v();
         throw new RuntimeException("wire: expected a scalar argument");
     })JAVA";
 }
 
 static std::string decode_value_snippet(java_flavor f) {
   if (f == JAVA_21 || f == JAVA_17) {
-    return R"JAVA(    public static Value decodeValue(Reader r) {
+    return R"JAVA(    public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
         return switch (tag) {
-            case T_UNDEFINED -> new Value.Null();
-            case T_BOOL -> new Value.Bool(r.readBoolRaw());
-            case T_INT8 -> new Value.Int(r.readI8());
-            case T_INT16 -> new Value.Int(r.readI16());
-            case T_INT32, T_UINT32 -> new Value.Int(r.i32());
-            case T_INT64, T_UINT64 -> new Value.Int(r.i64());
-            case T_UINT8 -> new Value.Int(r.u8());
-            case T_UINT16 -> new Value.Int(r.u16());
-            case T_FLOAT32 -> new Value.Dbl(r.f32());
-            case T_FLOAT64 -> new Value.Dbl(r.f64());
-            case T_STRING -> new Value.Str(r.str());
+            case T_UNDEFINED -> new S5RunVariable.Null();
+            case T_BOOL -> new S5RunVariable.Bool(r.readBoolRaw());
+            case T_INT8 -> new S5RunVariable.Int(r.readI8());
+            case T_INT16 -> new S5RunVariable.Int(r.readI16());
+            case T_INT32, T_UINT32 -> new S5RunVariable.Int(r.i32());
+            case T_INT64, T_UINT64 -> new S5RunVariable.Int(r.i64());
+            case T_UINT8 -> new S5RunVariable.Int(r.u8());
+            case T_UINT16 -> new S5RunVariable.Int(r.u16());
+            case T_FLOAT32 -> new S5RunVariable.Dbl(r.f32());
+            case T_FLOAT64 -> new S5RunVariable.Dbl(r.f64());
+            case T_STRING -> new S5RunVariable.Str(r.str());
             case T_ARRAY -> {
                 int n = (int) r.u32();
-                List<Value> a = new ArrayList<>(n);
+                List<S5RunVariable> a = new ArrayList<>(n);
                 for (int i = 0; i < n; i++) a.add(decodeValue(r));
-                yield new Value.Arr(a);
+                yield new S5RunVariable.Arr(a);
             }
             case T_OBJECT -> {
                 int n = (int) r.u32();
-                Map<String, Value> o = new LinkedHashMap<>();
+                Map<String, S5RunVariable> o = new LinkedHashMap<>();
                 for (int i = 0; i < n; i++) o.put(r.strValue(), decodeValue(r));
-                yield new Value.Obj(o);
+                yield new S5RunVariable.Obj(o);
             }
-            case T_REF -> new Value.Ref(r.i32(), r.str());
+            case T_REF -> new S5RunVariable.Ref(r.i32(), r.str());
             default -> throw new RuntimeException("wire: unknown value tag " + tag);
         };
     })JAVA";
   }
-  return R"JAVA(    public static Value decodeValue(Reader r) {
+  return R"JAVA(    public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
         switch (tag) {
-            case T_UNDEFINED: return Value.Null.INSTANCE;
-            case T_BOOL: return new Value.Bool(r.readBoolRaw());
-            case T_INT8: return new Value.Int(r.readI8());
-            case T_INT16: return new Value.Int(r.readI16());
-            case T_INT32: case T_UINT32: return new Value.Int(r.i32());
-            case T_INT64: case T_UINT64: return new Value.Int(r.i64());
-            case T_UINT8: return new Value.Int(r.u8());
-            case T_UINT16: return new Value.Int(r.u16());
-            case T_FLOAT32: return new Value.Dbl(r.f32());
-            case T_FLOAT64: return new Value.Dbl(r.f64());
-            case T_STRING: return new Value.Str(r.str());
+            case T_UNDEFINED: return S5RunVariable.Null.INSTANCE;
+            case T_BOOL: return new S5RunVariable.Bool(r.readBoolRaw());
+            case T_INT8: return new S5RunVariable.Int(r.readI8());
+            case T_INT16: return new S5RunVariable.Int(r.readI16());
+            case T_INT32: case T_UINT32: return new S5RunVariable.Int(r.i32());
+            case T_INT64: case T_UINT64: return new S5RunVariable.Int(r.i64());
+            case T_UINT8: return new S5RunVariable.Int(r.u8());
+            case T_UINT16: return new S5RunVariable.Int(r.u16());
+            case T_FLOAT32: return new S5RunVariable.Dbl(r.f32());
+            case T_FLOAT64: return new S5RunVariable.Dbl(r.f64());
+            case T_STRING: return new S5RunVariable.Str(r.str());
             case T_ARRAY: {
                 int n = (int) r.u32();
-                List<Value> a = new ArrayList<>(n);
+                List<S5RunVariable> a = new ArrayList<>(n);
                 for (int i = 0; i < n; i++) a.add(decodeValue(r));
-                return new Value.Arr(a);
+                return new S5RunVariable.Arr(a);
             }
             case T_OBJECT: {
                 int n = (int) r.u32();
-                Map<String, Value> o = new LinkedHashMap<>();
+                Map<String, S5RunVariable> o = new LinkedHashMap<>();
                 for (int i = 0; i < n; i++) o.put(r.strValue(), decodeValue(r));
-                return new Value.Obj(o);
+                return new S5RunVariable.Obj(o);
             }
-            case T_REF: return new Value.Ref(r.i32(), r.str());
+            case T_REF: return new S5RunVariable.Ref(r.i32(), r.str());
             default: throw new RuntimeException("wire: unknown value tag " + tag);
         }
     })JAVA";
@@ -611,55 +624,55 @@ static std::string str_switch_snippet(java_flavor f) {
 static std::string value_file_snippet(java_flavor f) {
   if (f == JAVA_21 || f == JAVA_17) {
     return R"JAVA(
-public sealed interface Value {
-    record Null() implements Value {}
-    record Bool(boolean v) implements Value {}
-    record Int(long v) implements Value {}
-    record Dbl(double v) implements Value {}
-    record Str(String v) implements Value {}
-    record Arr(List<Value> v) implements Value {}
-    record Obj(Map<String, Value> v) implements Value {}
-    record Ref(int thisId, String type) implements Value {}
+public sealed interface S5RunVariable {
+    record Null() implements S5RunVariable {}
+    record Bool(boolean v) implements S5RunVariable {}
+    record Int(long v) implements S5RunVariable {}
+    record Dbl(double v) implements S5RunVariable {}
+    record Str(String v) implements S5RunVariable {}
+    record Arr(List<S5RunVariable> v) implements S5RunVariable {}
+    record Obj(Map<String, S5RunVariable> v) implements S5RunVariable {}
+    record Ref(int thisId, String type) implements S5RunVariable {}
 }
 )JAVA";
   }
   return R"JAVA(
-public interface Value {
-    final class Null implements Value {
+public interface S5RunVariable {
+    final class Null implements S5RunVariable {
         public static final Null INSTANCE = new Null();
         private Null() {}
     }
-    final class Bool implements Value {
+    final class Bool implements S5RunVariable {
         final boolean val;
         public Bool(boolean v) { this.val = v; }
         public boolean v() { return val; }
     }
-    final class Int implements Value {
+    final class Int implements S5RunVariable {
         final long val;
         public Int(long v) { this.val = v; }
         public long v() { return val; }
     }
-    final class Dbl implements Value {
+    final class Dbl implements S5RunVariable {
         final double val;
         public Dbl(double v) { this.val = v; }
         public double v() { return val; }
     }
-    final class Str implements Value {
+    final class Str implements S5RunVariable {
         final String val;
         public Str(String v) { this.val = v; }
         public String v() { return val; }
     }
-    final class Arr implements Value {
-        final List<Value> val;
-        public Arr(List<Value> v) { this.val = v; }
-        public List<Value> v() { return val; }
+    final class Arr implements S5RunVariable {
+        final List<S5RunVariable> val;
+        public Arr(List<S5RunVariable> v) { this.val = v; }
+        public List<S5RunVariable> v() { return val; }
     }
-    final class Obj implements Value {
-        final Map<String, Value> val;
-        public Obj(Map<String, Value> v) { this.val = v; }
-        public Map<String, Value> v() { return val; }
+    final class Obj implements S5RunVariable {
+        final Map<String, S5RunVariable> val;
+        public Obj(Map<String, S5RunVariable> v) { this.val = v; }
+        public Map<String, S5RunVariable> v() { return val; }
     }
-    final class Ref implements Value {
+    final class Ref implements S5RunVariable {
         final int thisId;
         final String type;
         public Ref(int thisId, String type) { this.thisId = thisId; this.type = type; }
@@ -678,8 +691,8 @@ static std::string run_result_file_snippet(java_flavor f) {
            "        String error,\n"
            "        int errorLine,\n"
            "        long durationMs,\n"
-           "        Value value) {\n";
-    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new Value.Null());";
+           "        S5RunVariable value) {\n";
+    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, new S5RunVariable.Null());";
     tail = "}\n";
   } else {
     head = "public final class RunResult {\n"
@@ -687,9 +700,9 @@ static std::string run_result_file_snippet(java_flavor f) {
            "    private final String error;\n"
            "    private final int errorLine;\n"
            "    private final long durationMs;\n"
-           "    private final Value value;\n"
+           "    private final S5RunVariable value;\n"
            "\n"
-           "    public RunResult(boolean hasError, String error, int errorLine, long durationMs, Value value) {\n"
+           "    public RunResult(boolean hasError, String error, int errorLine, long durationMs, S5RunVariable value) {\n"
            "        this.hasError = hasError;\n"
            "        this.error = error;\n"
            "        this.errorLine = errorLine;\n"
@@ -701,13 +714,13 @@ static std::string run_result_file_snippet(java_flavor f) {
            "    public String error() { return error; }\n"
            "    public int errorLine() { return errorLine; }\n"
            "    public long durationMs() { return durationMs; }\n"
-           "    public Value value() { return value; }\n";
-    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, Value.Null.INSTANCE);";
+           "    public S5RunVariable value() { return value; }\n";
+    fail_line = "        return new RunResult(true, msg, parseErrorLine(msg), durationMs, S5RunVariable.Null.INSTANCE);";
     tail = "}\n";
   }
   return "\n" + head +
          "\n"
-         "    public static RunResult ok(Value value, long durationMs) {\n"
+         "    public static RunResult ok(S5RunVariable value, long durationMs) {\n"
          "        return new RunResult(false, \"\", 0, durationMs, value);\n"
          "    }\n"
          "\n"
@@ -1259,7 +1272,7 @@ public final class Context implements AutoCloseable {
     // public entry point
     // ------------------------------------------------------------------
 
-    public static RunResult runScript(Context ctx, String entry, List<Value> args) {
+    public static RunResult runScript(Context ctx, String entry, List<S5RunVariable> args) {
         long started = System.currentTimeMillis();
         try {
             ctx.connect();
@@ -1268,7 +1281,7 @@ public final class Context implements AutoCloseable {
             w.str(ctx.script);
             w.str(entry);
             w.u32(args.size());
-            for (Value a : args) Wire.encodeValue(w, a);
+            for (S5RunVariable a : args) Wire.encodeValue(w, a);
             ctx.sendMessage(Wire.M_EXEC_REQ, w.toByteArray());
             while (true) {
                 Frame f = ctx.readFrame();
@@ -1356,7 +1369,7 @@ public final class Context implements AutoCloseable {
         return id;
     }
 
-    private static String valueToString(Value v) {
+    private static String valueToString(S5RunVariable v) {
         return Wire.valueToString(v);
     }
 
@@ -1609,7 +1622,7 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
   mkdir_p(pkg_dir);
 
   write_java_file(pkg_dir, pkg, "Wire", generate_wire(m_flavor, s), written);
-  write_java_file(pkg_dir, pkg, "Value", value_file_snippet(m_flavor), written);
+  write_java_file(pkg_dir, pkg, "S5RunVariable", value_file_snippet(m_flavor), written);
   write_java_file(
     pkg_dir,
     pkg,

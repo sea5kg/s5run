@@ -55,6 +55,8 @@ func NewContext() *Context {
 		"log": ctx.callbackmconsoleLog,
 		"warning": ctx.callbackmconsoleWarning,
 		"error": ctx.callbackmconsoleError,
+		"SetValueByKey": ctx.callbackmKeyValueStorageSetValueByKey,
+		"GetValueByKey": ctx.callbackmKeyValueStorageGetValueByKey,
 	} {
 		ctx.handlers[k] = v
 	}
@@ -416,6 +418,39 @@ func (ctx *Context) callbackmconsoleError(cbID int32, r *reader) {
 			args = append(args, valueToString(decodeValue(r)))
 		}
 		obj.Error(args)
+		w.u8(tagUndefined)
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) callbackmKeyValueStorageSetValueByKey(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+		if r.u32() != 3 {
+			panic("KeyValueStorage.SetValueByKey: wrong argument count")
+		}
+		thisID := readInt(r)
+		obj := ctx.instanceByID("KeyValueStorage", int(thisID)).(KeyValueStorage)
+		name := readStrValue(r)
+		value := decodeValue(r)
+		obj.SetValueByKey(name, value)
+		w.u8(tagUndefined)
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) callbackmKeyValueStorageGetValueByKey(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+		if r.u32() != 2 {
+			panic("KeyValueStorage.GetValueByKey: wrong argument count")
+		}
+		thisID := readInt(r)
+		obj := ctx.instanceByID("KeyValueStorage", int(thisID)).(KeyValueStorage)
+		name := readStrValue(r)
+		obj.GetValueByKey(name)
 		w.u8(tagUndefined)
 	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
 }

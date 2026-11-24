@@ -390,9 +390,12 @@ private:
     void _cbm_console_log(int32_t cb_id, Reader &r);
     void _cbm_console_warning(int32_t cb_id, Reader &r);
     void _cbm_console_error(int32_t cb_id, Reader &r);
+    void _cbm_KeyValueStorage_SetValueByKey(int32_t cb_id, Reader &r);
+    void _cbm_KeyValueStorage_GetValueByKey(int32_t cb_id, Reader &r);
     int32_t _register_instance_File(const std::shared_ptr<File> &obj);
     int32_t _register_instance_FileSystem(const std::shared_ptr<FileSystem> &obj);
     int32_t _register_instance_console(const std::shared_ptr<console> &obj);
+    int32_t _register_instance_KeyValueStorage(const std::shared_ptr<KeyValueStorage> &obj);
     void _register_method_handlers();
     void _connect(); void _disconnect(); void _flush_pending();
     static void _read_hello(int fd);
@@ -433,6 +436,7 @@ private:
     std::map<int32_t, std::shared_ptr<File>> m_instances_File;
     std::map<int32_t, std::shared_ptr<FileSystem>> m_instances_FileSystem;
     std::map<int32_t, std::shared_ptr<console>> m_instances_console;
+    std::map<int32_t, std::shared_ptr<KeyValueStorage>> m_instances_KeyValueStorage;
 };
 
 void context::impl::_connect() {
@@ -910,6 +914,33 @@ void context::impl::_cbm_console_error(int32_t cb_id, Reader &r) {
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
+void context::impl::_cbm_KeyValueStorage_SetValueByKey(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 3) { throw std::runtime_error("KeyValueStorage.SetValueByKey: wrong argument count"); }
+    int32_t this_id = (int32_t)read_int(r);
+    auto it = m_instances_KeyValueStorage.find(this_id);
+    if (it == m_instances_KeyValueStorage.end()) { throw std::runtime_error("KeyValueStorage: unknown this_id"); }
+        std::string a_name = read_string(r);
+        value a_value = decode_value(r);
+    it->second->SetValueByKey(a_name, a_value);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_UNDEFINED);
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::impl::_cbm_KeyValueStorage_GetValueByKey(int32_t cb_id, Reader &r) {
+    uint32_t n = r.get_u32();
+    if (n != 2) { throw std::runtime_error("KeyValueStorage.GetValueByKey: wrong argument count"); }
+    int32_t this_id = (int32_t)read_int(r);
+    auto it = m_instances_KeyValueStorage.find(this_id);
+    if (it == m_instances_KeyValueStorage.end()) { throw std::runtime_error("KeyValueStorage: unknown this_id"); }
+        std::string a_name = read_string(r);
+    it->second->GetValueByKey(a_name);
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+        w.put_u8(T_UNDEFINED);
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
 int32_t context::impl::_register_instance_File(const std::shared_ptr<File> &obj) {
     int32_t id = ++m_next_this_id;
     m_instances_File[id] = obj;
@@ -925,6 +956,12 @@ int32_t context::impl::_register_instance_FileSystem(const std::shared_ptr<FileS
 int32_t context::impl::_register_instance_console(const std::shared_ptr<console> &obj) {
     int32_t id = ++m_next_this_id;
     m_instances_console[id] = obj;
+    return id;
+}
+
+int32_t context::impl::_register_instance_KeyValueStorage(const std::shared_ptr<KeyValueStorage> &obj) {
+    int32_t id = ++m_next_this_id;
+    m_instances_KeyValueStorage[id] = obj;
     return id;
 }
 
@@ -964,6 +1001,15 @@ void context::impl::_register_method_handlers() {
     };
     m_handlers["error"] = [this](int32_t cb_id, Reader &r) {
         _cbm_console_error(cb_id, r);
+    };
+    m_instance_registrars["KeyValueStorage"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
+        m_instances_KeyValueStorage[id] = std::static_pointer_cast<KeyValueStorage>(obj);
+    };
+    m_handlers["SetValueByKey"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_KeyValueStorage_SetValueByKey(cb_id, r);
+    };
+    m_handlers["GetValueByKey"] = [this](int32_t cb_id, Reader &r) {
+        _cbm_KeyValueStorage_GetValueByKey(cb_id, r);
     };
     m_function_registrars["GetFile"] = [this](const std::shared_ptr<s5run_function> &fn) {
         m_fn_GetFile = std::static_pointer_cast<GlobalFunction_GetFile>(fn);

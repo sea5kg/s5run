@@ -38,6 +38,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <map>
 #include <new>
 #include <string>
@@ -46,9 +47,9 @@
 
 namespace s5run {
 
-class Value;
-typedef std::vector<Value> ValueArray;
-typedef std::map<std::string, Value> ValueObject;
+class variable;
+typedef std::vector<variable> variable_array;
+typedef std::map<std::string, variable> variable_object;
 
 struct ObjectRef {
   int this_id;
@@ -60,7 +61,7 @@ struct ObjectRef {
   }
 };
 
-class Value {
+class variable {
 public:
   enum Kind {
     K_NULL = 0,
@@ -75,60 +76,85 @@ public:
 
   // ---- constructors ----
 
-  Value() : kind_(K_NULL) {
+  variable() : kind_(K_NULL) {
   }
-  Value(std::nullptr_t) : kind_(K_NULL) {
+  variable(std::nullptr_t) : kind_(K_NULL) {
   }
 
-  Value(bool b) : kind_(K_BOOL) {
+  variable(bool b) : kind_(K_BOOL) {
     u_.b = b;
   }
 
-  Value(int32_t i) : kind_(K_INT) {
+  variable(int32_t i) : kind_(K_INT) {
     u_.i = static_cast<int64_t>(i);
   }
-  Value(int64_t i) : kind_(K_INT) {
+  variable(int64_t i) : kind_(K_INT) {
     u_.i = i;
   }
-  Value(uint32_t i) : kind_(K_INT) {
+  variable(uint32_t i) : kind_(K_INT) {
     u_.i = static_cast<int64_t>(i);
   }
-  Value(uint64_t i) : kind_(K_INT) {
+  variable(uint64_t i) : kind_(K_INT) {
     u_.i = static_cast<int64_t>(i);
   }
 
-  Value(double d) : kind_(K_DOUBLE) {
+  variable(double d) : kind_(K_DOUBLE) {
     u_.d = d;
   }
 
-  Value(const char *s) : kind_(K_STRING) {
+  variable(const char *s) : kind_(K_STRING) {
     new (&u_.s) std::string(s);
   }
-  Value(const std::string &s) : kind_(K_STRING) {
+  variable(const std::string &s) : kind_(K_STRING) {
     new (&u_.s) std::string(s);
   }
 
-  Value(const ValueArray &a) : kind_(K_ARRAY) {
-    new (&u_.a) ValueArray(a);
+  variable(const variable_array &a) : kind_(K_ARRAY) {
+    new (&u_.a) variable_array(a);
   }
-  Value(const ValueObject &o) : kind_(K_OBJECT) {
-    new (&u_.o) ValueObject(o);
+  variable(const variable_object &o) : kind_(K_OBJECT) {
+    new (&u_.o) variable_object(o);
   }
-  Value(const ObjectRef &r) : kind_(K_REF) {
+  variable(const ObjectRef &r) : kind_(K_REF) {
     new (&u_.r) ObjectRef(r);
   }
 
-  Value(const Value &other) : kind_(other.kind_) {
+  // Parse a raw command-line argument into a typed variable:
+  // int -> bool -> double -> string.
+  static variable parse_script_arg(const std::string &raw) {
+    // int?
+    if (!raw.empty()) {
+      char *end = nullptr;
+      long long v = std::strtoll(raw.c_str(), &end, 10);
+      if (end && *end == '\0')
+        return variable(static_cast<int64_t>(v));
+    }
+    // bool?
+    if (raw == "true")
+      return variable(true);
+    if (raw == "false")
+      return variable(false);
+    // double?
+    if (!raw.empty()) {
+      char *end = nullptr;
+      double d = std::strtod(raw.c_str(), &end);
+      if (end && *end == '\0')
+        return variable(d);
+    }
+    return variable(raw);
+  }
+
+  variable(const variable &other) : kind_(other.kind_) {
     copy_from(other);
   }
 
-  ~Value() {
+  ~variable() {
     destroy();
   }
 
   // ---- assignment ----
 
-  Value &operator=(const Value &other) {
+  variable &operator=(const variable &other) {
     if (this != &other) {
       destroy();
       kind_ = other.kind_;
@@ -185,20 +211,20 @@ public:
   const std::string &as_string() const {
     return u_.s;
   }
-  const ValueArray &as_array() const {
+  const variable_array &as_array() const {
     return u_.a;
   }
-  const ValueObject &as_object() const {
+  const variable_object &as_object() const {
     return u_.o;
   }
   const ObjectRef &as_ref() const {
     return u_.r;
   }
 
-  ValueArray &array() {
+  variable_array &array() {
     return u_.a;
   }
-  ValueObject &object() {
+  variable_object &object() {
     return u_.o;
   }
   std::string &string() {
@@ -211,8 +237,8 @@ private:
     int64_t i;
     double d;
     std::string s;
-    ValueArray a;
-    ValueObject o;
+    variable_array a;
+    variable_object o;
     ObjectRef r;
 
     Storage() {
@@ -232,10 +258,10 @@ private:
     // case K_STRING: u_.s.~string(); break;         // std::string
     // case K_STRING: u_.s.~basic_string(); break;         // std::string
     case K_ARRAY:
-      u_.a.~ValueArray();
+      u_.a.~variable_array();
       break; // typedef
     case K_OBJECT:
-      u_.o.~ValueObject();
+      u_.o.~variable_object();
       break; // typedef
     case K_REF:
       u_.r.~ObjectRef();
@@ -244,7 +270,7 @@ private:
     kind_ = K_NULL;
   }
 
-  void copy_from(const Value &other) {
+  void copy_from(const variable &other) {
     switch (other.kind_) {
     case K_NULL:
       break;
@@ -261,10 +287,10 @@ private:
       new (&u_.s) std::string(other.u_.s);
       break;
     case K_ARRAY:
-      new (&u_.a) ValueArray(other.u_.a);
+      new (&u_.a) variable_array(other.u_.a);
       break;
     case K_OBJECT:
-      new (&u_.o) ValueObject(other.u_.o);
+      new (&u_.o) variable_object(other.u_.o);
       break;
     case K_REF:
       new (&u_.r) ObjectRef(other.u_.r);

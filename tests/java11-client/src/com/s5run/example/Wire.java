@@ -148,75 +148,75 @@ public final class Wire {
         }
     }
 
-    public static void encodeValue(Writer w, Value v) {
-        if (v instanceof Value.Null) {
+    public static void encodeValue(Writer w, S5RunVariable v) {
+        if (v instanceof S5RunVariable.Null) {
             w.u8(T_UNDEFINED);
-        } else if (v instanceof Value.Bool) {
-            w.u8(T_BOOL); w.bool(((Value.Bool) v).v());
-        } else if (v instanceof Value.Int) {
-            w.int64(((Value.Int) v).v());
-        } else if (v instanceof Value.Dbl) {
-            w.u8(T_FLOAT64); w.f64(((Value.Dbl) v).v());
-        } else if (v instanceof Value.Str) {
-            w.strValue(((Value.Str) v).v());
-        } else if (v instanceof Value.Arr) {
-            Value.Arr a = (Value.Arr) v;
+        } else if (v instanceof S5RunVariable.Bool) {
+            w.u8(T_BOOL); w.bool(((S5RunVariable.Bool) v).v());
+        } else if (v instanceof S5RunVariable.Int) {
+            w.int64(((S5RunVariable.Int) v).v());
+        } else if (v instanceof S5RunVariable.Dbl) {
+            w.u8(T_FLOAT64); w.f64(((S5RunVariable.Dbl) v).v());
+        } else if (v instanceof S5RunVariable.Str) {
+            w.strValue(((S5RunVariable.Str) v).v());
+        } else if (v instanceof S5RunVariable.Arr) {
+            S5RunVariable.Arr a = (S5RunVariable.Arr) v;
             w.u8(T_ARRAY);
             w.u32(a.v().size());
-            for (Value e : a.v()) encodeValue(w, e);
-        } else if (v instanceof Value.Obj) {
-            Value.Obj o = (Value.Obj) v;
+            for (S5RunVariable e : a.v()) encodeValue(w, e);
+        } else if (v instanceof S5RunVariable.Obj) {
+            S5RunVariable.Obj o = (S5RunVariable.Obj) v;
             w.u8(T_OBJECT);
             w.u32(o.v().size());
-            for (Map.Entry<String, Value> en : o.v().entrySet()) {
+            for (Map.Entry<String, S5RunVariable> en : o.v().entrySet()) {
                 w.strValue(en.getKey());
                 encodeValue(w, en.getValue());
             }
-        } else if (v instanceof Value.Ref) {
-            Value.Ref rf = (Value.Ref) v;
+        } else if (v instanceof S5RunVariable.Ref) {
+            S5RunVariable.Ref rf = (S5RunVariable.Ref) v;
             w.u8(T_REF);
             w.i32(rf.thisId());
             w.str(rf.type());
         }
     }
 
-    public static Value decodeValue(Reader r) {
+    public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
         switch (tag) {
-            case T_UNDEFINED: return Value.Null.INSTANCE;
-            case T_BOOL: return new Value.Bool(r.readBoolRaw());
-            case T_INT8: return new Value.Int(r.readI8());
-            case T_INT16: return new Value.Int(r.readI16());
-            case T_INT32: case T_UINT32: return new Value.Int(r.i32());
-            case T_INT64: case T_UINT64: return new Value.Int(r.i64());
-            case T_UINT8: return new Value.Int(r.u8());
-            case T_UINT16: return new Value.Int(r.u16());
-            case T_FLOAT32: return new Value.Dbl(r.f32());
-            case T_FLOAT64: return new Value.Dbl(r.f64());
-            case T_STRING: return new Value.Str(r.str());
+            case T_UNDEFINED: return S5RunVariable.Null.INSTANCE;
+            case T_BOOL: return new S5RunVariable.Bool(r.readBoolRaw());
+            case T_INT8: return new S5RunVariable.Int(r.readI8());
+            case T_INT16: return new S5RunVariable.Int(r.readI16());
+            case T_INT32: case T_UINT32: return new S5RunVariable.Int(r.i32());
+            case T_INT64: case T_UINT64: return new S5RunVariable.Int(r.i64());
+            case T_UINT8: return new S5RunVariable.Int(r.u8());
+            case T_UINT16: return new S5RunVariable.Int(r.u16());
+            case T_FLOAT32: return new S5RunVariable.Dbl(r.f32());
+            case T_FLOAT64: return new S5RunVariable.Dbl(r.f64());
+            case T_STRING: return new S5RunVariable.Str(r.str());
             case T_ARRAY: {
                 int n = (int) r.u32();
-                List<Value> a = new ArrayList<>(n);
+                List<S5RunVariable> a = new ArrayList<>(n);
                 for (int i = 0; i < n; i++) a.add(decodeValue(r));
-                return new Value.Arr(a);
+                return new S5RunVariable.Arr(a);
             }
             case T_OBJECT: {
                 int n = (int) r.u32();
-                Map<String, Value> o = new LinkedHashMap<>();
+                Map<String, S5RunVariable> o = new LinkedHashMap<>();
                 for (int i = 0; i < n; i++) o.put(r.strValue(), decodeValue(r));
-                return new Value.Obj(o);
+                return new S5RunVariable.Obj(o);
             }
-            case T_REF: return new Value.Ref(r.i32(), r.str());
+            case T_REF: return new S5RunVariable.Ref(r.i32(), r.str());
             default: throw new RuntimeException("wire: unknown value tag " + tag);
         }
     }
 
-    public static String valueToString(Value v) {
-        if (v instanceof Value.Null) return "null";
-        if (v instanceof Value.Bool) return Boolean.toString(((Value.Bool) v).v());
-        if (v instanceof Value.Int) return Long.toString(((Value.Int) v).v());
-        if (v instanceof Value.Dbl) return Double.toString(((Value.Dbl) v).v());
-        if (v instanceof Value.Str) return ((Value.Str) v).v();
+    public static String valueToString(S5RunVariable v) {
+        if (v instanceof S5RunVariable.Null) return "null";
+        if (v instanceof S5RunVariable.Bool) return Boolean.toString(((S5RunVariable.Bool) v).v());
+        if (v instanceof S5RunVariable.Int) return Long.toString(((S5RunVariable.Int) v).v());
+        if (v instanceof S5RunVariable.Dbl) return Double.toString(((S5RunVariable.Dbl) v).v());
+        if (v instanceof S5RunVariable.Str) return ((S5RunVariable.Str) v).v();
         throw new RuntimeException("wire: expected a scalar argument");
     }
 

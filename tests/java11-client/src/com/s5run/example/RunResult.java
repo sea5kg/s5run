@@ -6,9 +6,9 @@ public final class RunResult {
     private final String error;
     private final int errorLine;
     private final long durationMs;
-    private final Value value;
+    private final S5RunVariable value;
 
-    public RunResult(boolean hasError, String error, int errorLine, long durationMs, Value value) {
+    public RunResult(boolean hasError, String error, int errorLine, long durationMs, S5RunVariable value) {
         this.hasError = hasError;
         this.error = error;
         this.errorLine = errorLine;
@@ -20,15 +20,15 @@ public final class RunResult {
     public String error() { return error; }
     public int errorLine() { return errorLine; }
     public long durationMs() { return durationMs; }
-    public Value value() { return value; }
+    public S5RunVariable value() { return value; }
 
-    public static RunResult ok(Value value, long durationMs) {
+    public static RunResult ok(S5RunVariable value, long durationMs) {
         return new RunResult(false, "", 0, durationMs, value);
     }
 
     public static RunResult fail(String error, long durationMs) {
         String msg = error == null ? "unknown error" : error;
-        return new RunResult(true, msg, parseErrorLine(msg), durationMs, Value.Null.INSTANCE);
+        return new RunResult(true, msg, parseErrorLine(msg), durationMs, S5RunVariable.Null.INSTANCE);
     }
 
     static int parseErrorLine(String error) {

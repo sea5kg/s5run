@@ -73,7 +73,7 @@ void open_sandbox(lua_State *L) {
 }
 
 // JSON to Lua conversion
-void push_json(lua_State *L, const json::Value &v) {
+void push_json(lua_State *L, const json::variable &v) {
   if (v.is_null()) {
     lua_pushnil(L);
     return;
@@ -109,21 +109,21 @@ void push_json(lua_State *L, const json::Value &v) {
 }
 
 // Lua to JSON conversion (depth-limited)
-json::Value pop_json(lua_State *L, int idx, int depth = 0) {
+json::variable pop_json(lua_State *L, int idx, int depth = 0) {
   if (depth > 32)
     throw std::runtime_error("json: nesting too deep");
   int t = lua_type(L, idx);
   switch (t) {
   case LUA_TNIL:
-    return json::Value();
+    return json::variable();
   case LUA_TBOOLEAN:
-    return json::Value((bool)lua_toboolean(L, idx));
+    return json::variable((bool)lua_toboolean(L, idx));
   case LUA_TNUMBER:
-    return json::Value((double)lua_tonumber(L, idx));
+    return json::variable((double)lua_tonumber(L, idx));
   case LUA_TSTRING: {
     size_t len;
     const char *s = lua_tolstring(L, idx, &len);
-    return json::Value(std::string(s, len));
+    return json::variable(std::string(s, len));
   }
   case LUA_TTABLE: {
     // Distinguishing an array from an object: indices 1..n with no gaps and no other keys
@@ -147,7 +147,7 @@ json::Value pop_json(lua_State *L, int idx, int depth = 0) {
         a.push_back(pop_json(L, -1, depth + 1));
         lua_pop(L, 1);
       }
-      return json::Value(std::move(a));
+      return json::variable(std::move(a));
     }
     json::Object o;
     lua_pushnil(L);
@@ -168,10 +168,10 @@ json::Value pop_json(lua_State *L, int idx, int depth = 0) {
       o[k] = pop_json(L, -1, depth + 1);
       lua_pop(L, 1);
     }
-    return json::Value(std::move(o));
+    return json::variable(std::move(o));
   }
   default:
-    return json::Value(); // function/userdata -> null
+    return json::variable(); // function/userdata -> null
   }
 }
 

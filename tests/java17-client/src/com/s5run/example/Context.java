@@ -40,6 +40,8 @@ public final class Context implements AutoCloseable {
                 handlers.put("log", (cbId, r) -> cbm_console_log(cbId, r));
                 handlers.put("warning", (cbId, r) -> cbm_console_warning(cbId, r));
                 handlers.put("error", (cbId, r) -> cbm_console_error(cbId, r));
+                handlers.put("SetValueByKey", (cbId, r) -> cbm_KeyValueStorage_SetValueByKey(cbId, r));
+                handlers.put("GetValueByKey", (cbId, r) -> cbm_KeyValueStorage_GetValueByKey(cbId, r));
     }
 
     public static String clientVersion() {
@@ -110,7 +112,7 @@ public final class Context implements AutoCloseable {
     // public entry point
     // ------------------------------------------------------------------
 
-    public static RunResult runScript(Context ctx, String entry, List<Value> args) {
+    public static RunResult runScript(Context ctx, String entry, List<S5RunVariable> args) {
         long started = System.currentTimeMillis();
         try {
             ctx.connect();
@@ -119,7 +121,7 @@ public final class Context implements AutoCloseable {
             w.str(ctx.script);
             w.str(entry);
             w.u32(args.size());
-            for (Value a : args) Wire.encodeValue(w, a);
+            for (S5RunVariable a : args) Wire.encodeValue(w, a);
             ctx.sendMessage(Wire.M_EXEC_REQ, w.toByteArray());
             while (true) {
                 Frame f = ctx.readFrame();
@@ -393,6 +395,33 @@ public final class Context implements AutoCloseable {
         sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
     }
 
+    private void cbm_KeyValueStorage_SetValueByKey(int cbId, Wire.Reader r) throws Exception {
+                    if (r.u32() != 3) throw new RuntimeException("KeyValueStorage.SetValueByKey: wrong argument count");
+        int thisId = (int) r.readLongInt();
+        KeyValueStorage obj = instanceById("KeyValueStorage", thisId);
+            String name = r.strValue();
+            S5RunVariable value = Wire.decodeValue(r);
+        obj.SetValueByKey(name, value);
+        Wire.Writer w = new Wire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+            w.u8(Wire.T_UNDEFINED);
+        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void cbm_KeyValueStorage_GetValueByKey(int cbId, Wire.Reader r) throws Exception {
+                    if (r.u32() != 2) throw new RuntimeException("KeyValueStorage.GetValueByKey: wrong argument count");
+        int thisId = (int) r.readLongInt();
+        KeyValueStorage obj = instanceById("KeyValueStorage", thisId);
+            String name = r.strValue();
+        obj.GetValueByKey(name);
+        Wire.Writer w = new Wire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+            w.u8(Wire.T_UNDEFINED);
+        sendMessage(Wire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
     private GlobalFunction_GetFile asGetFile() {
         return (GlobalFunction_GetFile) functions.get("GetFile");
     }
@@ -482,7 +511,7 @@ public final class Context implements AutoCloseable {
         return id;
     }
 
-    private static String valueToString(Value v) {
+    private static String valueToString(S5RunVariable v) {
         return Wire.valueToString(v);
     }
 

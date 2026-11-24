@@ -413,6 +413,22 @@ class console(S5RunObject):
 
 
 
+class KeyValueStorage(S5RunObject):
+    """Schema class 'KeyValueStorage' — inherit and implement."""
+
+    def s5run_class_name(self) -> str:
+        return "KeyValueStorage"
+
+    def s5run_method_names(self) -> list[str]:
+        return ["SetValueByKey", "GetValueByKey"]
+
+    @abstractmethod
+    def SetValueByKey(self, name: str, value: Any): ...
+    @abstractmethod
+    def GetValueByKey(self, name: str): ...
+
+
+
 class GlobalFunction_GetFile(S5RunFunction):
     """Global function 'GetFile' — inherit and implement execute()."""
 
@@ -588,6 +604,8 @@ class Context:
             "log": self._cbm_console_log,
             "warning": self._cbm_console_warning,
             "error": self._cbm_console_error,
+            "SetValueByKey": self._cbm_KeyValueStorage_SetValueByKey,
+            "GetValueByKey": self._cbm_KeyValueStorage_GetValueByKey,
         }
         self._functions: dict[str, S5RunFunction] = {}
         self._instances: dict[str, dict[int, S5RunObject]] = {}
@@ -890,6 +908,35 @@ class Context:
         for _ in range(n_count - 1):
             args.append(_value_to_string(_decode_value(buf)))
         obj.error(args)
+        _write_undefined(out)
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _cbm_KeyValueStorage_SetValueByKey(self, cb_id: int, buf: _Reader) -> None:
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        n_count = _read_count(buf)
+        if n_count != 3:
+            raise RuntimeError("KeyValueStorage.SetValueByKey: wrong argument count")
+        obj = _instance_by_id('KeyValueStorage', _read_int(buf))
+        name = _read_str_value(buf)
+        value = _decode_value(buf)
+        obj.SetValueByKey(name, value)
+        _write_undefined(out)
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _cbm_KeyValueStorage_GetValueByKey(self, cb_id: int, buf: _Reader) -> None:
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        n_count = _read_count(buf)
+        if n_count != 2:
+            raise RuntimeError("KeyValueStorage.GetValueByKey: wrong argument count")
+        obj = _instance_by_id('KeyValueStorage', _read_int(buf))
+        name = _read_str_value(buf)
+        obj.GetValueByKey(name)
         _write_undefined(out)
         self._send(_Msg.CALLBACK_RESP, out)
 

@@ -66,6 +66,7 @@ static std::string cpp_type(const std::string &t) {
   if (t == "float" || t == "double") return "double";
   if (t == "string") return "std::string";
   if (t == "byte") return "u8";
+  if (t == "var") return "value";
   if (t.substr(0, 6) == "array<")
     return "std::vector<" + cpp_type(t.substr(6, t.size() - 7)) + ">";
   return "base_context_class_" + t + " *";
@@ -74,6 +75,7 @@ static std::string cpp_type(const std::string &t) {
 static std::string param_type(const std::string &t) {
   std::string ct = cpp_type(t);
   if (ct.substr(0, 5) == "std::") return "const " + ct + " &";
+  if (ct == "value") return "const " + ct + " &";
   return ct;
 }
 
@@ -83,7 +85,8 @@ static bool has_convert(const std::vector<schema_argument> &args) {
 }
 static bool is_ref(const std::string &t) {
   return t != "bool" && t != "int" && t != "uint" && t != "float" && t != "double" &&
-         t != "string" && t != "byte" && t != "void" && t.substr(0, 6) != "array<";
+         t != "string" && t != "byte" && t != "var" && t != "void" &&
+         t.substr(0, 6) != "array<";
 }
 static bool is_array_of_ref(const std::string &t) {
   if (t.substr(0, 6) != "array<") return false;
@@ -570,6 +573,15 @@ static void emit_decode_args(std::string &out, const std::vector<schema_argument
         out += "    std::string a_" + a.name + " = read_string(r);\n";
       } else if (a.type == "byte") {
         out += "    u8 a_" + a.name + " = read_byte(r);\n";
+      } else if (a.type == "var") {
+        out += "    value a_" + a.name + " = decode_value(r);\n";
+      } else if (a.type.substr(0, 6) == "array<" && array_inner(a.type) == "var") {
+        out += "    if (r.get_u8() != T_ARRAY) throw std::runtime_error(\"wire: expected array\");\n";
+        out += "    u32 cnt_" + a.name + " = r.get_u32();\n";
+        out += "    std::vector<value> a_" + a.name + ";\n";
+        out += "    a_" + a.name + ".reserve(cnt_" + a.name + ");\n";
+        out += "    for (u32 i = 0; i < cnt_" + a.name + "; ++i)\n";
+        out += "        a_" + a.name + ".push_back(decode_value(r));\n";
       } else if (a.type.substr(0, 6) == "array<") {
         std::string inner = array_inner(a.type);
         std::string reader_fn;
@@ -613,6 +625,8 @@ static void emit_encode_result(std::string &out, const std::string &return_type,
     out += "    w.put_u8(T_STRING); w.put_string(res);\n";
   } else if (return_type == "byte") {
     out += "    w.put_u8(T_UINT8); w.put_u8(res);\n";
+  } else if (return_type == "var") {
+    out += "    encode_value(w, res);\n";
   } else if (return_type.substr(0, 6) == "array<") {
     std::string inner = array_inner(return_type);
     out += "    w.put_u8(T_ARRAY); w.put_u32((u32)res.size());\n";
@@ -622,6 +636,7 @@ static void emit_encode_result(std::string &out, const std::string &return_type,
     else if (inner == "int" || inner == "uint") { out += "        write_int(w, res[i]);\n"; }
     else if (inner == "float" || inner == "double") { out += "        w.put_u8(T_FLOAT64); w.put_f64(res[i]);\n"; }
     else if (inner == "byte") { out += "        w.put_u8(T_UINT8); w.put_u8(res[i]);\n"; }
+    else if (inner == "var") { out += "        encode_value(w, res[i]);\n"; }
     out += "    }\n";
   }
 }
