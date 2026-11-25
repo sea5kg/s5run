@@ -143,7 +143,7 @@ func main() {
 			AddServer(s5runcli.NewRemoteServerInfo().Address(address)).
 			SetScript(kScript)
 
-		result := s5runcli.RunScript(ctx, "main", []s5runcli.Variable{s5runcli.Str("test.txt")})
+		result := s5runcli.RunScript(ctx, "main", []s5runcli.S5RunVariable{s5runcli.Str("test.txt")})
 		if result.HasError {
 			fmt.Fprintf(os.Stderr, "!!! FAIL: %s\n", result.Error)
 			os.Exit(1)
