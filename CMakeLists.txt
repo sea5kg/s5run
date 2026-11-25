@@ -91,6 +91,19 @@ set_target_properties(quickjs_static PROPERTIES
   C_STANDARD 11
 )
 
+# libhv
+set(WITH_OPENSSL OFF CACHE BOOL "")
+set(WITH_CURL OFF CACHE BOOL "")
+# set(WITH_MQTT OFF CACHE BOOL "")
+# set(WITH_EVPP OFF CACHE BOOL "")
+set(BUILD_EXAMPLES OFF CACHE BOOL "")
+# set(WITH_HTTP_CLIENT OFF CACHE BOOL "")
+set(BUILD_SHARED OFF CACHE BOOL "")
+
+add_subdirectory(src/third_party/libhv)
+list (APPEND WSJCPP_LIBRARIES hv_static)
+list (APPEND WSJCPP_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/src/third_party/libhv/include/hv")
+
 add_subdirectory(src/third_party/sqlite3)
 # https://www.sqlite.org/threadsafe.html
 # target_compile_definitions(sqlite3-static

@@ -450,6 +450,7 @@ However, the context of the execution objects (Database, Storage) is provided by
 
 ### Third-party
 
+- [ithewei/libhv](https://github.com/ithewei/libhv) (v1.3.3) - BSD 3-Clause License. Copyright (c) 2020, ithewei
 - [QuickJS (quickjs-ng)](https://github.com/quickjs-ng/quickjs) — JavaScript engine
 - [Lua](https://www.lua.org/) — scripting engine (integration in progress)
 - [SQLITE](https://www.sqlite.org/download.html) (v3.53.1) - SQLite is in the Public Domain

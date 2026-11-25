@@ -7,6 +7,7 @@
 - Added sea5kg-logger:v2.0.1 for a server
 - Added wsjcpp-yaml:v0.1.10 for a server
 - Added sea5kg-sqlite3-wrapper:v0.1.1 for a server
+- Added libhv:v1.3.3 for a server
 - Added new type 'var' to schema and added some implementation
 - In output client libraries renamed system classes and renaming class 'value' to 'variable'
 - Redesigned 's5run run': '--script' removed and removed implementation from stdin
