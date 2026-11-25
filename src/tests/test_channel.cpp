@@ -34,7 +34,7 @@ using s5run::channel;
 using s5run::variable;
 using s5run::variable_array;
 using s5run::variable_object;
-using s5run::ObjectRef;
+using s5run::object_ref;
 
 // -----------------------------------------------------------------------
 // Test helper: a minimal in-process server on the other end of a socketpair

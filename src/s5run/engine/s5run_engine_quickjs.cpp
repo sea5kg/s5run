@@ -153,7 +153,7 @@ s5run::variable js_to_value(JSContext *ctx, JSValueConst v) {
       double d = 0;
       JS_ToFloat64(ctx, &d, marker);
       JS_FreeValue(ctx, marker);
-      return s5run::variable(s5run::ObjectRef((int)d, ""));
+      return s5run::variable(s5run::object_ref((int)d, ""));
     }
     JS_FreeValue(ctx, marker);
 
@@ -172,7 +172,7 @@ s5run::variable js_to_value(JSContext *ctx, JSValueConst v) {
           JS_ToFloat64(ctx, &d, id_val);
           JS_FreeValue(ctx, id_val);
           JS_FreePropertyEnum(ctx, tab, len);
-          return s5run::variable(s5run::ObjectRef((int)d, ""));
+          return s5run::variable(s5run::object_ref((int)d, ""));
         }
         JS_FreeValue(ctx, id_val);
       }
@@ -238,7 +238,7 @@ JSValue value_to_js(JSContext *ctx, const s5run::variable &v) {
     return obj;
   }
   case s5run::variable::K_REF: {
-    // Represent an ObjectRef as {"this_id": N} in JS.
+    // Represent an object_ref as {"this_id": N} in JS.
     JSValue obj = JS_NewObject(ctx);
     if (JS_IsException(obj))
       return obj;
@@ -320,7 +320,7 @@ public:
       return nullptr;
 
     // Hidden marker: lets js_to_value recognize proxy objects and pass
-    // them to callbacks as ObjectRef instead of a plain object.
+    // them to callbacks as object_ref instead of a plain object.
     JS_DefinePropertyValueStr(ctx, obj, "__s5run_this_id",
                               JS_NewInt64(ctx, this_id), 0);
 

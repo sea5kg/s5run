@@ -39,10 +39,277 @@
 #include "nlohmann/json.hpp"
 
 #include <cstdio>
+#include <cstdlib>
+#include <new>
 #include <sstream>
 #include <stdexcept>
 
 namespace s5run {
+
+// -----------------------------------------------------------------------
+// object_ref
+// -----------------------------------------------------------------------
+
+object_ref::object_ref() : this_id(0) {
+}
+
+object_ref::object_ref(int id, const std::string &t) : this_id(id), type(t) {
+}
+
+// -----------------------------------------------------------------------
+// variable: construction / copying / destruction
+// -----------------------------------------------------------------------
+
+variable::Storage::Storage() {
+}
+
+variable::Storage::~Storage() {
+}
+
+variable::variable() : kind_(K_NULL) {
+}
+
+variable::variable(std::nullptr_t) : kind_(K_NULL) {
+}
+
+variable::variable(bool b) : kind_(K_BOOL) {
+  u_.b = b;
+}
+
+variable::variable(int32_t i) : kind_(K_INT) {
+  u_.i = static_cast<int64_t>(i);
+}
+
+variable::variable(int64_t i) : kind_(K_INT) {
+  u_.i = i;
+}
+
+variable::variable(uint32_t i) : kind_(K_INT) {
+  u_.i = static_cast<int64_t>(i);
+}
+
+variable::variable(uint64_t i) : kind_(K_INT) {
+  u_.i = static_cast<int64_t>(i);
+}
+
+variable::variable(double d) : kind_(K_DOUBLE) {
+  u_.d = d;
+}
+
+variable::variable(const char *s) : kind_(K_STRING) {
+  new (&u_.s) std::string(s);
+}
+
+variable::variable(const std::string &s) : kind_(K_STRING) {
+  new (&u_.s) std::string(s);
+}
+
+variable::variable(const variable_array &a) : kind_(K_ARRAY) {
+  new (&u_.a) variable_array(a);
+}
+
+variable::variable(const variable_object &o) : kind_(K_OBJECT) {
+  new (&u_.o) variable_object(o);
+}
+
+variable::variable(const object_ref &r) : kind_(K_REF) {
+  new (&u_.r) object_ref(r);
+}
+
+variable::variable(const variable &other) : kind_(other.kind_) {
+  copy_from(other);
+}
+
+variable::~variable() {
+  destroy();
+}
+
+variable &variable::operator=(const variable &other) {
+  if (this != &other) {
+    destroy();
+    kind_ = other.kind_;
+    copy_from(other);
+  }
+  return *this;
+}
+
+// -----------------------------------------------------------------------
+// variable: introspection / accessors
+// -----------------------------------------------------------------------
+
+variable::Kind variable::kind() const {
+  return kind_;
+}
+
+bool variable::is_null() const {
+  return kind_ == K_NULL;
+}
+
+bool variable::is_bool() const {
+  return kind_ == K_BOOL;
+}
+
+bool variable::is_int() const {
+  return kind_ == K_INT;
+}
+
+bool variable::is_double() const {
+  return kind_ == K_DOUBLE;
+}
+
+bool variable::is_number() const {
+  return kind_ == K_INT || kind_ == K_DOUBLE;
+}
+
+bool variable::is_string() const {
+  return kind_ == K_STRING;
+}
+
+bool variable::is_array() const {
+  return kind_ == K_ARRAY;
+}
+
+bool variable::is_object() const {
+  return kind_ == K_OBJECT;
+}
+
+bool variable::is_ref() const {
+  return kind_ == K_REF;
+}
+
+bool variable::as_bool() const {
+  return u_.b;
+}
+
+int64_t variable::as_int() const {
+  return u_.i;
+}
+
+double variable::as_double() const {
+  return (kind_ == K_INT) ? static_cast<double>(u_.i) : u_.d;
+}
+
+const std::string &variable::as_string() const {
+  return u_.s;
+}
+
+const variable_array &variable::as_array() const {
+  return u_.a;
+}
+
+const variable_object &variable::as_object() const {
+  return u_.o;
+}
+
+const object_ref &variable::as_ref() const {
+  return u_.r;
+}
+
+variable_array &variable::array() {
+  return u_.a;
+}
+
+variable_object &variable::object() {
+  return u_.o;
+}
+
+std::string &variable::string() {
+  return u_.s;
+}
+
+// -----------------------------------------------------------------------
+// variable: destruction / copying internals
+// -----------------------------------------------------------------------
+
+namespace {
+
+// Calls the real destructor of a union member; the pseudo-destructor
+// syntax u_.s.~string() is not portable across compilers.
+template <typename T>
+void s5run_destroy_at(T *p) {
+  p->~T();
+}
+
+} // namespace
+
+void variable::destroy() {
+  switch (kind_) {
+  case K_STRING:
+    s5run_destroy_at(&u_.s);
+    break;
+  case K_ARRAY:
+    s5run_destroy_at(&u_.a);
+    break;
+  case K_OBJECT:
+    s5run_destroy_at(&u_.o);
+    break;
+  case K_REF:
+    s5run_destroy_at(&u_.r);
+    break;
+  case K_NULL:
+  case K_BOOL:
+  case K_INT:
+  case K_DOUBLE:
+  default:
+    break;
+  }
+  kind_ = K_NULL;
+}
+
+void variable::copy_from(const variable &other) {
+  switch (other.kind_) {
+  case K_NULL:
+    break;
+  case K_BOOL:
+    u_.b = other.u_.b;
+    break;
+  case K_INT:
+    u_.i = other.u_.i;
+    break;
+  case K_DOUBLE:
+    u_.d = other.u_.d;
+    break;
+  case K_STRING:
+    new (&u_.s) std::string(other.u_.s);
+    break;
+  case K_ARRAY:
+    new (&u_.a) variable_array(other.u_.a);
+    break;
+  case K_OBJECT:
+    new (&u_.o) variable_object(other.u_.o);
+    break;
+  case K_REF:
+    new (&u_.r) object_ref(other.u_.r);
+    break;
+  }
+}
+
+// -----------------------------------------------------------------------
+// variable: parse_script_arg
+// -----------------------------------------------------------------------
+
+variable variable::parse_script_arg(const std::string &raw) {
+  // int?
+  if (!raw.empty()) {
+    char *end = nullptr;
+    long long v = std::strtoll(raw.c_str(), &end, 10);
+    if (end && *end == '\0')
+      return variable(static_cast<int64_t>(v));
+  }
+  // bool?
+  if (raw == "true")
+    return variable(true);
+  if (raw == "false")
+    return variable(false);
+  // double?
+  if (!raw.empty()) {
+    char *end = nullptr;
+    double d = std::strtod(raw.c_str(), &end);
+    if (end && *end == '\0')
+      return variable(d);
+  }
+  return variable(raw);
+}
 
 namespace {
 
@@ -162,7 +429,7 @@ variable parse_scalar_line(const std::string &line) {
     long long id = std::strtoll(line.c_str() + 6, &end, 10);
     if (!end || end != line.c_str() + sp)
       throw std::runtime_error("s5run variable: bad K_REF id: " + line);
-    return variable(ObjectRef((int)id, json_unquote(line.substr(sp + 1))));
+    return variable(object_ref((int)id, json_unquote(line.substr(sp + 1))));
   }
   throw std::runtime_error("s5run variable: unknown value line: " + line);
 }
@@ -265,7 +532,7 @@ variable json_to_variable(const nlohmann::json &j) {
       const auto &r = j["__s5run_ref__"];
       if (!r.is_object() || !r.contains("this_id") || !r.contains("type"))
         throw std::runtime_error("s5run variable: bad __s5run_ref__");
-      return variable(ObjectRef(r["this_id"].get<int>(), r["type"].get<std::string>()));
+      return variable(object_ref(r["this_id"].get<int>(), r["type"].get<std::string>()));
     }
     variable_object out;
     for (auto it = j.begin(); it != j.end(); ++it)

@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 
-using s5run::ObjectRef;
+using s5run::object_ref;
 using s5run::variable;
 using s5run::variable_array;
 using s5run::variable_object;
@@ -32,7 +32,7 @@ void test_scalars() {
   CHECK(variable(std::string("hello")).to_string_s5run() == "K_STRING \"hello\"");
   CHECK(variable(std::string("line1\nline2\ttab \"q\"")).to_string_s5run()
         == "K_STRING \"line1\\nline2\\ttab \\\"q\\\"\"");
-  CHECK(variable(ObjectRef(3, "File")).to_string_s5run() == "K_REF 3 \"File\"");
+  CHECK(variable(object_ref(3, "File")).to_string_s5run() == "K_REF 3 \"File\"");
 
   std::fprintf(stderr, "  PASS\n");
 }

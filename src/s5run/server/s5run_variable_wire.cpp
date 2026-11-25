@@ -153,7 +153,7 @@ variable value_from_wire(wire::Reader &r) {
   case wire::T_REF: {
     int32_t this_id = r.get_i32();
     std::string type = r.get_string();
-    return variable(ObjectRef(this_id, type));
+    return variable(object_ref(this_id, type));
   }
   default:
     throw std::runtime_error("wire: unknown value tag");

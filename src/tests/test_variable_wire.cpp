@@ -40,7 +40,7 @@
 #include <cassert>
 #include <cstdio>
 
-using s5run::ObjectRef;
+using s5run::object_ref;
 using s5run::variable;
 using s5run::variable_array;
 using s5run::variable_object;
@@ -99,7 +99,7 @@ int main() {
   assert(ro.as_object().at("name").as_string() == "file.txt");
 
   // ref
-  variable rr = roundtrip(variable(s5run::ObjectRef(123, "File")));
+  variable rr = roundtrip(variable(s5run::object_ref(123, "File")));
   assert(rr.is_ref());
   assert(rr.as_ref().this_id == 123);
   assert(rr.as_ref().type == "File");

@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 
-using s5run::ObjectRef;
+using s5run::object_ref;
 using s5run::variable;
 using s5run::variable_array;
 using s5run::variable_object;
@@ -92,13 +92,13 @@ void test_containers() {
 void test_ref() {
   std::fprintf(stderr, "== variable json: refs\n");
 
-  variable v(ObjectRef(3, "File"));
+  variable v(object_ref(3, "File"));
   CHECK(v.to_string_json() == "{\"__s5run_ref__\":{\"this_id\":3,\"type\":\"File\"}}");
   check_json_roundtrip(v);
 
   // nested ref inside an object
   variable_object obj;
-  obj["f"] = variable(ObjectRef(7, "File"));
+  obj["f"] = variable(object_ref(7, "File"));
   check_json_roundtrip(variable(obj));
 
   std::fprintf(stderr, "  PASS\n");
