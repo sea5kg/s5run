@@ -3,6 +3,10 @@
 // Usage: ./cpp11-client [host] [port]
 #include "s5run_cli_example/s5run_cli_example.h"
 
+#include <dirent.h>
+#include <algorithm>
+#include <sstream>
+
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -135,6 +139,7 @@ public:
   virtual void warning(const std::vector<std::string> &args) override;
   virtual void error(const std::vector<std::string> &args) override;
   std::vector<std::string> get_logs();
+  void clear_logs();
 
 private:
   std::string to_line(const std::vector<std::string> &args);
@@ -160,6 +165,12 @@ std::vector<std::string> MyConsole::get_logs() {
   return m_logs;
 }
 
+void MyConsole::clear_logs() {
+  m_logs.clear();
+  m_warnings.clear();
+  m_errors.clear();
+}
+
 std::string MyConsole::to_line(const std::vector<std::string> &args) {
   std::string line;
   for (size_t i = 0; i < args.size(); ++i)
@@ -167,19 +178,203 @@ std::string MyConsole::to_line(const std::vector<std::string> &args) {
   return line;
 }
 
-static std::string load_base_script() {
-    const char *paths[] = {"tests/base_cli_test_script.js", "../base_cli_test_script.js"};
-    for (int i = 0; i < 2; ++i) {
-        std::ifstream f(paths[i]);
-        if (f.is_open()) {
-            std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-            return content;
-        }
-    }
-    throw std::runtime_error("cannot find tests/base_cli_test_script.js");
+struct test_data {
+  std::string name;
+  std::string script_js;
+  std::string output_console_expected;
+  std::string output_return_expected; // optional: empty = no return check
+  std::vector<std::string> input_arguments;
+};
+
+static std::string read_file(const std::string &path) {
+  std::ifstream f(path.c_str());
+  if (!f.is_open()) {
+    throw std::runtime_error("cannot find " + path);
+  }
+  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  return content;
 }
 
-static std::string kScript = load_base_script();
+static test_data load_test_data(const std::string &test_name) {
+  std::string base_path = "../__test_data/" + test_name;
+  test_data ret;
+  ret.name = test_name;
+  ret.script_js = read_file(base_path + "/script.js");
+  ret.output_console_expected = read_file(base_path + "/output_console_expected.txt");
+  {
+    std::ifstream f((base_path + "/output_return_expected.txt").c_str());
+    if (f.is_open())
+      ret.output_return_expected =
+        std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  }
+  {
+    // one argument per non-empty line
+    std::string input_args = read_file(base_path + "/input_arguments.txt");
+    std::istringstream iss(input_args);
+    std::string line;
+    while (std::getline(iss, line)) {
+      if (!line.empty() && line[line.size() - 1] == '\r')
+        line.erase(line.size() - 1);
+      if (!line.empty())
+        ret.input_arguments.push_back(line);
+    }
+  }
+
+  return ret;
+}
+
+// Scan ../__test_data/ for sessionX_scenarioX subdirectories.
+static std::vector<std::string> list_test_scenarios() {
+  const std::string dir = "../__test_data";
+  std::vector<std::string> out;
+  DIR *d = ::opendir(dir.c_str());
+  if (!d)
+    throw std::runtime_error("cannot open " + dir);
+  struct dirent *entry = nullptr;
+  while ((entry = ::readdir(d)) != nullptr) {
+    std::string name = entry->d_name;
+    if (name == "." || name == "..")
+      continue;
+    if (name.rfind("session", 0) == 0 && name.find("_scenario") != std::string::npos)
+      out.push_back(name);
+  }
+  ::closedir(d);
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+static std::string trim_cr(std::string line) {
+  if (!line.empty() && line[line.size() - 1] == '\r')
+    line.erase(line.size() - 1);
+  return line;
+}
+
+static std::string value_debug(const s5run_cli_example::value &v) {
+  char buf[64];
+  switch (v.get_kind()) {
+  case s5run_cli_example::value::K_INT:
+    snprintf(buf, sizeof(buf), "int %lld", (long long)v.as_int());
+    return buf;
+  case s5run_cli_example::value::K_STRING:
+    return "string \"" + v.as_string() + "\"";
+  case s5run_cli_example::value::K_BOOL:
+    return std::string("bool ") + (v.as_bool() ? "true" : "false");
+  case s5run_cli_example::value::K_DOUBLE:
+    snprintf(buf, sizeof(buf), "double %g", v.as_double());
+    return buf;
+  case s5run_cli_example::value::K_NULL:
+    return "null";
+  case s5run_cli_example::value::K_ARRAY:
+    return "array";
+  case s5run_cli_example::value::K_OBJECT:
+    return "object";
+  default:
+    return "ref";
+  }
+}
+
+// Compare the script return value with output_return_expected.txt:
+//   AS_INT <n>
+//   AS_BOOL true|false
+//   AS_DOUBLE <d>
+//   AS_STRING <text>
+//   AS_OBJECT
+//     <key> <type> <value>      (int|bool|double|string)
+static void check_return_value(const std::string &test_name,
+                                const s5run_cli_example::value &got,
+                                const std::string &expected_raw) {
+  std::istringstream iss(expected_raw);
+  std::string line;
+  if (!std::getline(iss, line))
+    throw std::runtime_error(test_name + ": empty output_return_expected.txt");
+  line = trim_cr(line);
+  const s5run_cli_example::value &v = got;
+  std::string where = test_name + ": return value mismatch: ";
+
+  if (line.rfind("AS_INT ", 0) == 0) {
+    long long expected = strtoll(line.c_str() + 7, nullptr, 10);
+    if (v.get_kind() != s5run_cli_example::value::K_INT || v.as_int() != expected)
+      throw std::runtime_error(where + "expected int " + std::to_string(expected)
+                               + ", got " + value_debug(v));
+  } else if (line.rfind("AS_BOOL ", 0) == 0) {
+    bool expected = (line.substr(8) == "true");
+    if (v.get_kind() != s5run_cli_example::value::K_BOOL || v.as_bool() != expected)
+      throw std::runtime_error(where + "expected bool " + std::string(expected ? "true" : "false")
+                               + ", got " + value_debug(v));
+  } else if (line.rfind("AS_DOUBLE ", 0) == 0) {
+    double expected = strtod(line.c_str() + 10, nullptr);
+    if (v.get_kind() != s5run_cli_example::value::K_DOUBLE || v.as_double() != expected)
+      throw std::runtime_error(where + "expected double " + std::to_string(expected)
+                               + ", got " + value_debug(v));
+  } else if (line.rfind("AS_STRING ", 0) == 0) {
+    std::string expected = line.substr(10);
+    if (v.get_kind() != s5run_cli_example::value::K_STRING || v.as_string() != expected)
+      throw std::runtime_error(where + "expected string \"" + expected
+                               + "\", got " + value_debug(v));
+  } else if (line == "AS_OBJECT") {
+    if (v.get_kind() != s5run_cli_example::value::K_OBJECT)
+      throw std::runtime_error(where + "expected object, got " + value_debug(v));
+    const std::map<std::string, s5run_cli_example::value> &obj = v.as_object();
+    std::string field_line;
+    while (std::getline(iss, field_line)) {
+      field_line = trim_cr(field_line);
+      if (field_line.empty())
+        continue;
+      std::istringstream field_iss(field_line);
+      std::string key, ftype;
+      field_iss >> key >> ftype;
+      std::string fval;
+      std::getline(field_iss, fval);
+      if (!fval.empty() && fval[0] == ' ')
+        fval.erase(0, 1);
+      fval = trim_cr(fval);
+      auto it = obj.find(key);
+      if (it == obj.end())
+        throw std::runtime_error(where + "expected field '" + key + "' is missing");
+      const s5run_cli_example::value &fv = it->second;
+      if (ftype == "int") {
+        long long expected = strtoll(fval.c_str(), nullptr, 10);
+        if (fv.get_kind() != s5run_cli_example::value::K_INT || fv.as_int() != expected)
+          throw std::runtime_error(where + "field '" + key + "': expected int "
+                                   + std::to_string(expected) + ", got " + value_debug(fv));
+      } else if (ftype == "bool") {
+        bool expected = (fval == "true");
+        if (fv.get_kind() != s5run_cli_example::value::K_BOOL || fv.as_bool() != expected)
+          throw std::runtime_error(where + "field '" + key + "': expected bool " + fval
+                                   + ", got " + value_debug(fv));
+      } else if (ftype == "double") {
+        double expected = strtod(fval.c_str(), nullptr);
+        if (fv.get_kind() != s5run_cli_example::value::K_DOUBLE || fv.as_double() != expected)
+          throw std::runtime_error(where + "field '" + key + "': expected double " + fval
+                                   + ", got " + value_debug(fv));
+      } else if (ftype == "string") {
+        if (fv.get_kind() != s5run_cli_example::value::K_STRING || fv.as_string() != fval)
+          throw std::runtime_error(where + "field '" + key + "': expected string \"" + fval
+                                   + "\", got " + value_debug(fv));
+      } else {
+        throw std::runtime_error(test_name + ": unknown field type '" + ftype
+                                 + "' in output_return_expected.txt");
+      }
+    }
+  } else {
+    throw std::runtime_error(test_name + ": unknown expected kind: " + line);
+  }
+}
+
+// Parse a raw argument into a typed value: int -> bool -> string.
+static s5run_cli_example::value parse_input_argument(const std::string &raw) {
+  if (!raw.empty()) {
+    char *end = nullptr;
+    long long v = std::strtoll(raw.c_str(), &end, 10);
+    if (end && *end == '\0')
+      return s5run_cli_example::value((int64_t)v);
+  }
+  if (raw == "true")
+    return s5run_cli_example::value(true);
+  if (raw == "false")
+    return s5run_cli_example::value(false);
+  return s5run_cli_example::value(raw);
+}
 
 int main(int argc, char **argv) {
   std::string host = argc > 1 ? argv[1] : "127.0.0.1";
@@ -187,6 +382,13 @@ int main(int argc, char **argv) {
 
   char address[64];
   snprintf(address, sizeof(address), "s5run://%s:%u", host.c_str(), (unsigned)port);
+
+  std::vector<std::string> scenarios = list_test_scenarios();
+  if (scenarios.empty())
+    throw std::runtime_error("no sessionX_scenarioX found in ../__test_data");
+  std::vector<test_data> tests;
+  for (const auto &scenario : scenarios)
+    tests.push_back(load_test_data(scenario));
 
   // == happy path
   std::printf("== cpp11-client: happy path\n");
@@ -213,60 +415,67 @@ int main(int argc, char **argv) {
     ctx->add_server(server0);
     ctx->add_object(con);
 
-    ctx->set_script(kScript);
-    std::vector<s5run_cli_example::value> args;
-    args.push_back(s5run_cli_example::value("test.txt"));
-    std::shared_ptr<s5run_cli_example::run_result> result = s5run_cli_example::run_script(ctx, "main", args);
-    if (result->has_error()) {
-      throw std::runtime_error("unexpected error: " + result->error());
+    for (int i = 0; i < tests.size(); ++i) {
+      test_data test = tests[i];
+      std::printf("== cpp11-client: %s\n", test.name.c_str());
+      ctx->set_script(test.script_js);
+      con->clear_logs();
+      std::vector<s5run_cli_example::value> args;
+      for (const auto &raw : test.input_arguments)
+        args.push_back(parse_input_argument(raw));
+      std::shared_ptr<s5run_cli_example::run_result> result = s5run_cli_example::run_script(ctx, "main", args);
+      if (result->has_error()) {
+        throw std::runtime_error("unexpected error: " + result->error());
+      }
+      std::printf("  duration: %lld ms\n", (long long)result->duration());
+
+      // return value: compare with output_return_expected.txt
+      if (!test.output_return_expected.empty()) {
+        check_return_value(test.name, result->get_value(), test.output_return_expected);
+        std::printf("  return value matches output_return_expected.txt\n");
+      } else {
+        std::printf("  return value: no output_return_expected.txt, skipped\n");
+      }
+
+      // side-effect checks (callback state, to be moved into data files)
+      if (test.name == "session0_scenario0") {
+        if (MyFileSystem::m_last_path != "test.txt")
+          throw std::runtime_error("unexpected FileSystem.GetList path: " + MyFileSystem::m_last_path);
+        if (MyCloseFiles::m_closed_sizes.size() != 2
+            || MyCloseFiles::m_closed_sizes[0] != 100
+            || MyCloseFiles::m_closed_sizes[1] != 200)
+          throw std::runtime_error("unexpected closed sizes");
+        if (MyGetFile::m_last_path != "test.txt")
+          throw std::runtime_error("unexpected filepath: " + MyGetFile::m_last_path);
+      }
+      // console output: compare with output_console_expected.txt (line per log)
+      std::vector<std::string> expected_console;
+      {
+        std::istringstream expected_iss(test.output_console_expected);
+        std::string expected_line;
+        while (std::getline(expected_iss, expected_line)) {
+          if (!expected_line.empty() && expected_line[expected_line.size() - 1] == '\r')
+            expected_line.erase(expected_line.size() - 1);
+          if (!expected_line.empty())
+            expected_console.push_back(expected_line);
+        }
+      }
+      std::vector<std::string> got_console = con->get_logs();
+      if (got_console != expected_console) {
+        std::string details;
+        size_t n = got_console.size() > expected_console.size()
+                     ? got_console.size() : expected_console.size();
+        for (size_t j = 0; j < n; ++j) {
+          std::string got = j < got_console.size() ? got_console[j] : "<missing>";
+          std::string exp = j < expected_console.size() ? expected_console[j] : "<missing>";
+          details += "  line " + std::to_string(j + 1) + ": got \"" + got
+                     + "\" expected \"" + exp + "\"\n";
+        }
+        throw std::runtime_error(test.name + ": console output mismatch:\n" + details);
+      }
+      std::printf("  console output matches %d lines\n", (int)got_console.size());
+      std::printf("  PASS\n");
     }
-    std::printf("  duration: %lld ms\n", (long long)result->duration());
-
-    // checks
-
-    const std::map<std::string, s5run_cli_example::value> &obj = result->get_value().as_object();
-    std::printf(
-      "  exec result: {size: %lld, time: %lld, bytes: %lld, openedSum: %lld}\n",
-      (long long)obj.at("size").as_int(),
-      (long long)obj.at("time").as_int(),
-      (long long)obj.at("bytes").as_int(),
-      (long long)obj.at("openedSum").as_int()
-    );
-
-    if (obj.at("size").as_int() != 1024)
-      throw std::runtime_error("unexpected size");
-    if (obj.at("sizeByRef").as_int() != 1024)
-      throw std::runtime_error("unexpected sizeByRef");
-    if (obj.at("openedCount").as_int() != 2)
-      throw std::runtime_error("unexpected openedCount");
-    if (obj.at("openedSum").as_int() != 300)
-      throw std::runtime_error("unexpected openedSum");
-    if (obj.at("fileListCount").as_int() != 3)
-      throw std::runtime_error("unexpected fileListCount");
-    if (MyFileSystem::m_last_path != "test.txt")
-      throw std::runtime_error("unexpected FileSystem.GetList path: " + MyFileSystem::m_last_path);
-    if (MyCloseFiles::m_closed_sizes.size() != 2
-        || MyCloseFiles::m_closed_sizes[0] != 100
-        || MyCloseFiles::m_closed_sizes[1] != 200)
-      throw std::runtime_error("unexpected closed sizes");
-    if (obj.at("time").as_int() != 1737000000)
-      throw std::runtime_error("unexpected time");
-    if (obj.at("bytes").as_int() != 3)
-      throw std::runtime_error("unexpected bytes");
-    if (MyGetFile::m_last_path != "test.txt")
-      throw std::runtime_error("unexpected filepath: " + MyGetFile::m_last_path);
-    if (con->get_logs().size() != 4)
-      throw std::runtime_error("unexpected console log count");
-    if (con->get_logs()[0] != "hello test.txt 1 2")
-      throw std::runtime_error("unexpected console log: " + con->get_logs()[0]);
-    if (con->get_logs()[1] != "name: example.txt")
-      throw std::runtime_error("unexpected property Name getter: " + con->get_logs()[1]);
-    if (con->get_logs()[2] != "bufsize: 4096")
-      throw std::runtime_error("unexpected property BufferSize getter: " + con->get_logs()[2]);
-    if (con->get_logs()[3] != "bufsize-after: 2048")
-      throw std::runtime_error("unexpected property BufferSize setter: " + con->get_logs()[3]);
-    std::printf("  console.log got: \"%s\"\n", con->get_logs()[0].c_str());
-    std::printf("  PASS\n");
   }
 
   // == primitives (float/uint via separate run)

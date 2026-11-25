@@ -126,12 +126,13 @@ def test_cpp_gen_client(cpp_version, port):
 
     LOG.get_logger().info(" ... Builded client for %s [PASS]", cpp_version)
     LOG.get_logger().info(" ... %s-client: scenarios", cpp_version)
-    ret, _ = UtilsShell.run_command(
-        [client_bin, "127.0.0.1", str(port)],
-        _log=LOG.get_logger(),
-        print_output_on_exit=True
-    )
-    assert ret == 0, cpp_version + "-client failed with code %d" % ret
+    with FolderSwitcher(LOG.get_logger(), client_dir) as _:
+        ret, _ = UtilsShell.run_command(
+            [client_bin, "127.0.0.1", str(port)],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+        assert ret == 0, cpp_version + "-client failed with code %d" % ret
     LOG.get_logger().info(" ... %s-client: [PASS]", cpp_version)
 
 

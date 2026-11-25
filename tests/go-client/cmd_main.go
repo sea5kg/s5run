@@ -12,12 +12,12 @@ import (
 var kScript = loadBaseScript()
 
 func loadBaseScript() string {
-	for _, p := range []string{"tests/base_cli_test_script.js", "../base_cli_test_script.js"} {
+	for _, p := range []string{"tests/__test_data/session0_scenario0/script.js", "../__test_data/session0_scenario0/script.js"} {
 		if b, err := os.ReadFile(p); err == nil {
 			return string(b)
 		}
 	}
-	panic("cannot find tests/base_cli_test_script.js")
+	panic("cannot find tests/__test_data/session0_scenario0/script.js")
 }
 
 type MyFile struct {
@@ -54,13 +54,13 @@ func (MyGetFile) Execute(filepath string) s5runcli.File {
 
 type MyGetFileSize struct{}
 
-func (MyGetFileSize) S5RunFunctionName() string { return "GetFileSize" }
+func (MyGetFileSize) S5RunFunctionName() string        { return "GetFileSize" }
 func (MyGetFileSize) Execute(file s5runcli.File) int64 { return file.GetSize() }
 
 type MyGetTimeNow struct{}
 
 func (MyGetTimeNow) S5RunFunctionName() string { return "GetTimeNow" }
-func (MyGetTimeNow) Execute() int64 { return 1737000000 }
+func (MyGetTimeNow) Execute() int64            { return 1737000000 }
 
 type MyHasFile struct{}
 
@@ -94,7 +94,7 @@ type MyConsole struct {
 	s5runcli.ConsoleBase
 }
 
-func (MyConsole) Log(args []string)  { consoleLogs = append(consoleLogs, strings.Join(args, " ")) }
+func (MyConsole) Log(args []string)     { consoleLogs = append(consoleLogs, strings.Join(args, " ")) }
 func (MyConsole) Warning(args []string) {}
 func (MyConsole) Error(args []string)   {}
 

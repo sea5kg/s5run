@@ -1,0 +1,4 @@
+hello test.txt 1 2
+name: example.txt
+bufsize: 4096
+bufsize-after: 2048

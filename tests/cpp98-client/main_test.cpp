@@ -12,7 +12,7 @@
 #include <vector>
 
 static std::string load_base_script() {
-    const char *paths[] = {"tests/base_cli_test_script.js", "../base_cli_test_script.js"};
+    const char *paths[] = {"../__test_data/session0_scenario0/script.js"};
     for (int i = 0; i < 2; ++i) {
         std::ifstream f(paths[i]);
         if (f.is_open()) {
@@ -24,7 +24,7 @@ static std::string load_base_script() {
             return content;
         }
     }
-    throw std::runtime_error("cannot find tests/base_cli_test_script.js");
+    throw std::runtime_error("cannot find tests/__test_data/session0_scenario0/script.js");
 }
 
 static std::string kScript = load_base_script();

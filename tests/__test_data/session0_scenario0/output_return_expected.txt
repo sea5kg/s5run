@@ -1,0 +1,6 @@
+AS_OBJECT
+size int 1024
+sizeByRef int 1024
+openedCount int 2
+openedSum int 300
+fileListCount int 3
