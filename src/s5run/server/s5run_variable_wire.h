@@ -36,7 +36,7 @@
 
 #pragma once
 
-#include "../engine/s5run_value.h"
+#include "../engine/s5run_variable.h"
 #include "../protocol/s5run_wire.h"
 
 namespace s5run {

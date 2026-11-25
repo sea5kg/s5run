@@ -13,7 +13,7 @@
 - Redesigned tests any test will be read script from file.
 - Implemented 'properties' and added tests
 - Improved tests/cpp11-client prepare new tests without code-write just a files 'input_/script_/output_'
-
+- Added new methods to s5run_variable 'to_string_s5run' and 'to_string_json' to easy using
 
 ## [v0.2.0] - (2026 Nov 24)
 

@@ -38,7 +38,7 @@
 #include "protocol/s5run_channel.h"
 #include "protocol/s5run_wire.h"
 #include "s5run_globals.h"
-#include "server/s5run_value_wire.h"
+#include "server/s5run_variable_wire.h"
 
 #include <chrono>
 #include <cstdio>

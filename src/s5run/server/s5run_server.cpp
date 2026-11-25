@@ -38,10 +38,10 @@
 
 #include "s5run_thread_pool.h"
 #include "s5run_queue.h"
-#include "../protocol/s5run_protocol.h"
+#include "protocol/s5run_protocol.h"
 #include "s5run_server.h"
-#include "../engine/s5run_engine.h"
-#include "s5run_value_wire.h"
+#include "engine/s5run_engine.h"
+#include "s5run_variable_wire.h"
 
 #include <arpa/inet.h>
 #include <netdb.h>

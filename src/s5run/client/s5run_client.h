@@ -40,7 +40,7 @@
 #include <string>
 #include <vector>
 
-#include "../engine/s5run_value.h"
+#include "../engine/s5run_variable.h"
 
 namespace s5run {
 

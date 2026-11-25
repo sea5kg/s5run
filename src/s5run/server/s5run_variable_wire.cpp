@@ -34,7 +34,7 @@
  *
  ***********************************************************************************/
 
-#include "s5run_value_wire.h"
+#include "s5run_variable_wire.h"
 
 #include <cstring>
 

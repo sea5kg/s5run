@@ -4,8 +4,8 @@
 #include "protocol/s5run_channel.h"
 #include "protocol/s5run_protocol.h"
 #include "s5run_globals.h"
-#include "engine/s5run_value.h"
-#include "server/s5run_value_wire.h"
+#include "engine/s5run_variable.h"
+#include "server/s5run_variable_wire.h"
 
 #include <sys/socket.h>
 #include <unistd.h>

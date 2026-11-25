@@ -231,6 +231,30 @@ public:
     return u_.s;
   }
 
+  // ---- serialization (implemented in s5run_variable.cpp) ----
+
+  // Structured multi-line representation, handy for tests and debugging:
+  //   K_INT 1024
+  //   K_STRING "text\nline"
+  //   K_OBJECT
+  //   BEGIN
+  //     size K_INT 1024
+  //   END
+  // Object fields are sorted by name.
+  std::string to_string_s5run() const;
+
+  // JSON representation (nlohmann/json). A reference is encoded as
+  // {"__s5run_ref__": {"this_id": N, "type": "..."}}.
+  std::string to_string_json() const;
+
+  // Parse the structured format back; throws std::runtime_error
+  // on a malformed input.
+  static variable from_string_s5run(const std::string &text);
+
+  // Parse JSON back (nlohmann/json); throws on invalid JSON or on
+  // non-representable values.
+  static variable from_string_json(const std::string &text);
+
 private:
   union Storage {
     bool b;

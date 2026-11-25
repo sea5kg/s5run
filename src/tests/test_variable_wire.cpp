@@ -34,8 +34,8 @@
  *
  ***********************************************************************************/
 
-#include "engine/s5run_value.h"
-#include "server/s5run_value_wire.h"
+#include "engine/s5run_variable.h"
+#include "server/s5run_variable_wire.h"
 
 #include <cassert>
 #include <cstdio>

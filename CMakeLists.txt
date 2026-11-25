@@ -123,8 +123,9 @@ list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/client/s5run_client
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/engine/s5run_engine_quickjs.cpp")
 
 # server
-list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_value_wire.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_variable_wire.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_server.cpp")
+list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/engine/s5run_variable.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_queue.cpp")
 list (APPEND WSJCPP_SOURCES "${PROJECT_SOURCE_DIR}/src/s5run/server/s5run_thread_pool.cpp")
 
