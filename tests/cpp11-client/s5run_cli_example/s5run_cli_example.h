@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <string>
@@ -10,28 +11,28 @@
 namespace s5run_cli_example {
 
 class context;
-class remote_server_info;
+class s5run_remote_server_info;
 class run_result;
 std::shared_ptr<context> make_context();
 
-class value {
+class s5run_variable {
 public:
     enum kind {
         K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF
     };
 
-    value() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0) {}
-    value(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0) {}
-    value(int i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
-    value(int64_t i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
-    value(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d) {}
-    value(const char *s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s) {}
-    value(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s) {}
-    value(const std::vector<value> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(a) {}
-    value(const std::map<std::string, value> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_o(o) {}
+    s5run_variable() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0) {}
+    s5run_variable(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0) {}
+    s5run_variable(int i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
+    s5run_variable(int64_t i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
+    s5run_variable(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d) {}
+    s5run_variable(const char *s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s) {}
+    s5run_variable(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s) {}
+    s5run_variable(const std::vector<s5run_variable> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(a) {}
+    s5run_variable(const std::map<std::string, s5run_variable> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_o(o) {}
 
-    static value make_ref(int this_id, const std::string &type) {
-        value v;
+    static s5run_variable make_ref(int this_id, const std::string &type) {
+        s5run_variable v;
         v.m_kind = K_REF;
         v.m_i = this_id;
         v.m_s = type;
@@ -45,23 +46,177 @@ public:
     int64_t as_int() const { return m_i; }
     double as_double() const { return m_d; }
     const std::string &as_string() const { return m_s; }
-    const std::vector<value> &as_array() const { return m_a; }
-    const std::map<std::string, value> &as_object() const { return m_o; }
+    const std::vector<s5run_variable> &as_array() const { return m_a; }
+    const std::map<std::string, s5run_variable> &as_object() const { return m_o; }
     int ref_this_id() const { return (int)m_i; }
     const std::string &ref_type() const { return m_s; }
 
+    // Structured representation, handy for tests and debugging, e.g.
+    //   K_INT 1024
+    //   K_STRING "text\nline"
+    //   K_OBJECT
+    //   BEGIN
+    //     size K_INT 1024
+    //   END
+    // Object fields are sorted by name.
+    std::string to_string_s5run() const {
+        std::string out;
+        append_debug(out, 0);
+        if (!out.empty() && out[out.size() - 1] == '\n')
+            out.erase(out.size() - 1);
+        return out;
+    }
+
+    // JSON representation (hand-rolled, no external libraries), e.g.
+    // {"size": 1024, "tags": ["a", "b"], "ok": true}
+    std::string to_string_json() const {
+        std::string out;
+        append_json(out);
+        return out;
+    }
+
 private:
+    // Structured multi-line form: the first line is emitted without an
+    // indent prefix (the caller positions it - column 0, after an object
+    // key or an array element prefix), continuation lines carry the
+    // given indent.
+    void append_debug(std::string &out, int indent) const {
+        char buf[64];
+        std::string pad(indent, ' ');
+        std::string pad_in(indent + 2, ' ');
+        switch (m_kind) {
+        case K_NULL:
+            out += "K_NULL\n";
+            break;
+        case K_BOOL:
+            out += m_b ? "K_BOOL true\n" : "K_BOOL false\n";
+            break;
+        case K_INT:
+            snprintf(buf, sizeof(buf), "K_INT %lld\n", (long long)m_i);
+            out += buf;
+            break;
+        case K_DOUBLE:
+            snprintf(buf, sizeof(buf), "K_DOUBLE %g\n", m_d);
+            out += buf;
+            break;
+        case K_STRING:
+            out += "K_STRING ";
+            append_json_string(out, m_s);
+            out += "\n";
+            break;
+        case K_ARRAY:
+            out += "K_ARRAY\n";
+            out += pad + "BEGIN\n";
+            for (size_t i = 0; i < m_a.size(); ++i) {
+                out += pad_in;
+                m_a[i].append_debug(out, indent + 2);
+            }
+            out += pad + "END\n";
+            break;
+        case K_OBJECT:
+            // std::map iterates sorted by name
+            out += "K_OBJECT\n";
+            out += pad + "BEGIN\n";
+            for (auto it = m_o.begin(); it != m_o.end(); ++it) {
+                out += pad_in + it->first + " ";
+                it->second.append_debug(out, indent + 2);
+            }
+            out += pad + "END\n";
+            break;
+        case K_REF:
+            out += "K_REF ";
+            out += std::to_string(m_i);
+            out += " ";
+            append_json_string(out, m_s);
+            out += "\n";
+            break;
+        }
+    }
+
+    static void append_json_string(std::string &out, const std::string &s) {
+        out += '"';
+        for (size_t i = 0; i < s.size(); ++i) {
+            char c = s[i];
+            switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if ((unsigned char)c < 0x20) {
+                    char b[8];
+                    snprintf(b, sizeof(b), "\\u%04x", (unsigned char)c);
+                    out += b;
+                } else {
+                    out += c;
+                }
+            }
+        }
+        out += '"';
+    }
+
+    void append_json(std::string &out) const {
+        char buf[64];
+        switch (m_kind) {
+        case K_NULL: out += "null"; break;
+        case K_BOOL: out += m_b ? "true" : "false"; break;
+        case K_INT:
+            snprintf(buf, sizeof(buf), "%lld", (long long)m_i);
+            out += buf;
+            break;
+        case K_DOUBLE:
+            snprintf(buf, sizeof(buf), "%g", m_d);
+            out += buf;
+            break;
+        case K_STRING:
+            append_json_string(out, m_s);
+            break;
+        case K_ARRAY: {
+            out += "[";
+            for (size_t i = 0; i < m_a.size(); ++i) {
+                if (i > 0)
+                    out += ", ";
+                m_a[i].append_json(out);
+            }
+            out += "]";
+            break;
+        }
+        case K_OBJECT: {
+            out += "{";
+            bool first = true;
+            for (auto it = m_o.begin(); it != m_o.end(); ++it) {
+                if (!first)
+                    out += ", ";
+                first = false;
+                append_json_string(out, it->first);
+                out += ": ";
+                it->second.append_json(out);
+            }
+            out += "}";
+            break;
+        }
+        case K_REF:
+            out += "{\"__s5run_ref__\":{\"this_id\":";
+            out += std::to_string(m_i);
+            out += ",\"type\":";
+            append_json_string(out, m_s);
+            out += "}}";
+            break;
+        }
+    }
+
     kind m_kind;
     bool m_b;
     int64_t m_i;
     double m_d;
     std::string m_s;
-    std::vector<value> m_a;
-    std::map<std::string, value> m_o;
+    std::vector<s5run_variable> m_a;
+    std::map<std::string, s5run_variable> m_o;
 };
-class remote_server_info {
+class s5run_remote_server_info {
 public:
-    remote_server_info() : m_port(0), m_have_address(false) {}
+    s5run_remote_server_info() : m_port(0), m_have_address(false) {}
 
     // Address format: s5run://host:port
     void set_address(const std::string &address);
@@ -171,7 +326,7 @@ public:
         return out_;
     }
     virtual ~KeyValueStorage() {}
-    virtual void SetValueByKey(const std::string & name, const value & value) = 0;
+    virtual void SetValueByKey(const std::string & name, const s5run_variable & value) = 0;
     virtual void GetValueByKey(const std::string & name) = 0;
 };
 
@@ -256,7 +411,7 @@ public:
     // Adds a server the context talks to. The first added server
     // is used for script execution; the api_key is reserved for
     // future authentication.
-    void add_server(const std::shared_ptr<remote_server_info> &server);
+    void add_server(const std::shared_ptr<s5run_remote_server_info> &server);
 
     // Registers a remote context provider: the listed context
     // names (global objects / classes) will be supplied by the
@@ -286,9 +441,9 @@ public:
 private:
     context(const context &);
     context &operator=(const context &);
-    std::shared_ptr<run_result> _run(const std::string &entry, const std::vector<value> &args);
+    std::shared_ptr<run_result> _run(const std::string &entry, const std::vector<s5run_variable> &args);
     friend std::shared_ptr<run_result> run_script(const std::shared_ptr<context> &,
-                                                const std::string &, const std::vector<value> &);
+                                                const std::string &, const std::vector<s5run_variable> &);
     impl *m_impl;
 };
 
@@ -298,7 +453,7 @@ public:
     const std::string &error() const { return m_error; }
     int error_line() const { return m_error_line; }
     int64_t duration() const { return m_duration_ms; } // milliseconds
-    const value &get_value() const { return m_value; }
+    const s5run_variable &get_value() const { return m_value; }
 
 private:
     friend class context::impl;
@@ -308,7 +463,7 @@ private:
     std::string m_error;
     int m_error_line;
     int64_t m_duration_ms;
-    value m_value;
+    s5run_variable m_value;
 };
 
 // Runs the context script; serves callbacks while it executes.
@@ -316,7 +471,7 @@ private:
 inline std::shared_ptr<run_result> run_script(
     const std::shared_ptr<context> &ctx,
     const std::string &entry,
-    const std::vector<value> &args = std::vector<value>()) {
+    const std::vector<s5run_variable> &args = std::vector<s5run_variable>()) {
     return ctx->_run(entry, args);
 }
 

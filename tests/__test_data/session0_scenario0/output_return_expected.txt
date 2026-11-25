@@ -1,6 +1,10 @@
-AS_OBJECT
-size int 1024
-sizeByRef int 1024
-openedCount int 2
-openedSum int 300
-fileListCount int 3
+K_OBJECT
+BEGIN
+  bytes K_INT 3
+  fileListCount K_INT 3
+  openedCount K_INT 2
+  openedSum K_INT 300
+  size K_INT 1024
+  sizeByRef K_INT 1024
+  time K_INT 1737000000
+END

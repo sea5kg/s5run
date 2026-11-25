@@ -249,131 +249,55 @@ static std::string trim_cr(std::string line) {
   return line;
 }
 
-static std::string value_debug(const s5run_cli_example::value &v) {
-  char buf[64];
-  switch (v.get_kind()) {
-  case s5run_cli_example::value::K_INT:
-    snprintf(buf, sizeof(buf), "int %lld", (long long)v.as_int());
-    return buf;
-  case s5run_cli_example::value::K_STRING:
-    return "string \"" + v.as_string() + "\"";
-  case s5run_cli_example::value::K_BOOL:
-    return std::string("bool ") + (v.as_bool() ? "true" : "false");
-  case s5run_cli_example::value::K_DOUBLE:
-    snprintf(buf, sizeof(buf), "double %g", v.as_double());
-    return buf;
-  case s5run_cli_example::value::K_NULL:
-    return "null";
-  case s5run_cli_example::value::K_ARRAY:
-    return "array";
-  case s5run_cli_example::value::K_OBJECT:
-    return "object";
-  default:
-    return "ref";
+// Split text into lines, trimming trailing \r and skipping empty lines.
+static std::vector<std::string> split_lines(const std::string &text) {
+  std::vector<std::string> out;
+  std::istringstream iss(text);
+  std::string line;
+  while (std::getline(iss, line)) {
+    if (!line.empty() && line[line.size() - 1] == '\r')
+      line.erase(line.size() - 1);
+    if (!line.empty())
+      out.push_back(line);
   }
+  return out;
 }
 
 // Compare the script return value with output_return_expected.txt:
-//   AS_INT <n>
-//   AS_BOOL true|false
-//   AS_DOUBLE <d>
-//   AS_STRING <text>
-//   AS_OBJECT
-//     <key> <type> <value>      (int|bool|double|string)
+// both sides use the s5run_variable::to_string_s5run() format.
 static void check_return_value(const std::string &test_name,
-                                const s5run_cli_example::value &got,
+                                const s5run_cli_example::s5run_variable &got,
                                 const std::string &expected_raw) {
-  std::istringstream iss(expected_raw);
-  std::string line;
-  if (!std::getline(iss, line))
-    throw std::runtime_error(test_name + ": empty output_return_expected.txt");
-  line = trim_cr(line);
-  const s5run_cli_example::value &v = got;
-  std::string where = test_name + ": return value mismatch: ";
+  std::vector<std::string> expected = split_lines(expected_raw);
+  std::vector<std::string> got_lines = split_lines(got.to_string_s5run());
+  if (got_lines == expected)
+    return;
 
-  if (line.rfind("AS_INT ", 0) == 0) {
-    long long expected = strtoll(line.c_str() + 7, nullptr, 10);
-    if (v.get_kind() != s5run_cli_example::value::K_INT || v.as_int() != expected)
-      throw std::runtime_error(where + "expected int " + std::to_string(expected)
-                               + ", got " + value_debug(v));
-  } else if (line.rfind("AS_BOOL ", 0) == 0) {
-    bool expected = (line.substr(8) == "true");
-    if (v.get_kind() != s5run_cli_example::value::K_BOOL || v.as_bool() != expected)
-      throw std::runtime_error(where + "expected bool " + std::string(expected ? "true" : "false")
-                               + ", got " + value_debug(v));
-  } else if (line.rfind("AS_DOUBLE ", 0) == 0) {
-    double expected = strtod(line.c_str() + 10, nullptr);
-    if (v.get_kind() != s5run_cli_example::value::K_DOUBLE || v.as_double() != expected)
-      throw std::runtime_error(where + "expected double " + std::to_string(expected)
-                               + ", got " + value_debug(v));
-  } else if (line.rfind("AS_STRING ", 0) == 0) {
-    std::string expected = line.substr(10);
-    if (v.get_kind() != s5run_cli_example::value::K_STRING || v.as_string() != expected)
-      throw std::runtime_error(where + "expected string \"" + expected
-                               + "\", got " + value_debug(v));
-  } else if (line == "AS_OBJECT") {
-    if (v.get_kind() != s5run_cli_example::value::K_OBJECT)
-      throw std::runtime_error(where + "expected object, got " + value_debug(v));
-    const std::map<std::string, s5run_cli_example::value> &obj = v.as_object();
-    std::string field_line;
-    while (std::getline(iss, field_line)) {
-      field_line = trim_cr(field_line);
-      if (field_line.empty())
-        continue;
-      std::istringstream field_iss(field_line);
-      std::string key, ftype;
-      field_iss >> key >> ftype;
-      std::string fval;
-      std::getline(field_iss, fval);
-      if (!fval.empty() && fval[0] == ' ')
-        fval.erase(0, 1);
-      fval = trim_cr(fval);
-      auto it = obj.find(key);
-      if (it == obj.end())
-        throw std::runtime_error(where + "expected field '" + key + "' is missing");
-      const s5run_cli_example::value &fv = it->second;
-      if (ftype == "int") {
-        long long expected = strtoll(fval.c_str(), nullptr, 10);
-        if (fv.get_kind() != s5run_cli_example::value::K_INT || fv.as_int() != expected)
-          throw std::runtime_error(where + "field '" + key + "': expected int "
-                                   + std::to_string(expected) + ", got " + value_debug(fv));
-      } else if (ftype == "bool") {
-        bool expected = (fval == "true");
-        if (fv.get_kind() != s5run_cli_example::value::K_BOOL || fv.as_bool() != expected)
-          throw std::runtime_error(where + "field '" + key + "': expected bool " + fval
-                                   + ", got " + value_debug(fv));
-      } else if (ftype == "double") {
-        double expected = strtod(fval.c_str(), nullptr);
-        if (fv.get_kind() != s5run_cli_example::value::K_DOUBLE || fv.as_double() != expected)
-          throw std::runtime_error(where + "field '" + key + "': expected double " + fval
-                                   + ", got " + value_debug(fv));
-      } else if (ftype == "string") {
-        if (fv.get_kind() != s5run_cli_example::value::K_STRING || fv.as_string() != fval)
-          throw std::runtime_error(where + "field '" + key + "': expected string \"" + fval
-                                   + "\", got " + value_debug(fv));
-      } else {
-        throw std::runtime_error(test_name + ": unknown field type '" + ftype
-                                 + "' in output_return_expected.txt");
-      }
-    }
-  } else {
-    throw std::runtime_error(test_name + ": unknown expected kind: " + line);
+  std::string details;
+  size_t n = got_lines.size() > expected.size() ? got_lines.size() : expected.size();
+  for (size_t i = 0; i < n; ++i) {
+    std::string got_line = i < got_lines.size() ? got_lines[i] : "<missing>";
+    std::string exp_line = i < expected.size() ? expected[i] : "<missing>";
+    if (got_line != exp_line)
+      details += "  line " + std::to_string(i + 1) + ": got \"" + got_line
+                 + "\" expected \"" + exp_line + "\"\n";
   }
+  throw std::runtime_error(test_name + ": return value mismatch:\n" + details);
 }
 
 // Parse a raw argument into a typed value: int -> bool -> string.
-static s5run_cli_example::value parse_input_argument(const std::string &raw) {
+static s5run_cli_example::s5run_variable parse_input_argument(const std::string &raw) {
   if (!raw.empty()) {
     char *end = nullptr;
     long long v = std::strtoll(raw.c_str(), &end, 10);
     if (end && *end == '\0')
-      return s5run_cli_example::value((int64_t)v);
+      return s5run_cli_example::s5run_variable((int64_t)v);
   }
   if (raw == "true")
-    return s5run_cli_example::value(true);
+    return s5run_cli_example::s5run_variable(true);
   if (raw == "false")
-    return s5run_cli_example::value(false);
-  return s5run_cli_example::value(raw);
+    return s5run_cli_example::s5run_variable(false);
+  return s5run_cli_example::s5run_variable(raw);
 }
 
 int main(int argc, char **argv) {
@@ -408,8 +332,8 @@ int main(int argc, char **argv) {
     ctx->add_function(std::make_shared<MyGetServerPort>());
     ctx->add_object(std::make_shared<MyFileSystem>());
     ctx->add_function(std::make_shared<MyGetFile>());
-    std::shared_ptr<s5run_cli_example::remote_server_info> server0 =
-      std::make_shared<s5run_cli_example::remote_server_info>();
+    std::shared_ptr<s5run_cli_example::s5run_remote_server_info> server0 =
+      std::make_shared<s5run_cli_example::s5run_remote_server_info>();
     server0->set_address(address);
     server0->set_api_key("some api key runner");
     ctx->add_server(server0);
@@ -420,7 +344,7 @@ int main(int argc, char **argv) {
       std::printf("== cpp11-client: %s\n", test.name.c_str());
       ctx->set_script(test.script_js);
       con->clear_logs();
-      std::vector<s5run_cli_example::value> args;
+      std::vector<s5run_cli_example::s5run_variable> args;
       for (const auto &raw : test.input_arguments)
         args.push_back(parse_input_argument(raw));
       std::shared_ptr<s5run_cli_example::run_result> result = s5run_cli_example::run_script(ctx, "main", args);
@@ -432,6 +356,8 @@ int main(int argc, char **argv) {
       // return value: compare with output_return_expected.txt
       if (!test.output_return_expected.empty()) {
         check_return_value(test.name, result->get_value(), test.output_return_expected);
+        std::printf("  return value: %s\n", result->get_value().to_string_s5run().c_str());
+        std::printf("  return json:  %s\n", result->get_value().to_string_json().c_str());
         std::printf("  return value matches output_return_expected.txt\n");
       } else {
         std::printf("  return value: no output_return_expected.txt, skipped\n");
@@ -483,12 +409,12 @@ int main(int argc, char **argv) {
     std::shared_ptr<s5run_cli_example::context> ctx = s5run_cli_example::make_context();
     ctx->add_function(std::make_shared<MyGetPi>());
     ctx->add_function(std::make_shared<MyGetServerPort>());
-    std::shared_ptr<s5run_cli_example::remote_server_info> server0 =
-      std::make_shared<s5run_cli_example::remote_server_info>();
+    std::shared_ptr<s5run_cli_example::s5run_remote_server_info> server0 =
+      std::make_shared<s5run_cli_example::s5run_remote_server_info>();
     server0->set_address(address);
     server0->set_api_key("some api key runner");
-    std::shared_ptr<s5run_cli_example::remote_server_info> server1 =
-      std::make_shared<s5run_cli_example::remote_server_info>();
+    std::shared_ptr<s5run_cli_example::s5run_remote_server_info> server1 =
+      std::make_shared<s5run_cli_example::s5run_remote_server_info>();
     server1->set_address(address);
     ctx->add_server(server0);
     ctx->add_server(server1); // same address: exercises the load-balancing probe
@@ -496,7 +422,7 @@ int main(int argc, char **argv) {
     std::shared_ptr<s5run_cli_example::run_result> result = s5run_cli_example::run_script(ctx, "main");
     if (result->has_error())
       throw std::runtime_error("unexpected error: " + result->error());
-    const std::map<std::string, s5run_cli_example::value> &obj = result->get_value().as_object();
+    const std::map<std::string, s5run_cli_example::s5run_variable> &obj = result->get_value().as_object();
     std::printf(
       "== cpp11-client: primitives\n  pi: %f, port: %lld\n",
       obj.at("pi").as_double(),
@@ -532,8 +458,8 @@ int main(int argc, char **argv) {
   {
     std::shared_ptr<s5run_cli_example::context> ctx = s5run_cli_example::make_context();
     ctx->add_function(std::make_shared<MyHasFile>());
-    std::shared_ptr<s5run_cli_example::remote_server_info> server0 =
-      std::make_shared<s5run_cli_example::remote_server_info>();
+    std::shared_ptr<s5run_cli_example::s5run_remote_server_info> server0 =
+      std::make_shared<s5run_cli_example::s5run_remote_server_info>();
     server0->set_address(address);
     server0->set_api_key("some api key runner");
     ctx->add_server(server0);

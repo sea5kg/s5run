@@ -251,33 +251,33 @@ inline void write_array__string(Writer &w, const std::vector<std::string> &v) {
         write_string(w, v[i]);
 }
 
-void encode_value(Writer &w, const value &v) {
+void encode_value(Writer &w, const s5run_variable &v) {
     switch (v.get_kind()) {
-    case value::K_NULL: w.put_u8(T_UNDEFINED); break;
-    case value::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
-    case value::K_INT: write_int(w, v.as_int()); break;
-    case value::K_DOUBLE: w.put_u8(T_FLOAT64); w.put_f64(v.as_double()); break;
-    case value::K_STRING: write_string(w, v.as_string()); break;
-    case value::K_ARRAY: {
+    case s5run_variable::K_NULL: w.put_u8(T_UNDEFINED); break;
+    case s5run_variable::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
+    case s5run_variable::K_INT: write_int(w, v.as_int()); break;
+    case s5run_variable::K_DOUBLE: w.put_u8(T_FLOAT64); w.put_f64(v.as_double()); break;
+    case s5run_variable::K_STRING: write_string(w, v.as_string()); break;
+    case s5run_variable::K_ARRAY: {
         w.put_u8(T_ARRAY);
-        const std::vector<value> &a = v.as_array();
+        const std::vector<s5run_variable> &a = v.as_array();
         w.put_u32((uint32_t)a.size());
         for (size_t i = 0; i < a.size(); ++i)
             encode_value(w, a[i]);
         break;
     }
-    case value::K_OBJECT: {
+    case s5run_variable::K_OBJECT: {
         w.put_u8(T_OBJECT);
-        const std::map<std::string, value> &o = v.as_object();
+        const std::map<std::string, s5run_variable> &o = v.as_object();
         w.put_u32((uint32_t)o.size());
-        for (std::map<std::string, value>::const_iterator it = o.begin();
+        for (std::map<std::string, s5run_variable>::const_iterator it = o.begin();
              it != o.end(); ++it) {
             write_string(w, it->first);
             encode_value(w, it->second);
         }
         break;
     }
-    case value::K_REF: {
+    case s5run_variable::K_REF: {
         w.put_u8(T_REF);
         w.put_i32(v.ref_this_id());
         w.put_string(v.ref_type());
@@ -286,56 +286,56 @@ void encode_value(Writer &w, const value &v) {
     }
 }
 
-value decode_value(Reader &r) {
+s5run_variable decode_value(Reader &r) {
     uint8_t tag = r.get_u8();
     switch (tag) {
-    case T_UNDEFINED: return value();
-    case T_BOOL: return value(r.get_u8() != 0);
-    case T_INT8: return value((int64_t)r.get_i8());
-    case T_INT16: return value((int64_t)r.get_i16());
-    case T_INT32: return value((int64_t)r.get_i32());
-    case T_INT64: return value(r.get_i64());
-    case T_UINT8: return value((int64_t)r.get_u8());
-    case T_UINT16: return value((int64_t)r.get_u16());
-    case T_UINT32: return value((int64_t)r.get_u32());
-    case T_UINT64: return value((int64_t)r.get_u64());
-    case T_FLOAT32: return value((double)r.get_f32());
-    case T_FLOAT64: return value(r.get_f64());
-    case T_STRING: return value(r.get_string());
+    case T_UNDEFINED: return s5run_variable();
+    case T_BOOL: return s5run_variable(r.get_u8() != 0);
+    case T_INT8: return s5run_variable((int64_t)r.get_i8());
+    case T_INT16: return s5run_variable((int64_t)r.get_i16());
+    case T_INT32: return s5run_variable((int64_t)r.get_i32());
+    case T_INT64: return s5run_variable(r.get_i64());
+    case T_UINT8: return s5run_variable((int64_t)r.get_u8());
+    case T_UINT16: return s5run_variable((int64_t)r.get_u16());
+    case T_UINT32: return s5run_variable((int64_t)r.get_u32());
+    case T_UINT64: return s5run_variable((int64_t)r.get_u64());
+    case T_FLOAT32: return s5run_variable((double)r.get_f32());
+    case T_FLOAT64: return s5run_variable(r.get_f64());
+    case T_STRING: return s5run_variable(r.get_string());
     case T_ARRAY: {
         uint32_t n = r.get_u32();
-        std::vector<value> a;
+        std::vector<s5run_variable> a;
         a.reserve(n);
         for (uint32_t i = 0; i < n; ++i)
             a.push_back(decode_value(r));
-        return value(a);
+        return s5run_variable(a);
     }
     case T_OBJECT: {
         uint32_t n = r.get_u32();
-        std::map<std::string, value> o;
+        std::map<std::string, s5run_variable> o;
         for (uint32_t i = 0; i < n; ++i) {
             std::string key = read_string(r);
             o[key] = decode_value(r);
         }
-        return value(o);
+        return s5run_variable(o);
     }
     case T_REF: {
         int32_t this_id = r.get_i32();
         std::string type = r.get_string();
-        return value::make_ref(this_id, type);
+        return s5run_variable::make_ref(this_id, type);
     }
     default:
         throw std::runtime_error("wire: unknown value tag");
     }
 }
 
-std::string _value_to_string(const value &v) {
+std::string _value_to_string(const s5run_variable &v) {
     switch (v.get_kind()) {
-    case value::K_NULL: return "null";
-    case value::K_BOOL: return v.as_bool() ? "true" : "false";
-    case value::K_INT: return std::to_string(v.as_int());
-    case value::K_DOUBLE: return std::to_string(v.as_double());
-    case value::K_STRING: return v.as_string();
+    case s5run_variable::K_NULL: return "null";
+    case s5run_variable::K_BOOL: return v.as_bool() ? "true" : "false";
+    case s5run_variable::K_INT: return std::to_string(v.as_int());
+    case s5run_variable::K_DOUBLE: return std::to_string(v.as_double());
+    case s5run_variable::K_STRING: return v.as_string();
     default:
         throw std::runtime_error("wire: expected a scalar argument");
     }
@@ -358,13 +358,13 @@ public:
     ~impl() { _disconnect(); }
 
     void set_script(const std::string &script);
-    void add_server(const std::shared_ptr<remote_server_info> &server);
+    void add_server(const std::shared_ptr<s5run_remote_server_info> &server);
     void register_type(const std::string &name, const std::vector<std::string> &methods,
                        const std::vector<s5run_property_descriptor> &props);
     void add_object(const std::shared_ptr<s5run_object> &obj);
     void add_function(const std::shared_ptr<s5run_function> &fn);
     std::shared_ptr<run_result> run(const std::string &entry,
-                                   const std::vector<value> &args);
+                                   const std::vector<s5run_variable> &args);
 
 private:
     struct PendingType { std::string name; std::vector<std::string> methods;
@@ -412,10 +412,10 @@ private:
     void _expect_register_resp(const std::string &what);
     void _dispatch_callback(std::vector<uint8_t> &body);
     static int _parse_error_line(const std::string &error);
-    static long _probe_server_load(const std::shared_ptr<remote_server_info> &server);
+    static long _probe_server_load(const std::shared_ptr<s5run_remote_server_info> &server);
 
     std::string m_script;
-    std::vector<std::shared_ptr<remote_server_info>> m_servers;
+    std::vector<std::shared_ptr<s5run_remote_server_info>> m_servers;
     int m_fd;
     int32_t m_next_this_id;
     std::vector<PendingType> m_pending_types;
@@ -589,7 +589,7 @@ void context::impl::set_script(const std::string &script) {
     m_script = script;
 }
 
-void context::impl::add_server(const std::shared_ptr<remote_server_info> &server) {
+void context::impl::add_server(const std::shared_ptr<s5run_remote_server_info> &server) {
     m_servers.push_back(server);
 }
 
@@ -939,7 +939,7 @@ void context::impl::_cbm_KeyValueStorage_SetValueByKey(int32_t cb_id, Reader &r)
     auto it = m_instances_KeyValueStorage.find(this_id);
     if (it == m_instances_KeyValueStorage.end()) { throw std::runtime_error("KeyValueStorage: unknown this_id"); }
         std::string a_name = read_string(r);
-        value a_value = decode_value(r);
+        s5run_variable a_value = decode_value(r);
     it->second->SetValueByKey(a_name, a_value);
     Writer w; w.put_i32(cb_id); w.put_u8(1);
         w.put_u8(T_UNDEFINED);
@@ -1146,7 +1146,7 @@ void context::impl::_dispatch_callback(std::vector<uint8_t> &body) {
     }
 }
 
-long context::impl::_probe_server_load(const std::shared_ptr<remote_server_info> &server) {
+long context::impl::_probe_server_load(const std::shared_ptr<s5run_remote_server_info> &server) {
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         return -1;
@@ -1207,7 +1207,7 @@ int context::impl::_parse_error_line(const std::string &error) {
 
 
 std::shared_ptr<run_result> context::impl::run(const std::string &entry,
-                                 const std::vector<value> &args) {
+                                 const std::vector<s5run_variable> &args) {
     std::shared_ptr<run_result> out(new run_result());
     clock_t started = clock();
     try {
@@ -1260,7 +1260,7 @@ context::~context() {
     delete m_impl;
 }
 
-void remote_server_info::set_address(const std::string &address) {
+void s5run_remote_server_info::set_address(const std::string &address) {
     const std::string prefix = "s5run://";
     if (address.compare(0, prefix.size(), prefix) != 0)
         throw std::runtime_error("set_address: expected format s5run://host:port");
@@ -1274,7 +1274,7 @@ void remote_server_info::set_address(const std::string &address) {
     m_have_address = true;
 }
 
-void context::add_server(const std::shared_ptr<remote_server_info> &server) {
+void context::add_server(const std::shared_ptr<s5run_remote_server_info> &server) {
     m_impl->add_server(server);
 }
 
@@ -1313,7 +1313,7 @@ void context::set_script(const std::string &script) {
 }
 
 std::shared_ptr<run_result> context::_run(const std::string &entry,
-                                      const std::vector<value> &args) {
+                                      const std::vector<s5run_variable> &args) {
     return m_impl->run(entry, args);
 }
 
