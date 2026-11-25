@@ -5,6 +5,7 @@
 
 - Added wsjcpp-employees:v0.2.2 for a server
 - Added sea5kg-logger:v2.0.1 for a server
+- Added wsjcpp-yaml:v0.1.10 for a server
 - Added new type 'var' to schema and added some implementation
 - In output client libraries renamed system classes and renaming class 'value' to 'variable'
 - Redesigned 's5run run': '--script' removed and removed implementation from stdin
