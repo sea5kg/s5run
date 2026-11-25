@@ -433,13 +433,27 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    s5run_variable(const std::map<std::string, s5run_variable> &o);\n";
   out += "    s5run_variable(const s5run_variable &other); s5run_variable &operator=(const s5run_variable &other); ~s5run_variable();\n";
   out += "    static s5run_variable make_ref(int this_id, const std::string &type);\n";
+  out += "    // Structured multi-line representation, handy for tests:\n";
+  out += "    //   K_INT 1024\n";
+  out += "    //   K_STRING \"text\\nline\"\n";
+  out += "    //   K_OBJECT\n";
+  out += "    //   BEGIN\n";
+  out += "    //     size K_INT 1024\n";
+  out += "    //   END\n";
+  out += "    // Object fields are sorted by name.\n";
+  out += "    std::string to_string_s5run() const;\n";
+  out += "    // JSON representation (hand-rolled, no external libraries).\n";
+  out += "    std::string to_string_json() const;\n";
   out += "    kind get_kind() const; bool is_null() const; bool as_bool() const;\n";
   out += "    i64 as_int() const; double as_double() const;\n";
   out += "    const std::string &as_string() const;\n";
   out += "    const std::vector<s5run_variable> &as_array() const;\n";
   out += "    const std::map<std::string, s5run_variable> &as_object() const;\n";
   out += "    int ref_this_id() const; const std::string &ref_type() const;\n";
-  out += "private:\n    void destroy(); void copy_from(const s5run_variable &other);\n";
+  out += "private:\n    void destroy(); void copy_from(const s5run_variable &other);\n"
+         "    void append_debug(std::string &out, int indent) const;\n"
+         "    static void append_json_string(std::string &out, const std::string &s);\n"
+         "    void append_json(std::string &out) const;\n";
   out += "    kind m_kind; bool m_b; i64 m_i; double m_d;\n";
   out += "    std::string m_s; std::vector<s5run_variable> *m_a; std::map<std::string, s5run_variable> *m_o;\n";
   out += "};\n\n";
@@ -914,6 +928,147 @@ void s5run_variable::copy_from(const s5run_variable &other) {
     m_s = other.m_s;
     m_a = other.m_a ? new std::vector<s5run_variable>(*other.m_a) : 0;
     m_o = other.m_o ? new std::map<std::string, s5run_variable>(*other.m_o) : 0;
+}
+
+std::string s5run_variable::to_string_s5run() const {
+    std::string out;
+    append_debug(out, 0);
+    if (!out.empty() && out[out.size() - 1] == '\n')
+        out.erase(out.size() - 1);
+    return out;
+}
+
+std::string s5run_variable::to_string_json() const {
+    std::string out;
+    append_json(out);
+    return out;
+}
+
+// Structured multi-line form: the first line is emitted without an
+// indent prefix (the caller positions it), continuation lines carry
+// the given indent.
+void s5run_variable::append_debug(std::string &out, int indent) const {
+    char buf[64];
+    std::string pad(indent, ' ');
+    std::string pad_in(indent + 2, ' ');
+    switch (m_kind) {
+    case K_NULL:
+        out += "K_NULL\n";
+        break;
+    case K_BOOL:
+        out += m_b ? "K_BOOL true\n" : "K_BOOL false\n";
+        break;
+    case K_INT:
+        snprintf(buf, sizeof(buf), "K_INT %lld\n", (long long)m_i);
+        out += buf;
+        break;
+    case K_DOUBLE:
+        snprintf(buf, sizeof(buf), "K_DOUBLE %g\n", m_d);
+        out += buf;
+        break;
+    case K_STRING:
+        out += "K_STRING ";
+        append_json_string(out, m_s);
+        out += "\n";
+        break;
+    case K_ARRAY:
+        out += "K_ARRAY\n";
+        out += pad + "BEGIN\n";
+        for (std::size_t i = 0; i < m_a->size(); ++i) {
+            out += pad_in;
+            (*m_a)[i].append_debug(out, indent + 2);
+        }
+        out += pad + "END\n";
+        break;
+    case K_OBJECT:
+        // std::map iterates sorted by name
+        out += "K_OBJECT\n";
+        out += pad + "BEGIN\n";
+        for (std::map<std::string, s5run_variable>::const_iterator it = m_o->begin();
+             it != m_o->end(); ++it) {
+            out += pad_in + it->first + " ";
+            it->second.append_debug(out, indent + 2);
+        }
+        out += pad + "END\n";
+        break;
+    case K_REF:
+        out += "K_REF " + num_to_str((long long)m_i) + " ";
+        append_json_string(out, m_s);
+        out += "\n";
+        break;
+    }
+}
+
+void s5run_variable::append_json_string(std::string &out, const std::string &s) {
+    out += '"';
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        switch (c) {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            if ((unsigned char)c < 0x20) {
+                char b[8];
+                snprintf(b, sizeof(b), "\\u%04x", (unsigned char)c);
+                out += b;
+            } else {
+                out += c;
+            }
+        }
+    }
+    out += '"';
+}
+
+void s5run_variable::append_json(std::string &out) const {
+    char buf[64];
+    switch (m_kind) {
+    case K_NULL: out += "null"; break;
+    case K_BOOL: out += m_b ? "true" : "false"; break;
+    case K_INT:
+        snprintf(buf, sizeof(buf), "%lld", (long long)m_i);
+        out += buf;
+        break;
+    case K_DOUBLE:
+        snprintf(buf, sizeof(buf), "%g", m_d);
+        out += buf;
+        break;
+    case K_STRING:
+        append_json_string(out, m_s);
+        break;
+    case K_ARRAY: {
+        out += "[";
+        for (std::size_t i = 0; i < m_a->size(); ++i) {
+            if (i > 0)
+                out += ", ";
+            (*m_a)[i].append_json(out);
+        }
+        out += "]";
+        break;
+    }
+    case K_OBJECT: {
+        out += "{";
+        bool first = true;
+        for (std::map<std::string, s5run_variable>::const_iterator it = m_o->begin();
+             it != m_o->end(); ++it) {
+            if (!first)
+                out += ", ";
+            first = false;
+            append_json_string(out, it->first);
+            out += ": ";
+            it->second.append_json(out);
+        }
+        out += "}";
+        break;
+    }
+    case K_REF:
+        out += "{\"__s5run_ref__\":{\"this_id\":" + num_to_str((long long)m_i) + ",\"type\":";
+        append_json_string(out, m_s);
+        out += "}}";
+        break;
+    }
 }
 
 run_result::run_result() : m_has_error(false), m_error_line(0), m_duration_ms(0) {}

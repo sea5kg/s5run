@@ -60,6 +60,17 @@ public:
     s5run_variable(const std::map<std::string, s5run_variable> &o);
     s5run_variable(const s5run_variable &other); s5run_variable &operator=(const s5run_variable &other); ~s5run_variable();
     static s5run_variable make_ref(int this_id, const std::string &type);
+    // Structured multi-line representation, handy for tests:
+    //   K_INT 1024
+    //   K_STRING "text\nline"
+    //   K_OBJECT
+    //   BEGIN
+    //     size K_INT 1024
+    //   END
+    // Object fields are sorted by name.
+    std::string to_string_s5run() const;
+    // JSON representation (hand-rolled, no external libraries).
+    std::string to_string_json() const;
     kind get_kind() const; bool is_null() const; bool as_bool() const;
     i64 as_int() const; double as_double() const;
     const std::string &as_string() const;
@@ -68,6 +79,9 @@ public:
     int ref_this_id() const; const std::string &ref_type() const;
 private:
     void destroy(); void copy_from(const s5run_variable &other);
+    void append_debug(std::string &out, int indent) const;
+    static void append_json_string(std::string &out, const std::string &s);
+    void append_json(std::string &out) const;
     kind m_kind; bool m_b; i64 m_i; double m_d;
     std::string m_s; std::vector<s5run_variable> *m_a; std::map<std::string, s5run_variable> *m_o;
 };
