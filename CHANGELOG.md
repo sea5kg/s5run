@@ -3,8 +3,16 @@
 
 ## [v0.3.0] - (2026 ?? ??)
 
-- added wsjcpp-employees:v0.2.2 for a server
-- added sea5kg-logger:v2.0.1 for a server
+- Added wsjcpp-employees:v0.2.2 for a server
+- Added sea5kg-logger:v2.0.1 for a server
+- Added new type 'var' to schema and added some implementation
+- In output client libraries renamed system classes and renaming class 'value' to 'variable'
+- Redesigned 's5run run': '--script' removed and removed implementation from stdin
+- Fixed run localhost:7777 (now possible run use a via domain)
+- Redesigned 's5run server' command with default port 7777
+- Redesigned tests any test will be read script from file.
+- Implemented 'properties' and added tests
+- Improved tests/cpp11-client prepare new tests without code-write just a files 'input_/script_/output_'
 
 
 ## [v0.2.0] - (2026 Nov 24)
