@@ -577,6 +577,10 @@ class S5RunObject(ABC):
     @abstractmethod
     def s5run_method_names(self) -> list[str]: ...
 
+    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
+        """(name, getter, setter) tuples; JS: obj.<name> read/write."""
+        return []
+
 
 class S5RunFunction(ABC):
     """Root of all generated global functions."""
@@ -670,10 +674,19 @@ static std::string generate_schema_class(const schema_class &c) {
       names += ", ";
     names += "\"" + m.name + "\"";
   }
+  std::string props;
+  for (const auto &p : c.properties) {
+    if (!props.empty())
+      props += ", ";
+    props += "(\"" + p.name + "\", \"" + p.getter + "\", \"" + p.setter + "\")";
+  }
   return "\n\n\nclass " + c.name + "(S5RunObject):\n"
          "    \"\"\"Schema class '" + c.name + "' — inherit and implement.\"\"\"\n\n"
          "    def s5run_class_name(self) -> str:\n"
          "        return \"" + c.name + "\"\n\n"
+         "    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:\n"
+         "        # (name, getter, setter); JS: obj.<name> read/write\n"
+         "        return [" + props + "]\n\n"
          "    def s5run_method_names(self) -> list[str]:\n"
          "        return [" + names + "]\n\n"
          + methods;
@@ -763,9 +776,11 @@ class Context:
     def add_class(self, sample: S5RunObject) -> "Context":
         name = sample.s5run_class_name()
         if self._sock is not None:
-            self._send_register_type(name, sample.s5run_method_names())
+            self._send_register_type(name, sample.s5run_method_names(),
+                                     sample.s5run_property_descriptors())
         else:
-            self._pending_types.append((name, sample.s5run_method_names()))
+            self._pending_types.append((name, sample.s5run_method_names(),
+                                        sample.s5run_property_descriptors()))
         return self
 
     def add_object(self, obj: S5RunObject) -> "Context":
@@ -773,9 +788,11 @@ class Context:
         self._next_id += 1
         self._instances.setdefault(cls, {})[self._next_id] = obj
         if self._sock is not None:
-            self._send_register_object(cls, self._next_id, obj.s5run_method_names())
+            self._send_register_object(cls, self._next_id, obj.s5run_method_names(),
+                                       obj.s5run_property_descriptors())
         else:
-            self._pending_objects.append((cls, self._next_id, obj.s5run_method_names()))
+            self._pending_objects.append((cls, self._next_id, obj.s5run_method_names(),
+                                          obj.s5run_property_descriptors()))
         return self
 
     def add_function(self, fn: S5RunFunction) -> "Context":
@@ -849,26 +866,33 @@ class Context:
         _read_hello(sock)
 
     def _flush_pending(self) -> None:
-        for name, methods in self._pending_types:
-            self._send_register_type(name, methods)
+        for name, methods, props in self._pending_types:
+            self._send_register_type(name, methods, props)
         self._pending_types.clear()
-        for name, this_id, methods in self._pending_objects:
-            self._send_register_object(name, this_id, methods)
+        for name, this_id, methods, props in self._pending_objects:
+            self._send_register_object(name, this_id, methods, props)
         self._pending_objects.clear()
         for name in self._pending_functions:
             self._send_register_function(name)
         self._pending_functions.clear()
 
-    def _send_register_type(self, name: str, methods: list[str]) -> None:
+    def _send_register_type(self, name: str, methods: list[str],
+                            props: list[tuple[str, str, str]]) -> None:
         out = _Writer()
         out.raw_str(name)
         out.u32(len(methods))
         for m in methods:
             out.raw_str(m)
+        out.u32(len(props))
+        for (pn, pg, ps) in props:
+            out.raw_str(pn)
+            out.raw_str(pg)
+            out.raw_str(ps)
         self._send(_Msg.REGISTER_TYPE, out)
         self._expect_register_resp("register_type(" + name + ")")
 
-    def _send_register_object(self, name: str, this_id: int, methods: list[str]) -> None:
+    def _send_register_object(self, name: str, this_id: int, methods: list[str],
+                              props: list[tuple[str, str, str]]) -> None:
         out = _Writer()
         out.raw_str(name)
         out.i32(this_id)
@@ -876,6 +900,11 @@ class Context:
         out.u32(len(methods))
         for m in methods:
             out.raw_str(m)
+        out.u32(len(props))
+        for (pn, pg, ps) in props:
+            out.raw_str(pn)
+            out.raw_str(pg)
+            out.raw_str(ps)
         self._send(_Msg.REGISTER_OBJ, out)
         self._expect_register_resp("register_object(" + name + ")")
 

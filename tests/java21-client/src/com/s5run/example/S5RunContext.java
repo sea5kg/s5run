@@ -27,8 +27,8 @@ public final class S5RunContext implements AutoCloseable {
     private InputStream in;
     private OutputStream out;
 
-    private record PendingType(String name, List<String> methods) {}
-    private record PendingObject(String name, int thisId, List<String> methods) {}
+    private record PendingType(String name, List<String> methods, List<S5RunProperty> props) {}
+    private record PendingObject(String name, int thisId, List<String> methods, List<S5RunProperty> props) {}
 
     public S5RunContext() {
                 handlers.put("GetSize", (cbId, r) -> cbm_File_GetSize(cbId, r));
@@ -60,18 +60,19 @@ public final class S5RunContext implements AutoCloseable {
     }
 
     public S5RunContext addClass(S5RunObject sample) {
-        return addClass(sample.s5runClassName(), sample.s5runMethodNames());
+        return addClass(sample.s5runClassName(), sample.s5runMethodNames(),
+                sample.s5runPropertyDescriptors());
     }
 
-    private S5RunContext addClass(String name, List<String> methods) {
+    private S5RunContext addClass(String name, List<String> methods, List<S5RunProperty> props) {
         if (socket != null) {
             try {
-                sendRegisterType(name, methods);
+                sendRegisterType(name, methods, props);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         } else {
-            pendingTypes.add(new PendingType(name, methods));
+            pendingTypes.add(new PendingType(name, methods, props));
         }
         return this;
     }
@@ -82,12 +83,13 @@ public final class S5RunContext implements AutoCloseable {
         instances.computeIfAbsent(cls, k -> new HashMap<>()).put(id, obj);
         if (socket != null) {
             try {
-                sendRegisterObject(cls, id, obj.s5runMethodNames());
+                sendRegisterObject(cls, id, obj.s5runMethodNames(), obj.s5runPropertyDescriptors());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         } else {
-            pendingObjects.add(new PendingObject(cls, id, obj.s5runMethodNames()));
+            pendingObjects.add(new PendingObject(cls, id, obj.s5runMethodNames(),
+                    obj.s5runPropertyDescriptors()));
         }
         return this;
     }
@@ -591,11 +593,11 @@ public final class S5RunContext implements AutoCloseable {
 
     private void flushPending() throws Exception {
         for (PendingType t : new ArrayList<>(pendingTypes)) {
-            sendRegisterType(t.name(), t.methods());
+            sendRegisterType(t.name(), t.methods(), t.props());
         }
         pendingTypes.clear();
         for (PendingObject o : new ArrayList<>(pendingObjects)) {
-            sendRegisterObject(o.name(), o.thisId(), o.methods());
+            sendRegisterObject(o.name(), o.thisId(), o.methods(), o.props());
         }
         pendingObjects.clear();
         for (String name : new ArrayList<>(pendingFunctions)) {
@@ -604,22 +606,35 @@ public final class S5RunContext implements AutoCloseable {
         pendingFunctions.clear();
     }
 
-    private void sendRegisterType(String name, List<String> methods) throws Exception {
+    private static void putPropertyDescriptors(S5RunWire.Writer w, List<S5RunProperty> props) {
+        w.u32(props.size());
+        for (S5RunProperty p : props) {
+            w.str(p.name);
+            w.str(p.getter);
+            w.str(p.setter);
+        }
+    }
+
+    private void sendRegisterType(String name, List<String> methods,
+                                  List<S5RunProperty> props) throws Exception {
         S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
+        putPropertyDescriptors(w, props);
         sendMessage(S5RunWire.M_REGISTER_TYPE, w.toByteArray());
         expectRegisterResp("register_type(" + name + ")");
     }
 
-    private void sendRegisterObject(String name, int thisId, List<String> methods) throws Exception {
+    private void sendRegisterObject(String name, int thisId, List<String> methods,
+                                    List<S5RunProperty> props) throws Exception {
         S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.i32(thisId);
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
+        putPropertyDescriptors(w, props);
         sendMessage(S5RunWire.M_REGISTER_OBJ, w.toByteArray());
         expectRegisterResp("register_object(" + name + ")");
     }

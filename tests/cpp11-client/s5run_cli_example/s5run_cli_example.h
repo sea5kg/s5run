@@ -81,16 +81,32 @@ private:
     uint16_t m_port;
     bool m_have_address;
 };
+struct s5run_property_descriptor {
+    std::string name;
+    std::string getter;
+    std::string setter;
+    s5run_property_descriptor() {}
+    s5run_property_descriptor(const std::string &n, const std::string &g, const std::string &s)
+        : name(n), getter(g), setter(s) {}
+};
+
 class s5run_object {
 public:
     virtual ~s5run_object() {}
     virtual std::string s5run_class_name() const = 0;
     virtual std::vector<std::string> s5run_method_names() const = 0;
+    // property descriptors {name, getter, setter}; JS: obj.<name> read/write
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        return {};
+    }
 };
 
 class File : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "File"; }
+    std::vector<s5run_property_descriptor> s5run_property_descriptors() const override {
+        return {s5run_property_descriptor("Name", "GetName", ""), s5run_property_descriptor("BufferSize", "GetBufferSize", "SetBufferSize")};
+    }
     std::vector<std::string> s5run_method_names() const override {
         std::vector<std::string> out_;
         out_.push_back("GetSize");
@@ -111,6 +127,9 @@ public:
 class FileSystem : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "FileSystem"; }
+    std::vector<s5run_property_descriptor> s5run_property_descriptors() const override {
+        return {};
+    }
     std::vector<std::string> s5run_method_names() const override {
         std::vector<std::string> out_;
         out_.push_back("GetList");
@@ -123,6 +142,9 @@ public:
 class console : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "console"; }
+    std::vector<s5run_property_descriptor> s5run_property_descriptors() const override {
+        return {};
+    }
     std::vector<std::string> s5run_method_names() const override {
         std::vector<std::string> out_;
         out_.push_back("log");
@@ -139,6 +161,9 @@ public:
 class KeyValueStorage : public s5run_object {
 public:
     std::string s5run_class_name() const override { return "KeyValueStorage"; }
+    std::vector<s5run_property_descriptor> s5run_property_descriptors() const override {
+        return {};
+    }
     std::vector<std::string> s5run_method_names() const override {
         std::vector<std::string> out_;
         out_.push_back("SetValueByKey");

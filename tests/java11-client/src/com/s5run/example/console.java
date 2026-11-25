@@ -8,6 +8,9 @@ public interface console extends S5RunObject {
     default String s5runClassName() { return "console"; }
 
     @Override
+    default List<S5RunProperty> s5runPropertyDescriptors() { return List.of(); }
+
+    @Override
     default List<String> s5runMethodNames() { return List.of("log", "warning", "error"); }
 
     void log(List<String> args);

@@ -17,6 +17,7 @@ K_SCRIPT = (Path(__file__).resolve().parent.parent / "base_cli_test_script.js").
 class MyFile(m.File):
     def __init__(self, size: int) -> None:
         self._size = size
+        self.buffer_size = 4096
 
     def GetSize(self) -> int:
         return self._size
@@ -28,10 +29,10 @@ class MyFile(m.File):
         return "example.txt"
 
     def GetBufferSize(self) -> int:
-        return 4096
+        return self.buffer_size
 
     def SetBufferSize(self, bufferSize: int) -> None:
-        pass
+        self.buffer_size = bufferSize
 
 
 class MyGetFile(m.GlobalFunction_GetFile):
@@ -135,6 +136,9 @@ def happy_path(address: str) -> None:
         check(MyGetFile.last_path == "test.txt", "GetFile path")
         check(MyFileSystem.last_path == "test.txt", "FileSystem.GetList path")
         check(MyConsole.logs[0] == "hello test.txt 1 2", "console.log")
+        check(MyConsole.logs[1] == "name: example.txt", "property Name getter")
+        check(MyConsole.logs[2] == "bufsize: 4096", "property BufferSize getter")
+        check(MyConsole.logs[3] == "bufsize-after: 2048", "property BufferSize setter")
         check(MyCloseFiles.closed_sizes == [100, 200], "CloseFiles sizes")
     print("  PASS")
 

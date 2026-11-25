@@ -255,15 +255,17 @@ int main(int argc, char **argv) {
       throw std::runtime_error("unexpected bytes");
     if (MyGetFile::m_last_path != "test.txt")
       throw std::runtime_error("unexpected filepath: " + MyGetFile::m_last_path);
-    if (con->get_logs().size() == 0) {
-      throw std::runtime_error("unexpected console log is empty");
-    } else {
-      std::string log_message = con->get_logs()[0];
-      if (log_message != "hello test.txt 1 2") {
-        throw std::runtime_error("unexpected console log: " + log_message);
-      }
-      std::printf("  console.log got: \"%s\"\n", log_message.c_str());
-    }
+    if (con->get_logs().size() != 4)
+      throw std::runtime_error("unexpected console log count");
+    if (con->get_logs()[0] != "hello test.txt 1 2")
+      throw std::runtime_error("unexpected console log: " + con->get_logs()[0]);
+    if (con->get_logs()[1] != "name: example.txt")
+      throw std::runtime_error("unexpected property Name getter: " + con->get_logs()[1]);
+    if (con->get_logs()[2] != "bufsize: 4096")
+      throw std::runtime_error("unexpected property BufferSize getter: " + con->get_logs()[2]);
+    if (con->get_logs()[3] != "bufsize-after: 2048")
+      throw std::runtime_error("unexpected property BufferSize setter: " + con->get_logs()[3]);
+    std::printf("  console.log got: \"%s\"\n", con->get_logs()[0].c_str());
     std::printf("  PASS\n");
   }
 

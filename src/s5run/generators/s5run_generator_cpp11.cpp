@@ -173,11 +173,24 @@ private:
     bool m_have_address;
 };)GEN";
 
-static const char *S5RUN_OBJECT = R"GEN(class s5run_object {
+static const char *S5RUN_OBJECT = R"GEN(struct s5run_property_descriptor {
+    std::string name;
+    std::string getter;
+    std::string setter;
+    s5run_property_descriptor() {}
+    s5run_property_descriptor(const std::string &n, const std::string &g, const std::string &s)
+        : name(n), getter(g), setter(s) {}
+};
+
+class s5run_object {
 public:
     virtual ~s5run_object() {}
     virtual std::string s5run_class_name() const = 0;
     virtual std::vector<std::string> s5run_method_names() const = 0;
+    // property descriptors {name, getter, setter}; JS: obj.<name> read/write
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        return {};
+    }
 };)GEN";
 
 static const char *S5RUN_FUNCTION = R"GEN(class s5run_function {
@@ -739,14 +752,26 @@ void context::impl::add_server(const std::shared_ptr<remote_server_info> &server
     m_servers.push_back(server);
 }
 
+static void s5run__put_property_descriptors(Writer &w,
+                                             const std::vector<s5run_property_descriptor> &props) {
+    w.put_u32((uint32_t)props.size());
+    for (size_t i = 0; i < props.size(); ++i) {
+        w.put_string(props[i].name);
+        w.put_string(props[i].getter);
+        w.put_string(props[i].setter);
+    }
+}
+
 void context::impl::register_type(const std::string &name,
-                                 const std::vector<std::string> &methods) {
+                                 const std::vector<std::string> &methods,
+                                 const std::vector<s5run_property_descriptor> &props) {
     if (m_fd >= 0) {
         Writer w;
         w.put_string(name);
         w.put_u32((uint32_t)methods.size());
         for (size_t i = 0; i < methods.size(); ++i)
             w.put_string(methods[i]);
+        s5run__put_property_descriptors(w, props);
         _send_message(M_REGISTER_TYPE, w.data());
         _expect_register_resp("register_type(" + name + ")");
         return;
@@ -754,6 +779,7 @@ void context::impl::register_type(const std::string &name,
     PendingType t;
     t.name = name;
     t.methods = methods;
+    t.props = props;
     m_pending_types.push_back(t);
 }
 
@@ -767,6 +793,7 @@ static const char *FLUSH = R"GEN(void context::impl::_flush_pending() {
         w.put_u32((uint32_t)t.methods.size());
         for (size_t j = 0; j < t.methods.size(); ++j)
             w.put_string(t.methods[j]);
+        s5run__put_property_descriptors(w, t.props);
         _send_message(M_REGISTER_TYPE, w.data());
         _expect_register_resp("register_type(" + t.name + ")");
     }
@@ -780,6 +807,7 @@ static const char *FLUSH = R"GEN(void context::impl::_flush_pending() {
         w.put_u32((uint32_t)o.methods.size());
         for (size_t j = 0; j < o.methods.size(); ++j)
             w.put_string(o.methods[j]);
+        s5run__put_property_descriptors(w, o.props);
         _send_message(M_REGISTER_OBJ, w.data());
         _expect_register_resp("register_object(" + o.name + ")");
     }
@@ -974,7 +1002,8 @@ void context::add_object(const std::shared_ptr<s5run_object> &obj) {
 
 void context::add_class(const std::shared_ptr<s5run_object> &sample) {
     m_impl->register_type(sample->s5run_class_name(),
-                          sample->s5run_method_names());
+                          sample->s5run_method_names(),
+                          sample->s5run_property_descriptors());
 }
 
 void context::add_function(const std::shared_ptr<s5run_function> &fn) {
@@ -1119,6 +1148,18 @@ std::string generator_cpp11::generate_header(const schema &s, std::shared_ptr<sc
   for (const auto &c : s.classes) {
     out += "\nclass " + c.name + " : public s5run_object {\npublic:\n";
     out += "    std::string s5run_class_name() const override { return \"" + c.name + "\"; }\n";
+    out += "    std::vector<s5run_property_descriptor> s5run_property_descriptors() const override {\n";
+    out += "        return {";
+    {
+      std::string list;
+      for (const auto &p : c.properties) {
+        if (!list.empty())
+          list += ", ";
+        list += "s5run_property_descriptor(\"" + p.name + "\", \"" + p.getter + "\", \"" + p.setter + "\")";
+      }
+      out += list;
+    }
+    out += "};\n    }\n";
     out += "    std::vector<std::string> s5run_method_names() const override {\n";
     out += "        std::vector<std::string> out_;\n";
     for (const auto &m : c.methods)
@@ -1192,16 +1233,18 @@ std::string generator_cpp11::generate_impl(const schema &s, std::shared_ptr<sche
   out += "    ~impl() { _disconnect(); }\n\n";
   out += "    void set_script(const std::string &script);\n";
   out += "    void add_server(const std::shared_ptr<remote_server_info> &server);\n";
-  out += "    void register_type(const std::string &name,\n";
-  out += "                       const std::vector<std::string> &methods);\n";
+  out += "    void register_type(const std::string &name, const std::vector<std::string> &methods,\n";
+  out += "                       const std::vector<s5run_property_descriptor> &props);\n";
   out += "    void add_object(const std::shared_ptr<s5run_object> &obj);\n";
   out += "    void add_function(const std::shared_ptr<s5run_function> &fn);\n";
   out += "    std::shared_ptr<run_result> run(const std::string &entry,\n";
   out += "                                   const std::vector<value> &args);\n\n";
   out += "private:\n";
-  out += "    struct PendingType { std::string name; std::vector<std::string> methods; };\n";
+  out += "    struct PendingType { std::string name; std::vector<std::string> methods;\n";
+  out += "                            std::vector<s5run_property_descriptor> props; };\n";
   out += "    struct PendingObject { std::string name; int32_t this_id; std::string type;\n";
-  out += "                          std::vector<std::string> methods; };\n";
+  out += "                          std::vector<std::string> methods;\n";
+  out += "                          std::vector<s5run_property_descriptor> props; };\n";
   out += "    struct PendingFunction { std::string name; };\n\n";
   for (const auto &f : s.functions)
     out += "    void _cb_" + f.name + "(int32_t cb_id, Reader &r);\n";
@@ -1256,6 +1299,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     int32_t id = ++m_next_this_id;
     rit->second(id, obj);
     const std::vector<std::string> methods = obj->s5run_method_names();
+    const std::vector<s5run_property_descriptor> props = obj->s5run_property_descriptors();
     if (m_fd >= 0) {
         Writer w;
         w.put_string(class_name);
@@ -1264,6 +1308,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
         w.put_u32((uint32_t)methods.size());
         for (size_t i = 0; i < methods.size(); ++i)
             w.put_string(methods[i]);
+        s5run__put_property_descriptors(w, props);
         _send_message(M_REGISTER_OBJ, w.data());
         _expect_register_resp("register_object(" + class_name + ")");
         return;
@@ -1273,6 +1318,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     o.this_id = id;
     o.type = class_name;
     o.methods = methods;
+    o.props = props;
     m_pending_objects.push_back(o);
 }
 )GEN";

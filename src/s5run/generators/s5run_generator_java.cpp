@@ -768,40 +768,44 @@ static std::string dispatch_default(java_flavor f) {
 
 static std::string pending_decls(java_flavor f) {
   if (f == JAVA_21 || f == JAVA_17) {
-    return "    private record PendingType(String name, List<String> methods) {}\n"
-           "    private record PendingObject(String name, int thisId, List<String> methods) {}";
+    return "    private record PendingType(String name, List<String> methods, List<S5RunProperty> props) {}\n"
+           "    private record PendingObject(String name, int thisId, List<String> methods, "
+           "List<S5RunProperty> props) {}";
   }
   return "    private static final class PendingType {\n"
          "        final String name;\n"
          "        final List<String> methods;\n"
-         "        PendingType(String name, List<String> methods) { this.name = name; this.methods = methods; }\n"
+         "        final List<S5RunProperty> props;\n"
+         "        PendingType(String name, List<String> methods, List<S5RunProperty> props) { this.name = name; "
+         "this.methods = methods; this.props = props; }\n"
          "    }\n"
          "\n"
          "    private static final class PendingObject {\n"
          "        final String name;\n"
          "        final int thisId;\n"
          "        final List<String> methods;\n"
-         "        PendingObject(String name, int thisId, List<String> methods) { this.name = name; this.thisId = "
-         "thisId; this.methods = methods; }\n"
+         "        final List<S5RunProperty> props;\n"
+         "        PendingObject(String name, int thisId, List<String> methods, List<S5RunProperty> props) { "
+         "this.name = name; this.thisId = thisId; this.methods = methods; this.props = props; }\n"
          "    }";
 }
 
 static std::string flush_pending_body(java_flavor f) {
   if (f == JAVA_21 || f == JAVA_17) {
     return "        for (PendingType t : new ArrayList<>(pendingTypes)) {\n"
-           "            sendRegisterType(t.name(), t.methods());\n"
+           "            sendRegisterType(t.name(), t.methods(), t.props());\n"
            "        }\n"
            "        pendingTypes.clear();\n"
            "        for (PendingObject o : new ArrayList<>(pendingObjects)) {\n"
-           "            sendRegisterObject(o.name(), o.thisId(), o.methods());\n"
+           "            sendRegisterObject(o.name(), o.thisId(), o.methods(), o.props());\n"
            "        }";
   }
   return "        for (PendingType t : new ArrayList<>(pendingTypes)) {\n"
-         "            sendRegisterType(t.name, t.methods);\n"
+         "            sendRegisterType(t.name, t.methods, t.props);\n"
          "        }\n"
          "        pendingTypes.clear();\n"
          "        for (PendingObject o : new ArrayList<>(pendingObjects)) {\n"
-         "            sendRegisterObject(o.name, o.thisId, o.methods);\n"
+         "            sendRegisterObject(o.name, o.thisId, o.methods, o.props);\n"
          "        }";
 }
 
@@ -1003,12 +1007,23 @@ static std::string generate_schema_class(const schema_class &c) {
       names += ", ";
     names += "\"" + m.name + "\"";
   }
+  std::string props;
+  for (const auto &p : c.properties) {
+    if (!props.empty())
+      props += ", ";
+    props += "new S5RunProperty(\"" + p.name + "\", \"" + p.getter + "\", \"" + p.setter + "\")";
+  }
   return "\npublic interface " + c.name +
          " extends S5RunObject {\n"
          "    @Override\n"
          "    default String s5runClassName() { return \"" +
          c.name +
          "\"; }\n"
+         "\n"
+         "    @Override\n"
+         "    default List<S5RunProperty> s5runPropertyDescriptors() { return List.of(" +
+         props +
+         "); }\n"
          "\n"
          "    @Override\n"
          "    default List<String> s5runMethodNames() { return List.of(" +
@@ -1220,18 +1235,19 @@ public final class S5RunContext implements AutoCloseable {
     }
 
     public S5RunContext addClass(S5RunObject sample) {
-        return addClass(sample.s5runClassName(), sample.s5runMethodNames());
+        return addClass(sample.s5runClassName(), sample.s5runMethodNames(),
+                sample.s5runPropertyDescriptors());
     }
 
-    private S5RunContext addClass(String name, List<String> methods) {
+    private S5RunContext addClass(String name, List<String> methods, List<S5RunProperty> props) {
         if (socket != null) {
             try {
-                sendRegisterType(name, methods);
+                sendRegisterType(name, methods, props);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         } else {
-            pendingTypes.add(new PendingType(name, methods));
+            pendingTypes.add(new PendingType(name, methods, props));
         }
         return this;
     }
@@ -1242,12 +1258,13 @@ public final class S5RunContext implements AutoCloseable {
         instances.computeIfAbsent(cls, k -> new HashMap<>()).put(id, obj);
         if (socket != null) {
             try {
-                sendRegisterObject(cls, id, obj.s5runMethodNames());
+                sendRegisterObject(cls, id, obj.s5runMethodNames(), obj.s5runPropertyDescriptors());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         } else {
-            pendingObjects.add(new PendingObject(cls, id, obj.s5runMethodNames()));
+            pendingObjects.add(new PendingObject(cls, id, obj.s5runMethodNames(),
+                    obj.s5runPropertyDescriptors()));
         }
         return this;
     }
@@ -1457,22 +1474,35 @@ public final class S5RunContext implements AutoCloseable {
         pendingFunctions.clear();
     }
 
-    private void sendRegisterType(String name, List<String> methods) throws Exception {
+    private static void putPropertyDescriptors(S5RunWire.Writer w, List<S5RunProperty> props) {
+        w.u32(props.size());
+        for (S5RunProperty p : props) {
+            w.str(p.name);
+            w.str(p.getter);
+            w.str(p.setter);
+        }
+    }
+
+    private void sendRegisterType(String name, List<String> methods,
+                                  List<S5RunProperty> props) throws Exception {
         S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
+        putPropertyDescriptors(w, props);
         sendMessage(S5RunWire.M_REGISTER_TYPE, w.toByteArray());
         expectRegisterResp("register_type(" + name + ")");
     }
 
-    private void sendRegisterObject(String name, int thisId, List<String> methods) throws Exception {
+    private void sendRegisterObject(String name, int thisId, List<String> methods,
+                                    List<S5RunProperty> props) throws Exception {
         S5RunWire.Writer w = new S5RunWire.Writer();
         w.str(name);
         w.i32(thisId);
         w.str(name);
         w.u32(methods.size());
         for (String m : methods) w.str(m);
+        putPropertyDescriptors(w, props);
         sendMessage(S5RunWire.M_REGISTER_OBJ, w.toByteArray());
         expectRegisterResp("register_object(" + name + ")");
     }
@@ -1626,10 +1656,30 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
   write_java_file(
     pkg_dir,
     pkg,
+    "S5RunProperty",
+    "\npublic final class S5RunProperty {\n"
+    "    public final String name;\n"
+    "    public final String getter;\n"
+    "    public final String setter;\n"
+    "\n"
+    "    public S5RunProperty(String name, String getter, String setter) {\n"
+    "        this.name = name;\n"
+    "        this.getter = getter;\n"
+    "        this.setter = setter;\n"
+    "    }\n"
+    "}\n",
+    written
+  );
+  write_java_file(
+    pkg_dir,
+    pkg,
     "S5RunObject",
     "\npublic interface S5RunObject {\n"
     "    String s5runClassName();\n"
     "    List<String> s5runMethodNames();\n"
+    "\n"
+    "    /** (name, getter, setter) descriptors; JS: obj.<name> read/write. */\n"
+    "    default List<S5RunProperty> s5runPropertyDescriptors() { return List.of(); }\n"
     "}\n",
     written
   );

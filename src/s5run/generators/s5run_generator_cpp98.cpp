@@ -454,9 +454,18 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    std::string m_address; std::string m_api_key; std::string m_host; int m_port;\n";
   out += "};\n\n";
 
+  out += "struct s5run_property_descriptor {\n";
+  out += "    std::string name;\n    std::string getter;\n    std::string setter;\n";
+  out += "    s5run_property_descriptor() {}\n";
+  out += "    s5run_property_descriptor(const std::string &n, const std::string &g, const std::string &s)\n";
+  out += "        : name(n), getter(g), setter(s) {}\n";
+  out += "};\n\n";
   out += "class s5run_object {\npublic:\n    virtual ~s5run_object() {}\n";
   out += "    virtual std::string s5run_class_name() const = 0;\n";
-  out += "    virtual std::vector<std::string> s5run_method_names() const = 0;\n};\n\n";
+  out += "    virtual std::vector<std::string> s5run_method_names() const = 0;\n";
+  out += "    // property descriptors {name, getter, setter}; JS: obj.<name> read/write\n";
+  out += "    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {\n";
+  out += "        return std::vector<s5run_property_descriptor>();\n    }\n};\n\n";
   out += "class s5run_function {\npublic:\n    virtual ~s5run_function() {}\n";
   out += "    virtual std::string s5run_function_name() const = 0;\n};\n\n";
 
@@ -465,6 +474,13 @@ std::string generator_cpp98::generate_header(const schema &s) const {
     out += "class base_context_class_" + c.name + " : public s5run_object {\npublic:\n";
     out += "    virtual ~base_context_class_" + c.name + "() {}\n";
     out += "    virtual std::string s5run_class_name() const { return \"" + c.name + "\"; }\n";
+    out += "    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {\n";
+    out += "        std::vector<s5run_property_descriptor> out;\n";
+    for (const auto &p : c.properties) {
+      out += "        out.push_back(s5run_property_descriptor(\"" + p.name + "\", \"" +
+              p.getter + "\", \"" + p.setter + "\"));\n";
+    }
+    out += "        return out;\n    }\n";
     out += "    virtual std::vector<std::string> s5run_method_names() const {\n";
     out += "        std::vector<std::string> out;\n";
     for (size_t j = 0; j < c.methods.size(); ++j)
@@ -938,13 +954,14 @@ int remote_server_info::get_port() const { return m_port; }
   out += "    ~context_impl() { disconnect(); s5run_sockets_shutdown(); }\n\n";
   out += "    void set_script(const std::string &script);\n";
   out += "    void add_server(remote_server_info *server);\n";
-  out += "    void register_type(const std::string &name, const std::vector<std::string> &methods);\n";
+  out += "    void register_type(const std::string &name, const std::vector<std::string> &methods,\n";
+  out += "                         const std::vector<s5run_property_descriptor> &props);\n";
   out += "    void add_object(s5run_object *obj);\n";
   out += "    void add_function(s5run_function *fn);\n";
   out += "    run_result run(const std::string &entry, const std::vector<value> &args);\n\n";
   out += "private:\n";
-  out += "    struct PendingType { std::string name; std::vector<std::string> methods; };\n";
-  out += "    struct PendingObject { std::string name; i32 this_id; std::vector<std::string> methods; };\n\n";
+  out += "    struct PendingType { std::string name; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };\n";
+  out += "    struct PendingObject { std::string name; i32 this_id; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };\n\n";
 
   // Callback declarations
   for (auto &f : s.functions)
@@ -986,24 +1003,37 @@ int remote_server_info::get_port() const { return m_port; }
 void context::context_impl::set_script(const std::string &script) { m_script = script; }
 void context::context_impl::add_server(remote_server_info *server) { m_servers.push_back(server); }
 
+static void s5run__put_property_descriptors(Writer &w,
+                                            const std::vector<s5run_property_descriptor> &props) {
+    w.put_u32((u32)props.size());
+    for (std::size_t i = 0; i < props.size(); ++i) {
+        w.put_string(props[i].name);
+        w.put_string(props[i].getter);
+        w.put_string(props[i].setter);
+    }
+}
+
 void context::context_impl::register_type(const std::string &name,
-                                          const std::vector<std::string> &methods) {
+                                          const std::vector<std::string> &methods,
+                                          const std::vector<s5run_property_descriptor> &props) {
     if (m_sock != S5RUN_BAD_SOCKET) {
         Writer w;
         w.put_string(name);
         w.put_u32((u32)methods.size());
         for (std::size_t i = 0; i < methods.size(); ++i) w.put_string(methods[i]);
+        s5run__put_property_descriptors(w, props);
         send_message(M_REGISTER_TYPE, w.data());
         expect_register_resp("register_type(" + name + ")");
         return;
     }
-    PendingType t; t.name = name; t.methods = methods;
+    PendingType t; t.name = name; t.methods = methods; t.props = props;
     m_pending_types.push_back(t);
 }
 
 void context::context_impl::add_object(s5run_object *obj) {
     const std::string cls = obj->s5run_class_name();
     const std::vector<std::string> methods = obj->s5run_method_names();
+    const std::vector<s5run_property_descriptor> props = obj->s5run_property_descriptors();
     i32 id = ++m_next_this_id;
     store_instance(cls, id, obj);
     if (m_sock != S5RUN_BAD_SOCKET) {
@@ -1011,11 +1041,12 @@ void context::context_impl::add_object(s5run_object *obj) {
         w.put_string(cls); w.put_i32(id); w.put_string(cls);
         w.put_u32((u32)methods.size());
         for (std::size_t i = 0; i < methods.size(); ++i) w.put_string(methods[i]);
+        s5run__put_property_descriptors(w, props);
         send_message(M_REGISTER_OBJ, w.data());
         expect_register_resp("register_object(" + cls + ")");
         return;
     }
-    PendingObject o; o.name = cls; o.this_id = id; o.methods = methods;
+    PendingObject o; o.name = cls; o.this_id = id; o.methods = methods; o.props = props;
     m_pending_objects.push_back(o);
 }
 
@@ -1151,7 +1182,7 @@ i64 context::context_impl::probe_server_load(remote_server_info *server) {
 
 void context::context_impl::flush_pending() {
     for (std::size_t i = 0; i < m_pending_types.size(); ++i)
-        register_type(m_pending_types[i].name, m_pending_types[i].methods);
+        register_type(m_pending_types[i].name, m_pending_types[i].methods, m_pending_types[i].props);
     m_pending_types.clear();
     for (std::size_t i = 0; i < m_pending_objects.size(); ++i) {
         const PendingObject &o = m_pending_objects[i];
@@ -1159,6 +1190,7 @@ void context::context_impl::flush_pending() {
         w.put_string(o.name); w.put_i32(o.this_id); w.put_string(o.name);
         w.put_u32((u32)o.methods.size());
         for (std::size_t j = 0; j < o.methods.size(); ++j) w.put_string(o.methods[j]);
+        s5run__put_property_descriptors(w, o.props);
         send_message(M_REGISTER_OBJ, w.data());
         expect_register_resp("register_object(" + o.name + ")");
     }
@@ -1269,7 +1301,7 @@ run_result context::context_impl::run(const std::string &entry,
   out += "context::~context() { delete m_impl; }\n\n";
   out += "void context::set_script(const std::string &s) { m_impl->set_script(s); }\n";
   out += "void context::add_server(remote_server_info *s) { m_impl->add_server(s); }\n";
-  out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names()); }\n";
+  out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }\n";
   out += "void context::add_object(s5run_object *o) { m_impl->add_object(o); }\n";
   out += "void context::add_function(s5run_function *f) { m_impl->add_function(f); }\n\n";
   out += "context * make_context() { return new context(); }\n\n";

@@ -22,7 +22,12 @@ func loadBaseScript() string {
 
 type MyFile struct {
 	s5runcli.FileBase
-	size int64
+	size       int64
+	bufferSize int64
+}
+
+func newMyFile(size int64) *MyFile {
+	return &MyFile{size: size, bufferSize: 4096}
 }
 
 func (f *MyFile) GetSize() int64 { return f.size }
@@ -34,8 +39,8 @@ func (f *MyFile) ReadBytes(readBytes int64) []byte {
 	return out
 }
 func (f *MyFile) GetName() string       { return "example.txt" }
-func (f *MyFile) GetBufferSize() int64  { return 4096 }
-func (f *MyFile) SetBufferSize(int64)   {}
+func (f *MyFile) GetBufferSize() int64  { return f.bufferSize }
+func (f *MyFile) SetBufferSize(v int64) { f.bufferSize = v }
 
 var lastGetFilePath string
 
@@ -44,7 +49,7 @@ type MyGetFile struct{}
 func (MyGetFile) S5RunFunctionName() string { return "GetFile" }
 func (MyGetFile) Execute(filepath string) s5runcli.File {
 	lastGetFilePath = filepath
-	return &MyFile{size: 1024}
+	return newMyFile(1024)
 }
 
 type MyGetFileSize struct{}
@@ -127,7 +132,7 @@ func main() {
 	fmt.Println("== go-client: happy path")
 	{
 		ctx := s5runcli.NewContext()
-		ctx.AddClass(&MyFile{size: 1024}).
+		ctx.AddClass(newMyFile(1024)).
 			AddFunction(MyGetFile{}).
 			AddFunction(MyGetFileSize{}).
 			AddFunction(MyGetTimeNow{}).
@@ -154,7 +159,11 @@ func main() {
 		check(obj["time"].(s5runcli.Int) == 1737000000, "time")
 		check(lastGetFilePath == "test.txt", "GetFile path")
 		check(lastGetListPath == "test.txt", "FileSystem.GetList path")
-		check(len(consoleLogs) == 1 && consoleLogs[0] == "hello test.txt 1 2", "console.log")
+		check(len(consoleLogs) == 4, "console.log count")
+		check(consoleLogs[0] == "hello test.txt 1 2", "console.log")
+		check(consoleLogs[1] == "name: example.txt", "property Name getter")
+		check(consoleLogs[2] == "bufsize: 4096", "property BufferSize getter")
+		check(consoleLogs[3] == "bufsize-after: 2048", "property BufferSize setter")
 		check(len(closeFilesSizes) == 2 && closeFilesSizes[0] == 100 && closeFilesSizes[1] == 200,
 			"CloseFiles sizes")
 		fmt.Println("  PASS")

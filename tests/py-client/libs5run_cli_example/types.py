@@ -18,6 +18,10 @@ class S5RunObject(ABC):
     @abstractmethod
     def s5run_method_names(self) -> list[str]: ...
 
+    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
+        """(name, getter, setter) tuples; JS: obj.<name> read/write."""
+        return []
+
 
 class S5RunFunction(ABC):
     """Root of all generated global functions."""
@@ -32,6 +36,10 @@ class File(S5RunObject):
 
     def s5run_class_name(self) -> str:
         return "File"
+
+    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
+        # (name, getter, setter); JS: obj.<name> read/write
+        return [("Name", "GetName", ""), ("BufferSize", "GetBufferSize", "SetBufferSize")]
 
     def s5run_method_names(self) -> list[str]:
         return ["GetSize", "ReadBytes", "GetName", "GetBufferSize", "SetBufferSize"]
@@ -55,6 +63,10 @@ class FileSystem(S5RunObject):
     def s5run_class_name(self) -> str:
         return "FileSystem"
 
+    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
+        # (name, getter, setter); JS: obj.<name> read/write
+        return []
+
     def s5run_method_names(self) -> list[str]:
         return ["GetList"]
 
@@ -68,6 +80,10 @@ class console(S5RunObject):
 
     def s5run_class_name(self) -> str:
         return "console"
+
+    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
+        # (name, getter, setter); JS: obj.<name> read/write
+        return []
 
     def s5run_method_names(self) -> list[str]:
         return ["log", "warning", "error"]
@@ -86,6 +102,10 @@ class KeyValueStorage(S5RunObject):
 
     def s5run_class_name(self) -> str:
         return "KeyValueStorage"
+
+    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
+        # (name, getter, setter); JS: obj.<name> read/write
+        return []
 
     def s5run_method_names(self) -> list[str]:
         return ["SetValueByKey", "GetValueByKey"]

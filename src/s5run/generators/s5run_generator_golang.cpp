@@ -570,10 +570,19 @@ func valueToString(v Variable) string {
 
 static std::string generate_types(const schema &s) {
   std::string out = R"GO(
+// S5RunProperty describes a JS accessor property: reading obj.<Name>
+// calls the Getter method, writing calls the Setter.
+type S5RunProperty struct {
+	Name   string
+	Getter string
+	Setter string
+}
+
 // S5RunObject is the root of all generated classes.
 type S5RunObject interface {
 	S5RunClassName() string
 	S5RunMethodNames() []string
+	S5RunPropertyDescriptors() []S5RunProperty
 }
 
 // S5RunFunction is the root of all generated global functions.
@@ -671,6 +680,16 @@ func parseInt(s string) int {
     out += "}\n\n";
     out += "type " + go_name(c.name) + "Base struct{}\n\n";
     out += "func (" + go_name(c.name) + "Base) S5RunClassName() string { return \"" + c.name + "\" }\n";
+    std::string props;
+    for (const auto &p : c.properties) {
+      if (!props.empty())
+        props += ", ";
+      props += "S5RunProperty{Name: \"" + p.name + "\", Getter: \"" + p.getter +
+               "\", Setter: \"" + p.setter + "\"}";
+    }
+    out += "func (" + go_name(c.name) + "Base) S5RunPropertyDescriptors() []S5RunProperty {\n";
+    out += "\treturn []S5RunProperty{" + props + "}\n";
+    out += "}\n";
     out += "func (" + go_name(c.name) + "Base) S5RunMethodNames() []string {\n";
     out += "\treturn []string{" + names + "}\n";
     out += "}\n";
@@ -880,12 +899,14 @@ const clientVersion = ")GO";
 type pendingType struct {
 	name    string
 	methods []string
+	props   []S5RunProperty
 }
 
 type pendingObject struct {
 	name    string
 	thisID  int
 	methods []string
+	props   []S5RunProperty
 }
 
 // Context is a cacheable execution context: registrations, servers, the script.
@@ -932,9 +953,9 @@ func (ctx *Context) AddServer(server *RemoteServerInfo) *Context {
 func (ctx *Context) AddClass(sample S5RunObject) *Context {
 	name := sample.S5RunClassName()
 	if ctx.conn != nil {
-		ctx.sendRegisterType(name, sample.S5RunMethodNames())
+		ctx.sendRegisterType(name, sample.S5RunMethodNames(), sample.S5RunPropertyDescriptors())
 	} else {
-		ctx.pendingTypes = append(ctx.pendingTypes, pendingType{name, sample.S5RunMethodNames()})
+		ctx.pendingTypes = append(ctx.pendingTypes, pendingType{name, sample.S5RunMethodNames(), sample.S5RunPropertyDescriptors()})
 	}
 	return ctx
 }
@@ -947,9 +968,9 @@ func (ctx *Context) AddObject(obj S5RunObject) *Context {
 	}
 	ctx.instances[cls][ctx.nextID] = obj
 	if ctx.conn != nil {
-		ctx.sendRegisterObject(cls, ctx.nextID, obj.S5RunMethodNames())
+		ctx.sendRegisterObject(cls, ctx.nextID, obj.S5RunMethodNames(), obj.S5RunPropertyDescriptors())
 	} else {
-		ctx.pendingObjects = append(ctx.pendingObjects, pendingObject{cls, ctx.nextID, obj.S5RunMethodNames()})
+		ctx.pendingObjects = append(ctx.pendingObjects, pendingObject{cls, ctx.nextID, obj.S5RunMethodNames(), obj.S5RunPropertyDescriptors()})
 	}
 	return ctx
 }
@@ -1078,13 +1099,13 @@ func probeServerLoad(server *RemoteServerInfo) (int64, error) {
 
 func (ctx *Context) flushPending() error {
 	for _, t := range ctx.pendingTypes {
-		if err := ctx.sendRegisterType(t.name, t.methods); err != nil {
+		if err := ctx.sendRegisterType(t.name, t.methods, t.props); err != nil {
 			return err
 		}
 	}
 	ctx.pendingTypes = nil
 	for _, o := range ctx.pendingObjects {
-		if err := ctx.sendRegisterObject(o.name, o.thisID, o.methods); err != nil {
+		if err := ctx.sendRegisterObject(o.name, o.thisID, o.methods, o.props); err != nil {
 			return err
 		}
 	}
@@ -1098,20 +1119,30 @@ func (ctx *Context) flushPending() error {
 	return nil
 }
 
-func (ctx *Context) sendRegisterType(name string, methods []string) error {
+func putPropertyDescriptors(w *writer, props []S5RunProperty) {
+	w.u32(uint32(len(props)))
+	for _, p := range props {
+		w.rawStr(p.Name)
+		w.rawStr(p.Getter)
+		w.rawStr(p.Setter)
+	}
+}
+
+func (ctx *Context) sendRegisterType(name string, methods []string, props []S5RunProperty) error {
 	w := &writer{}
 	w.rawStr(name)
 	w.u32(uint32(len(methods)))
 	for _, m := range methods {
 		w.rawStr(m)
 	}
+	putPropertyDescriptors(w, props)
 	if err := writeFrame(ctx.conn, msgRegisterType, w.buf.Bytes()); err != nil {
 		return err
 	}
 	return ctx.expectRegisterResp("register_type(" + name + ")")
 }
 
-func (ctx *Context) sendRegisterObject(name string, thisID int, methods []string) error {
+func (ctx *Context) sendRegisterObject(name string, thisID int, methods []string, props []S5RunProperty) error {
 	w := &writer{}
 	w.rawStr(name)
 	w.i32(int32(thisID))
@@ -1120,6 +1151,7 @@ func (ctx *Context) sendRegisterObject(name string, thisID int, methods []string
 	for _, m := range methods {
 		w.rawStr(m)
 	}
+	putPropertyDescriptors(w, props)
 	if err := writeFrame(ctx.conn, msgRegisterObj, w.buf.Bytes()); err != nil {
 		return err
 	}

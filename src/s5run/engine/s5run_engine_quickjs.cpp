@@ -83,6 +83,13 @@ struct MethodCtx {
   std::string method;
 };
 
+// Context for an object property accessor (file.name, ...).
+struct PropCtx {
+  int64_t this_id;
+  std::string getter; // "" - write-only
+  std::string setter; // "" - read-only
+};
+
 // ---------------------------------------------------------------
 // Opaque handle helpers
 // ---------------------------------------------------------------
@@ -303,7 +310,9 @@ public:
     JS_FreeValue(ctx_.get(), global);
   }
 
-  JsValue make_object(JsContext ctx_handle, int64_t this_id, const std::vector<std::string> &methods) override {
+  JsValue make_object(JsContext ctx_handle, int64_t this_id,
+                       const std::vector<std::string> &methods,
+                       const std::vector<object_property> &properties) override {
     JSContext *ctx = to_ctx(ctx_handle);
 
     JSValue obj = JS_NewObject(ctx);
@@ -323,6 +332,32 @@ public:
       JSValue fn = make_cfunction(&QuickJSEngine::js_method_trampoline, method_class_id_, holder);
 
       JS_SetPropertyStr(ctx, obj, name.c_str(), fn);
+    }
+
+    for (const auto &prop : properties) {
+      auto *pctx = new PropCtx{this_id, prop.getter, prop.setter};
+      prop_ctxs_.push_back(pctx);
+
+      JSValue getter = JS_UNDEFINED;
+      JSValue setter = JS_UNDEFINED;
+      if (!prop.getter.empty()) {
+        JSValue holder = wrap_opaque(prop_class_id_, pctx);
+        getter = make_cfunction(&QuickJSEngine::js_prop_getter_trampoline, prop_class_id_, holder);
+      }
+      if (!prop.setter.empty()) {
+        JSValue holder = wrap_opaque(prop_class_id_, pctx);
+        setter = make_cfunction(&QuickJSEngine::js_prop_setter_trampoline, prop_class_id_, holder);
+      }
+
+      JSAtom atom = JS_NewAtom(ctx, prop.name.c_str());
+      int prop_flags = JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE
+                       | JS_PROP_HAS_CONFIGURABLE | JS_PROP_HAS_ENUMERABLE;
+      if (!prop.getter.empty())
+        prop_flags |= JS_PROP_HAS_GET;
+      if (!prop.setter.empty())
+        prop_flags |= JS_PROP_HAS_SET;
+      JS_DefineProperty(ctx, obj, atom, JS_UNDEFINED, getter, setter, prop_flags);
+      JS_FreeAtom(ctx, atom);
     }
     return to_handle(obj);
   }
@@ -355,8 +390,9 @@ public:
   }
 
   void register_global_object(const std::string &name, int64_t this_id,
-                              const std::vector<std::string> &methods) override {
-    JsValue handle = make_object(ctx_.get(), this_id, methods);
+                              const std::vector<std::string> &methods,
+                              const std::vector<object_property> &properties) override {
+    JsValue handle = make_object(ctx_.get(), this_id, methods, properties);
     JSValue obj = from_handle(handle);
     free_handle(handle);
     JSValue global = JS_GetGlobalObject(ctx_.get());
@@ -450,6 +486,12 @@ private:
     m_def.class_name = "MethodCtxHolder";
     if (JS_NewClass(rt_.get(), method_class_id_, &m_def) < 0)
       throw std::runtime_error("JS_NewClass(method) failed");
+
+    JS_NewClassID(rt_.get(), &prop_class_id_);
+    JSClassDef p_def{};
+    p_def.class_name = "PropCtxHolder";
+    if (JS_NewClass(rt_.get(), prop_class_id_, &p_def) < 0)
+      throw std::runtime_error("JS_NewClass(prop) failed");
   }
 
   // Wrap a raw pointer into a JS object of the given class.
@@ -537,6 +579,48 @@ private:
     }
   }
 
+  // Object property getter: dispatch as simple callback [this_id].
+  static JSValue
+  js_prop_getter_trampoline(JSContext *ctx, JSValueConst, int, JSValueConst *, int magic, JSValue *func_data) {
+    auto *eng = static_cast<QuickJSEngine *>(JS_GetContextOpaque(ctx));
+    if (!eng)
+      return JS_ThrowTypeError(ctx, "engine context missing");
+    auto *pctx = static_cast<PropCtx *>(JS_GetOpaque(func_data[0], static_cast<JSClassID>(magic)));
+    if (!pctx || pctx->getter.empty())
+      return JS_ThrowTypeError(ctx, "property has no getter");
+
+    std::vector<s5run::variable> args;
+    args.push_back(s5run::variable((int64_t)pctx->this_id));
+    try {
+      s5run::variable r = eng->dispatch_simple(pctx->getter, args);
+      return value_to_js(ctx, r);
+    } catch (const std::exception &e) {
+      return JS_ThrowInternalError(ctx, "%s", e.what());
+    }
+  }
+
+  // Object property setter: dispatch as simple callback [this_id, value].
+  static JSValue
+  js_prop_setter_trampoline(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
+    auto *eng = static_cast<QuickJSEngine *>(JS_GetContextOpaque(ctx));
+    if (!eng)
+      return JS_ThrowTypeError(ctx, "engine context missing");
+    auto *pctx = static_cast<PropCtx *>(JS_GetOpaque(func_data[0], static_cast<JSClassID>(magic)));
+    if (!pctx || pctx->setter.empty())
+      return JS_ThrowTypeError(ctx, "property has no setter");
+
+    std::vector<s5run::variable> args;
+    args.push_back(s5run::variable((int64_t)pctx->this_id));
+    if (argc > 0)
+      args.push_back(js_to_value(ctx, argv[0]));
+    try {
+      eng->dispatch_simple(pctx->setter, args);
+    } catch (const std::exception &e) {
+      return JS_ThrowInternalError(ctx, "%s", e.what());
+    }
+    return JS_UNDEFINED;
+  }
+
   // Object method: prepend this_id to args, dispatch as simple callback.
   static JSValue
   js_method_trampoline(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
@@ -598,9 +682,11 @@ private:
 
   JSClassID callback_class_id_ = 0;
   JSClassID method_class_id_ = 0;
+  JSClassID prop_class_id_ = 0;
 
   std::vector<CallbackCtx *> callback_ctxs_;
   std::vector<MethodCtx *> method_ctxs_;
+  std::vector<PropCtx *> prop_ctxs_;
 };
 
 } // namespace

@@ -84,11 +84,24 @@ private:
     std::string m_address; std::string m_api_key; std::string m_host; int m_port;
 };
 
+struct s5run_property_descriptor {
+    std::string name;
+    std::string getter;
+    std::string setter;
+    s5run_property_descriptor() {}
+    s5run_property_descriptor(const std::string &n, const std::string &g, const std::string &s)
+        : name(n), getter(g), setter(s) {}
+};
+
 class s5run_object {
 public:
     virtual ~s5run_object() {}
     virtual std::string s5run_class_name() const = 0;
     virtual std::vector<std::string> s5run_method_names() const = 0;
+    // property descriptors {name, getter, setter}; JS: obj.<name> read/write
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        return std::vector<s5run_property_descriptor>();
+    }
 };
 
 class s5run_function {
@@ -101,6 +114,12 @@ class base_context_class_File : public s5run_object {
 public:
     virtual ~base_context_class_File() {}
     virtual std::string s5run_class_name() const { return "File"; }
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        std::vector<s5run_property_descriptor> out;
+        out.push_back(s5run_property_descriptor("Name", "GetName", ""));
+        out.push_back(s5run_property_descriptor("BufferSize", "GetBufferSize", "SetBufferSize"));
+        return out;
+    }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
         out.push_back("GetSize");
@@ -121,6 +140,10 @@ class base_context_class_FileSystem : public s5run_object {
 public:
     virtual ~base_context_class_FileSystem() {}
     virtual std::string s5run_class_name() const { return "FileSystem"; }
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        std::vector<s5run_property_descriptor> out;
+        return out;
+    }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
         out.push_back("GetList");
@@ -133,6 +156,10 @@ class base_context_class_console : public s5run_object {
 public:
     virtual ~base_context_class_console() {}
     virtual std::string s5run_class_name() const { return "console"; }
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        std::vector<s5run_property_descriptor> out;
+        return out;
+    }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
         out.push_back("log");
@@ -149,6 +176,10 @@ class base_context_class_KeyValueStorage : public s5run_object {
 public:
     virtual ~base_context_class_KeyValueStorage() {}
     virtual std::string s5run_class_name() const { return "KeyValueStorage"; }
+    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
+        std::vector<s5run_property_descriptor> out;
+        return out;
+    }
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
         out.push_back("SetValueByKey");

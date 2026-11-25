@@ -2,10 +2,19 @@
 // TODO: not compiled yet (no Go toolchain available at generation time).
 package s5runcli
 
+// S5RunProperty describes a JS accessor property: reading obj.<Name>
+// calls the Getter method, writing calls the Setter.
+type S5RunProperty struct {
+	Name   string
+	Getter string
+	Setter string
+}
+
 // S5RunObject is the root of all generated classes.
 type S5RunObject interface {
 	S5RunClassName() string
 	S5RunMethodNames() []string
+	S5RunPropertyDescriptors() []S5RunProperty
 }
 
 // S5RunFunction is the root of all generated global functions.
@@ -91,6 +100,9 @@ type File interface {
 type FileBase struct{}
 
 func (FileBase) S5RunClassName() string { return "File" }
+func (FileBase) S5RunPropertyDescriptors() []S5RunProperty {
+	return []S5RunProperty{S5RunProperty{Name: "Name", Getter: "GetName", Setter: ""}, S5RunProperty{Name: "BufferSize", Getter: "GetBufferSize", Setter: "SetBufferSize"}}
+}
 func (FileBase) S5RunMethodNames() []string {
 	return []string{"GetSize", "ReadBytes", "GetName", "GetBufferSize", "SetBufferSize"}
 }
@@ -105,6 +117,9 @@ type FileSystem interface {
 type FileSystemBase struct{}
 
 func (FileSystemBase) S5RunClassName() string { return "FileSystem" }
+func (FileSystemBase) S5RunPropertyDescriptors() []S5RunProperty {
+	return []S5RunProperty{}
+}
 func (FileSystemBase) S5RunMethodNames() []string {
 	return []string{"GetList"}
 }
@@ -121,6 +136,9 @@ type console interface {
 type ConsoleBase struct{}
 
 func (ConsoleBase) S5RunClassName() string { return "console" }
+func (ConsoleBase) S5RunPropertyDescriptors() []S5RunProperty {
+	return []S5RunProperty{}
+}
 func (ConsoleBase) S5RunMethodNames() []string {
 	return []string{"log", "warning", "error"}
 }
@@ -136,6 +154,9 @@ type KeyValueStorage interface {
 type KeyValueStorageBase struct{}
 
 func (KeyValueStorageBase) S5RunClassName() string { return "KeyValueStorage" }
+func (KeyValueStorageBase) S5RunPropertyDescriptors() []S5RunProperty {
+	return []S5RunProperty{}
+}
 func (KeyValueStorageBase) S5RunMethodNames() []string {
 	return []string{"SetValueByKey", "GetValueByKey"}
 }

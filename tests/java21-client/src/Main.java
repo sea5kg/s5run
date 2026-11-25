@@ -6,6 +6,7 @@ public class Main {
 
     static final class MyFile implements File {
         private final long size;
+        private long bufferSize = 4096;
 
         MyFile(long size) {
             this.size = size;
@@ -28,11 +29,12 @@ public class Main {
 
         @Override
         public long GetBufferSize() {
-            return 4096;
+            return bufferSize;
         }
 
         @Override
         public void SetBufferSize(long bufferSize) {
+            this.bufferSize = bufferSize;
         }
     }
 
@@ -191,6 +193,10 @@ public class Main {
         check(MyGetFile.lastPath.equals("test.txt"), "GetFile path");
         check(MyFileSystem.lastPath.equals("test.txt"), "FileSystem.GetList path");
         check(MyConsole.logs.get(0).equals("hello test.txt 1 2"), "console.log");
+        check(MyConsole.logs.size() == 4, "console.log count");
+        check(MyConsole.logs.get(1).equals("name: example.txt"), "property Name getter");
+        check(MyConsole.logs.get(2).equals("bufsize: 4096"), "property BufferSize getter");
+        check(MyConsole.logs.get(3).equals("bufsize-after: 2048"), "property BufferSize setter");
         check(MyCloseFiles.closedSizes.equals(List.of(100L, 200L)), "CloseFiles sizes");
         System.out.println("  PASS");
         }

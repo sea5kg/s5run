@@ -120,9 +120,33 @@ public:
   virtual void handle() override;
 
 private:
+  struct object_type_info {
+    std::vector<std::string> methods;
+    std::vector<engine::object_property> properties;
+  };
+
   int m_fd;
   thread_pool *m_pool;
-  std::map<std::string, std::vector<std::string>> m_object_types;
+  std::map<std::string, object_type_info> m_object_types;
+
+  static std::vector<engine::object_property> parse_properties(wire::Reader &r,
+                                                               const std::string &where) {
+    std::vector<engine::object_property> out;
+    if (r.remaining() < 4)
+      return out; // old clients send no properties
+    uint32_t count = r.get_u32();
+    out.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+      engine::object_property p;
+      p.name = r.get_string();
+      p.getter = r.get_string();
+      p.setter = r.get_string();
+      if (p.name.empty())
+        throw std::runtime_error(where + ": empty property name");
+      out.push_back(p);
+    }
+    return out;
+  }
   void handle_register_function(engine::IScriptEngine *, const std::vector<uint8_t> &body);
   void handle_register_object(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
   void handle_register_object_type(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
@@ -276,7 +300,8 @@ void client_handler::handle_register_function(engine::IScriptEngine *eng, const 
         auto it = m_object_types.find(resp.as_ref().type);
         if (it == m_object_types.end())
           throw std::runtime_error("unknown object type: " + resp.as_ref().type);
-        return eng->make_object(ctx, resp.as_ref().this_id, it->second);
+        return eng->make_object(ctx, resp.as_ref().this_id, it->second.methods,
+                                it->second.properties);
       }
       if (resp.is_array()) {
         bool has_refs = false;
@@ -294,7 +319,8 @@ void client_handler::handle_register_function(engine::IScriptEngine *eng, const 
               auto it = m_object_types.find(e.as_ref().type);
               if (it == m_object_types.end())
                 throw std::runtime_error("unknown object type: " + e.as_ref().type);
-              items.push_back(eng->make_object(ctx, e.as_ref().this_id, it->second));
+              items.push_back(eng->make_object(ctx, e.as_ref().this_id, it->second.methods,
+                                               it->second.properties));
             } else {
               items.push_back(eng->make_value(ctx, e));
             }
@@ -320,12 +346,15 @@ void client_handler::handle_register_object(
   for (uint32_t i = 0; i < count; ++i)
     methods.push_back(r.get_string());
 
+  std::vector<engine::object_property> properties =
+    parse_properties(r, "register_object(" + name + ")");
+
   register_method_callbacks(eng, channel, methods);
 
   if (!type_name.empty())
-    m_object_types[type_name] = methods;
+    m_object_types[type_name] = object_type_info{methods, properties};
 
-  eng->register_global_object(name, this_id, methods);
+  eng->register_global_object(name, this_id, methods, properties);
 }
 
 void client_handler::handle_register_object_type(
@@ -339,7 +368,10 @@ void client_handler::handle_register_object_type(
   for (uint32_t i = 0; i < count; ++i)
     methods.push_back(r.get_string());
 
-  m_object_types[name] = methods;
+  std::vector<engine::object_property> properties =
+    parse_properties(r, "register_type(" + name + ")");
+
+  m_object_types[name] = object_type_info{methods, properties};
   register_method_callbacks(eng, channel, methods);
 }
 

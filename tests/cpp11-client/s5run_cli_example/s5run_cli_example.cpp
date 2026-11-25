@@ -359,17 +359,19 @@ public:
 
     void set_script(const std::string &script);
     void add_server(const std::shared_ptr<remote_server_info> &server);
-    void register_type(const std::string &name,
-                       const std::vector<std::string> &methods);
+    void register_type(const std::string &name, const std::vector<std::string> &methods,
+                       const std::vector<s5run_property_descriptor> &props);
     void add_object(const std::shared_ptr<s5run_object> &obj);
     void add_function(const std::shared_ptr<s5run_function> &fn);
     std::shared_ptr<run_result> run(const std::string &entry,
                                    const std::vector<value> &args);
 
 private:
-    struct PendingType { std::string name; std::vector<std::string> methods; };
+    struct PendingType { std::string name; std::vector<std::string> methods;
+                            std::vector<s5run_property_descriptor> props; };
     struct PendingObject { std::string name; int32_t this_id; std::string type;
-                          std::vector<std::string> methods; };
+                          std::vector<std::string> methods;
+                          std::vector<s5run_property_descriptor> props; };
     struct PendingFunction { std::string name; };
 
     void _cb_GetFile(int32_t cb_id, Reader &r);
@@ -591,14 +593,26 @@ void context::impl::add_server(const std::shared_ptr<remote_server_info> &server
     m_servers.push_back(server);
 }
 
+static void s5run__put_property_descriptors(Writer &w,
+                                             const std::vector<s5run_property_descriptor> &props) {
+    w.put_u32((uint32_t)props.size());
+    for (size_t i = 0; i < props.size(); ++i) {
+        w.put_string(props[i].name);
+        w.put_string(props[i].getter);
+        w.put_string(props[i].setter);
+    }
+}
+
 void context::impl::register_type(const std::string &name,
-                                 const std::vector<std::string> &methods) {
+                                 const std::vector<std::string> &methods,
+                                 const std::vector<s5run_property_descriptor> &props) {
     if (m_fd >= 0) {
         Writer w;
         w.put_string(name);
         w.put_u32((uint32_t)methods.size());
         for (size_t i = 0; i < methods.size(); ++i)
             w.put_string(methods[i]);
+        s5run__put_property_descriptors(w, props);
         _send_message(M_REGISTER_TYPE, w.data());
         _expect_register_resp("register_type(" + name + ")");
         return;
@@ -606,6 +620,7 @@ void context::impl::register_type(const std::string &name,
     PendingType t;
     t.name = name;
     t.methods = methods;
+    t.props = props;
     m_pending_types.push_back(t);
 }
 
@@ -619,6 +634,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     int32_t id = ++m_next_this_id;
     rit->second(id, obj);
     const std::vector<std::string> methods = obj->s5run_method_names();
+    const std::vector<s5run_property_descriptor> props = obj->s5run_property_descriptors();
     if (m_fd >= 0) {
         Writer w;
         w.put_string(class_name);
@@ -627,6 +643,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
         w.put_u32((uint32_t)methods.size());
         for (size_t i = 0; i < methods.size(); ++i)
             w.put_string(methods[i]);
+        s5run__put_property_descriptors(w, props);
         _send_message(M_REGISTER_OBJ, w.data());
         _expect_register_resp("register_object(" + class_name + ")");
         return;
@@ -636,6 +653,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     o.this_id = id;
     o.type = class_name;
     o.methods = methods;
+    o.props = props;
     m_pending_objects.push_back(o);
 }
 
@@ -1075,6 +1093,7 @@ void context::impl::_flush_pending() {
         w.put_u32((uint32_t)t.methods.size());
         for (size_t j = 0; j < t.methods.size(); ++j)
             w.put_string(t.methods[j]);
+        s5run__put_property_descriptors(w, t.props);
         _send_message(M_REGISTER_TYPE, w.data());
         _expect_register_resp("register_type(" + t.name + ")");
     }
@@ -1088,6 +1107,7 @@ void context::impl::_flush_pending() {
         w.put_u32((uint32_t)o.methods.size());
         for (size_t j = 0; j < o.methods.size(); ++j)
             w.put_string(o.methods[j]);
+        s5run__put_property_descriptors(w, o.props);
         _send_message(M_REGISTER_OBJ, w.data());
         _expect_register_resp("register_object(" + o.name + ")");
     }
@@ -1280,7 +1300,8 @@ void context::add_object(const std::shared_ptr<s5run_object> &obj) {
 
 void context::add_class(const std::shared_ptr<s5run_object> &sample) {
     m_impl->register_type(sample->s5run_class_name(),
-                          sample->s5run_method_names());
+                          sample->s5run_method_names(),
+                          sample->s5run_property_descriptors());
 }
 
 void context::add_function(const std::shared_ptr<s5run_function> &fn) {

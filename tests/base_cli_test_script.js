@@ -3,6 +3,10 @@ function main(path) {
     var t = GetTimeNow();
     var b = f.ReadBytes(3);
     console.log("hello", path, 1, 2);
+    console.log("name:", f.Name);
+    console.log("bufsize:", f.BufferSize);
+    f.BufferSize = 2048;
+    console.log("bufsize-after:", f.BufferSize);
     var sizeByRef = GetFileSize(f);
     var opened = GetOpenedFiles();
     var openedSum = 0;

@@ -31,7 +31,7 @@ static std::string kScript = load_base_script();
 
 class MyFile : public s5run_cli_cpp98::base_context_class_File {
 public:
-    explicit MyFile(s5run_cli_cpp98::i64 size) : m_size(size) {}
+    explicit MyFile(s5run_cli_cpp98::i64 size) : m_size(size), m_buffer_size(4096) {}
 
     virtual s5run_cli_cpp98::i64 GetSize() { return m_size; }
 
@@ -206,7 +206,11 @@ int main(int argc, char **argv) {
             check(obj.find("time")->second.as_int() == 1737000000LL, "time");
             check(MyGetFile::last_path == "test.txt", "GetFile path");
             check(g_fs_last_path == "test.txt", "FileSystem.GetList path");
-            check(g_logs.size() == 1 && g_logs[0] == "hello test.txt 1 2", "console.log");
+            check(g_logs.size() == 4, "console.log count");
+            check(g_logs[0] == "hello test.txt 1 2", "console.log");
+            check(g_logs[1] == "name: example.txt", "property Name getter");
+            check(g_logs[2] == "bufsize: 4096", "property BufferSize getter");
+            check(g_logs[3] == "bufsize-after: 2048", "property BufferSize setter");
             check(g_closed_sizes.size() == 2 && g_closed_sizes[0] == 100
                       && g_closed_sizes[1] == 200, "CloseFiles sizes");
             std::printf("  PASS\n");

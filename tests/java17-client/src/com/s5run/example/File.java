@@ -8,6 +8,9 @@ public interface File extends S5RunObject {
     default String s5runClassName() { return "File"; }
 
     @Override
+    default List<S5RunProperty> s5runPropertyDescriptors() { return List.of(new S5RunProperty("Name", "GetName", ""), new S5RunProperty("BufferSize", "GetBufferSize", "SetBufferSize")); }
+
+    @Override
     default List<String> s5runMethodNames() { return List.of("GetSize", "ReadBytes", "GetName", "GetBufferSize", "SetBufferSize"); }
 
     long GetSize();

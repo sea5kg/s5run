@@ -62,6 +62,15 @@ struct ExecResult {
 using CallbackHandler = std::function<s5run::variable(
     const std::string &method, const std::vector<s5run::variable> &args)>;
 
+// JS object property descriptor: reading obj.<name> dispatches the
+// getter method as a simple callback with [this_id], writing calls the
+// setter with [this_id, value].
+struct object_property {
+  std::string name;
+  std::string getter; // "" - write-only property
+  std::string setter; // "" - read-only property
+};
+
 // JS callback: the handler receives an opaque context and must return
 // an opaque value, typically produced by make_object(). The engine
 // takes ownership of the returned handle and releases it after use.
@@ -81,12 +90,16 @@ public:
   // Build a JS object with method stubs. Each method, when called from
   // JS, is dispatched as a simple callback with signature
   //   method(this_id, ...js_args)
-  virtual JsValue make_object(JsContext ctx, int64_t this_id, const std::vector<std::string> &methods) = 0;
+  // Property descriptors become JS accessor properties.
+  virtual JsValue make_object(JsContext ctx, int64_t this_id,
+                              const std::vector<std::string> &methods,
+                              const std::vector<object_property> &properties) = 0;
 
   // Install a JS object with method stubs as a global property, so
   // scripts call it as `name.method(...)`.
   virtual void register_global_object(const std::string &name, int64_t this_id,
-                                      const std::vector<std::string> &methods) = 0;
+                                      const std::vector<std::string> &methods,
+                                      const std::vector<object_property> &properties) = 0;
 
   // Build a JS array from opaque item handles. Takes ownership of the
   // items and releases them after use.
