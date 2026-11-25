@@ -336,128 +336,128 @@ static void write_byte(Writer &w, u8 v) {
 }
 
 
-static void encode_value(Writer &w, const value &v) {
+static void encode_value(Writer &w, const s5run_variable &v) {
     switch (v.get_kind()) {
-    case value::K_NULL: w.put_u8(T_UNDEFINED); break;
-    case value::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
-    case value::K_INT: write_int(w, v.as_int()); break;
-    case value::K_DOUBLE: w.put_u8(T_FLOAT64); w.put_f64(v.as_double()); break;
-    case value::K_STRING: w.put_u8(T_STRING); w.put_string(v.as_string()); break;
-    case value::K_ARRAY: {
+    case s5run_variable::K_NULL: w.put_u8(T_UNDEFINED); break;
+    case s5run_variable::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
+    case s5run_variable::K_INT: write_int(w, v.as_int()); break;
+    case s5run_variable::K_DOUBLE: w.put_u8(T_FLOAT64); w.put_f64(v.as_double()); break;
+    case s5run_variable::K_STRING: w.put_u8(T_STRING); w.put_string(v.as_string()); break;
+    case s5run_variable::K_ARRAY: {
         w.put_u8(T_ARRAY);
-        const std::vector<value> &a = v.as_array();
+        const std::vector<s5run_variable> &a = v.as_array();
         w.put_u32((u32)a.size());
         for (std::size_t i = 0; i < a.size(); ++i) encode_value(w, a[i]);
         break;
     }
-    case value::K_OBJECT: {
+    case s5run_variable::K_OBJECT: {
         w.put_u8(T_OBJECT);
-        const std::map<std::string, value> &o = v.as_object();
+        const std::map<std::string, s5run_variable> &o = v.as_object();
         w.put_u32((u32)o.size());
-        for (std::map<std::string, value>::const_iterator it = o.begin(); it != o.end(); ++it) {
+        for (std::map<std::string, s5run_variable>::const_iterator it = o.begin(); it != o.end(); ++it) {
             w.put_u8(T_STRING); w.put_string(it->first);
             encode_value(w, it->second);
         }
         break;
     }
-    case value::K_REF: {
+    case s5run_variable::K_REF: {
         w.put_u8(T_REF); w.put_i32(v.ref_this_id()); w.put_string(v.ref_type());
         break;
     }
     }
 }
 
-static value decode_value(Reader &r) {
+static s5run_variable decode_value(Reader &r) {
     u8 tag = r.get_u8();
     switch (tag) {
-    case T_UNDEFINED: return value();
-    case T_BOOL: return value(r.get_u8() != 0);
-    case T_INT8: return value((i64)r.get_i8());
-    case T_INT16: return value((i64)r.get_i16());
-    case T_INT32: return value((i64)r.get_i32());
-    case T_INT64: return value(r.get_i64());
-    case T_UINT8: return value((i64)r.get_u8());
-    case T_UINT16: return value((i64)r.get_u16());
-    case T_UINT32: return value((i64)r.get_u32());
-    case T_UINT64: return value((i64)r.get_u64());
-    case T_FLOAT64: return value(r.get_f64());
-    case T_STRING: return value(r.get_string());
+    case T_UNDEFINED: return s5run_variable();
+    case T_BOOL: return s5run_variable(r.get_u8() != 0);
+    case T_INT8: return s5run_variable((i64)r.get_i8());
+    case T_INT16: return s5run_variable((i64)r.get_i16());
+    case T_INT32: return s5run_variable((i64)r.get_i32());
+    case T_INT64: return s5run_variable(r.get_i64());
+    case T_UINT8: return s5run_variable((i64)r.get_u8());
+    case T_UINT16: return s5run_variable((i64)r.get_u16());
+    case T_UINT32: return s5run_variable((i64)r.get_u32());
+    case T_UINT64: return s5run_variable((i64)r.get_u64());
+    case T_FLOAT64: return s5run_variable(r.get_f64());
+    case T_STRING: return s5run_variable(r.get_string());
     case T_ARRAY: {
         u32 n = r.get_u32();
-        std::vector<value> a; a.reserve(n);
+        std::vector<s5run_variable> a; a.reserve(n);
         for (u32 i = 0; i < n; ++i) a.push_back(decode_value(r));
-        return value(a);
+        return s5run_variable(a);
     }
     case T_OBJECT: {
         u32 n = r.get_u32();
-        std::map<std::string, value> o;
+        std::map<std::string, s5run_variable> o;
         for (u32 i = 0; i < n; ++i) {
             if (r.get_u8() != T_STRING) throw std::runtime_error("wire: expected a string key");
             std::string key = r.get_string();
             o[key] = decode_value(r);
         }
-        return value(o);
+        return s5run_variable(o);
     }
     case T_REF: {
         i32 this_id = r.get_i32();
         std::string type = r.get_string();
-        return value::make_ref(this_id, type);
+        return s5run_variable::make_ref(this_id, type);
     }
     default: throw std::runtime_error("wire: unknown value tag");
     }
 }
 
-static std::string _value_to_string(const value &v) {
+static std::string _value_to_string(const s5run_variable &v) {
     switch (v.get_kind()) {
-    case value::K_NULL: return "null";
-    case value::K_BOOL: return v.as_bool() ? "true" : "false";
-    case value::K_INT: return num_to_str(v.as_int());
-    case value::K_DOUBLE: {
+    case s5run_variable::K_NULL: return "null";
+    case s5run_variable::K_BOOL: return v.as_bool() ? "true" : "false";
+    case s5run_variable::K_INT: return num_to_str(v.as_int());
+    case s5run_variable::K_DOUBLE: {
         char buf[64]; std::sprintf(buf, "%g", v.as_double());
         return std::string(buf);
     }
-    case value::K_STRING: return v.as_string();
+    case s5run_variable::K_STRING: return v.as_string();
     default: throw std::runtime_error("wire: expected a scalar argument");
     }
 }
 
-value::value() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
-value::value(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
-value::value(i64 i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0), m_a(0), m_o(0) {}
-value::value(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d), m_a(0), m_o(0) {}
-value::value(const char *s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
-value::value(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
-value::value(const std::vector<value> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(new std::vector<value>(a)), m_o(0) {}
-value::value(const std::map<std::string, value> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(new std::map<std::string, value>(o)) {}
-value::value(const value &other) : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) { copy_from(other); }
-value &value::operator=(const value &other) {
+s5run_variable::s5run_variable() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable(i64 i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable(const char *s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable(const std::vector<s5run_variable> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(new std::vector<s5run_variable>(a)), m_o(0) {}
+s5run_variable::s5run_variable(const std::map<std::string, s5run_variable> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(new std::map<std::string, s5run_variable>(o)) {}
+s5run_variable::s5run_variable(const s5run_variable &other) : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) { copy_from(other); }
+s5run_variable &s5run_variable::operator=(const s5run_variable &other) {
     if (this != &other) { destroy(); copy_from(other); }
     return *this;
 }
-value::~value() { destroy(); }
-value value::make_ref(int this_id, const std::string &type) {
-    value v; v.m_kind = K_REF; v.m_i = this_id; v.m_s = type; return v;
+s5run_variable::~s5run_variable() { destroy(); }
+s5run_variable s5run_variable::make_ref(int this_id, const std::string &type) {
+    s5run_variable v; v.m_kind = K_REF; v.m_i = this_id; v.m_s = type; return v;
 }
-value::kind value::get_kind() const { return m_kind; }
-bool value::is_null() const { return m_kind == K_NULL; }
-bool value::as_bool() const { return m_b; }
-i64 value::as_int() const { return m_i; }
-double value::as_double() const { return m_d; }
-const std::string &value::as_string() const { return m_s; }
-const std::vector<value> &value::as_array() const { return *m_a; }
-const std::map<std::string, value> &value::as_object() const { return *m_o; }
-int value::ref_this_id() const { return (int)m_i; }
-const std::string &value::ref_type() const { return m_s; }
-void value::destroy() {
+s5run_variable::kind s5run_variable::get_kind() const { return m_kind; }
+bool s5run_variable::is_null() const { return m_kind == K_NULL; }
+bool s5run_variable::as_bool() const { return m_b; }
+i64 s5run_variable::as_int() const { return m_i; }
+double s5run_variable::as_double() const { return m_d; }
+const std::string &s5run_variable::as_string() const { return m_s; }
+const std::vector<s5run_variable> &s5run_variable::as_array() const { return *m_a; }
+const std::map<std::string, s5run_variable> &s5run_variable::as_object() const { return *m_o; }
+int s5run_variable::ref_this_id() const { return (int)m_i; }
+const std::string &s5run_variable::ref_type() const { return m_s; }
+void s5run_variable::destroy() {
     delete m_a; m_a = 0;
     delete m_o; m_o = 0;
     m_kind = K_NULL;
 }
-void value::copy_from(const value &other) {
+void s5run_variable::copy_from(const s5run_variable &other) {
     m_kind = other.m_kind; m_b = other.m_b; m_i = other.m_i; m_d = other.m_d;
     m_s = other.m_s;
-    m_a = other.m_a ? new std::vector<value>(*other.m_a) : 0;
-    m_o = other.m_o ? new std::map<std::string, value>(*other.m_o) : 0;
+    m_a = other.m_a ? new std::vector<s5run_variable>(*other.m_a) : 0;
+    m_o = other.m_o ? new std::map<std::string, s5run_variable>(*other.m_o) : 0;
 }
 
 run_result::run_result() : m_has_error(false), m_error_line(0), m_duration_ms(0) {}
@@ -465,7 +465,7 @@ bool run_result::has_error() const { return m_has_error; }
 const std::string &run_result::error() const { return m_error; }
 int run_result::error_line() const { return m_error_line; }
 i64 run_result::duration() const { return m_duration_ms; }
-const value &run_result::get_value() const { return m_value; }
+const s5run_variable &run_result::get_value() const { return m_value; }
 
 remote_server_info::remote_server_info() : m_port(0) {}
 void remote_server_info::set_address(const std::string &address) {
@@ -502,7 +502,7 @@ public:
                          const std::vector<s5run_property_descriptor> &props);
     void add_object(s5run_object *obj);
     void add_function(s5run_function *fn);
-    run_result run(const std::string &entry, const std::vector<value> &args);
+    run_result run(const std::string &entry, const std::vector<s5run_variable> &args);
 
 private:
     struct PendingType { std::string name; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };
@@ -950,7 +950,7 @@ void context::context_impl::cbm_KeyValueStorage_SetValueByKey(i32 cb_id, Reader 
     std::map<i32, base_context_class_KeyValueStorage *>::const_iterator it = m_instances_KeyValueStorage.find(this_id);
     if (it == m_instances_KeyValueStorage.end()) throw std::runtime_error("KeyValueStorage: unknown this_id");
     std::string a_name = read_string(r);
-    value a_value = decode_value(r);
+    s5run_variable a_value = decode_value(r);
     it->second->SetValueByKey(a_name, a_value);
     Writer w; w.put_i32(cb_id); w.put_u8(1);
     w.put_u8(T_UNDEFINED);
@@ -1151,7 +1151,7 @@ int context::context_impl::parse_error_line(const std::string &error) {
 }
 
 run_result context::context_impl::run(const std::string &entry,
-                                      const std::vector<value> &args) {
+                                      const std::vector<s5run_variable> &args) {
     run_result out;
     std::clock_t started = std::clock();
     try {
@@ -1201,6 +1201,6 @@ void context::add_function(s5run_function *f) { m_impl->add_function(f); }
 
 context * make_context() { return new context(); }
 
-run_result run_script(context *ctx, const std::string &entry, const std::vector<value> &args) { return ctx->m_impl->run(entry, args); }
+run_result run_script(context *ctx, const std::string &entry, const std::vector<s5run_variable> &args) { return ctx->m_impl->run(entry, args); }
 
 } // namespace s5run_cli_cpp98

@@ -52,24 +52,24 @@ class context;
 class run_result;
 context * make_context();
 
-class value {
+class s5run_variable {
 public:
     enum kind { K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF };
-    value(); value(bool b); value(i64 i); value(double d); value(const char *s);
-    value(const std::string &s); value(const std::vector<value> &a);
-    value(const std::map<std::string, value> &o);
-    value(const value &other); value &operator=(const value &other); ~value();
-    static value make_ref(int this_id, const std::string &type);
+    s5run_variable(); s5run_variable(bool b); s5run_variable(i64 i); s5run_variable(double d); s5run_variable(const char *s);
+    s5run_variable(const std::string &s); s5run_variable(const std::vector<s5run_variable> &a);
+    s5run_variable(const std::map<std::string, s5run_variable> &o);
+    s5run_variable(const s5run_variable &other); s5run_variable &operator=(const s5run_variable &other); ~s5run_variable();
+    static s5run_variable make_ref(int this_id, const std::string &type);
     kind get_kind() const; bool is_null() const; bool as_bool() const;
     i64 as_int() const; double as_double() const;
     const std::string &as_string() const;
-    const std::vector<value> &as_array() const;
-    const std::map<std::string, value> &as_object() const;
+    const std::vector<s5run_variable> &as_array() const;
+    const std::map<std::string, s5run_variable> &as_object() const;
     int ref_this_id() const; const std::string &ref_type() const;
 private:
-    void destroy(); void copy_from(const value &other);
+    void destroy(); void copy_from(const s5run_variable &other);
     kind m_kind; bool m_b; i64 m_i; double m_d;
-    std::string m_s; std::vector<value> *m_a; std::map<std::string, value> *m_o;
+    std::string m_s; std::vector<s5run_variable> *m_a; std::map<std::string, s5run_variable> *m_o;
 };
 
 class remote_server_info {
@@ -186,7 +186,7 @@ public:
         out.push_back("GetValueByKey");
         return out;
     }
-    virtual void SetValueByKey(const std::string & name, const value & value) = 0;
+    virtual void SetValueByKey(const std::string & name, const s5run_variable & value) = 0;
     virtual void GetValueByKey(const std::string & name) = 0;
 };
 
@@ -265,7 +265,7 @@ public:
     class context_impl;
 private:
     friend run_result run_script(context *ctx, const std::string &entry,
-                                 const std::vector<value> &args);
+                                 const std::vector<s5run_variable> &args);
     context_impl *m_impl;
 };
 
@@ -273,16 +273,16 @@ class run_result {
 public:
     run_result();
     bool has_error() const; const std::string &error() const;
-    int error_line() const; i64 duration() const; const value &get_value() const;
+    int error_line() const; i64 duration() const; const s5run_variable &get_value() const;
 private:
     friend class context::context_impl;
     friend run_result run_script(context *ctx, const std::string &entry,
-                                 const std::vector<value> &args);
+                                 const std::vector<s5run_variable> &args);
     bool m_has_error; std::string m_error; int m_error_line; i64 m_duration_ms;
-    value m_value;
+    s5run_variable m_value;
 };
 
-run_result run_script(context *ctx, const std::string &entry, const std::vector<value> &args = std::vector<value>());
+run_result run_script(context *ctx, const std::string &entry, const std::vector<s5run_variable> &args = std::vector<s5run_variable>());
 
 } // namespace s5run_cli_cpp98
 

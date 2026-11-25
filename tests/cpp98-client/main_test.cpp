@@ -189,15 +189,15 @@ int main(int argc, char **argv) {
             ctx->add_server(&server0);
             ctx->set_script(kScript);
 
-            std::vector<s5run_cli_cpp98::value> args;
-            args.push_back(s5run_cli_cpp98::value("test.txt"));
+            std::vector<s5run_cli_cpp98::s5run_variable> args;
+            args.push_back(s5run_cli_cpp98::s5run_variable("test.txt"));
             s5run_cli_cpp98::run_result result = s5run_cli_cpp98::run_script(ctx, "main", args);
             delete ctx;
             if (result.has_error())
                 throw std::runtime_error("unexpected error: " + result.error());
             std::printf("  duration: %lld ms\n", (long long)result.duration());
 
-            const std::map<std::string, s5run_cli_cpp98::value> &obj = result.get_value().as_object();
+            const std::map<std::string, s5run_cli_cpp98::s5run_variable> &obj = result.get_value().as_object();
             check(obj.find("size")->second.as_int() == 1024, "size");
             check(obj.find("sizeByRef")->second.as_int() == 1024, "sizeByRef");
             check(obj.find("openedCount")->second.as_int() == 2, "openedCount");
@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
             delete ctx;
             if (result.has_error())
                 throw std::runtime_error("unexpected error: " + result.error());
-            const std::map<std::string, s5run_cli_cpp98::value> &obj = result.get_value().as_object();
+            const std::map<std::string, s5run_cli_cpp98::s5run_variable> &obj = result.get_value().as_object();
             double pi = obj.find("pi")->second.as_double();
             check(pi > 3.13 && pi < 3.15, "pi");
             check(obj.find("port")->second.as_int() == 8080, "port");
