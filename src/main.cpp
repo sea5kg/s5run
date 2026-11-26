@@ -224,11 +224,12 @@ void s5run_parse_args::print_run_usage() const {
   std::cout << m_bin << " run - run a script against a server" << std::endl;
   std::cout << "" << std::endl;
   std::cout << "Usage:" << std::endl;
-  std::cout << "  " << m_bin << " run <host:port> [--provider SPEC] [--api-key KEY] [FILE] [args...]" << std::endl;
+  std::cout << "  " << m_bin << " run [host:port] [--provider SPEC] [--api-key KEY] FILE [args...]" << std::endl;
   std::cout << "" << std::endl;
   std::cout << "Options:" << std::endl;
+  std::cout << "  host:port         s5run server (default 127.0.0.1:7777)" << std::endl;
   std::cout << "  FILE              script file to execute" << std::endl;
-  std::cout << "  --provider SPEC   remote context provider: \"host:port,name1,name2\"" << std::endl;
+  std::cout << "  --provider SPEC   mount remote context entries:\"host:port,name1,name2\"" << std::endl;
   std::cout << "  --api-key KEY     api key for authentication (stub)" << std::endl;
   std::cout << "  args...           arguments passed to the script entry point" << std::endl;
 }
@@ -402,13 +403,13 @@ int s5run_parse_args::cmd_run() {
     return 1;
   }
 
-  std::string host_port = m_arguments[0];
+  std::string host_port = "127.0.0.1:7777"; // default s5run server
   std::string script_file;
   std::string api_key;
   std::vector<std::string> providers;
   std::vector<s5run::variable> script_args;
 
-  for (size_t i = 1; i < m_arguments.size(); ++i) {
+  for (size_t i = 0; i < m_arguments.size(); ++i) {
     const std::string &arg = m_arguments[i];
     if (arg == "--provider" && i + 1 < m_arguments.size()) {
       providers.push_back(m_arguments[++i]);
@@ -417,6 +418,10 @@ int s5run_parse_args::cmd_run() {
     } else if (arg == "--help" || arg == "-h") {
       print_run_usage();
       return 0;
+    } else if (host_port == "127.0.0.1:7777" && script_file.empty()
+               && arg.find(':') != std::string::npos && arg.find(".js") == std::string::npos) {
+      // first positional with a colon: the server address
+      host_port = arg;
     } else if (script_file.empty()) {
       script_file = arg;
     } else {
@@ -447,10 +452,50 @@ int s5run_parse_args::cmd_run() {
     return 1;
   }
 
-  if (!providers.empty()) {
-    std::cerr << "run: --provider is a stub, not implemented yet" << std::endl;
-    for (const auto &p : providers)
-      std::cerr << "  provider: " << p << std::endl;
+  // --provider "host:port,name1,name2": mount remote context entries
+  struct provider_spec_t {
+    std::string host;
+    uint16_t port;
+    std::vector<std::string> names;
+  };
+  std::vector<provider_spec_t> provider_specs;
+  for (const auto &spec : providers) {
+    provider_spec_t ps;
+    std::string::size_type comma = spec.find(',');
+    if (comma == std::string::npos) {
+      std::cerr << "run: bad --provider spec (expected \"host:port,name1,name2\"): "
+                << spec << std::endl;
+      return 1;
+    }
+    std::string host_port_spec = spec.substr(0, comma);
+    std::string names_part = spec.substr(comma + 1);
+    std::string::size_type colon = host_port_spec.rfind(':');
+    if (colon == std::string::npos) {
+      std::cerr << "run: bad --provider host:port: " << host_port_spec << std::endl;
+      return 1;
+    }
+    ps.host = host_port_spec.substr(0, colon);
+    ps.port = (uint16_t)std::atoi(host_port_spec.substr(colon + 1).c_str());
+    if (ps.host.empty() || ps.port == 0) {
+      std::cerr << "run: bad --provider host:port: " << host_port_spec << std::endl;
+      return 1;
+    }
+    // names, comma separated
+    {
+      std::string name;
+      for (char c : names_part) {
+        if (c == ',') {
+          if (!name.empty())
+            ps.names.push_back(name);
+          name.clear();
+        } else {
+          name += c;
+        }
+      }
+      if (!name.empty())
+        ps.names.push_back(name);
+    }
+    provider_specs.push_back(ps);
   }
 
   // host:port
@@ -470,6 +515,8 @@ int s5run_parse_args::cmd_run() {
   try {
     ctx.connect(host, port);
     ctx.register_console(nullptr);
+    for (const auto &ps : provider_specs)
+      ctx.add_provider(ps.host, ps.port, ps.names);
   } catch (const std::exception &e) {
     std::cerr << "run: " << e.what() << std::endl;
     return 1;
