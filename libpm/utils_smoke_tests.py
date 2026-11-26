@@ -41,9 +41,6 @@ Helper tool for smoke tests
 
 import os
 import shutil
-import socket
-import subprocess
-
 from .pm_config import FolderSwitcher
 from .utils_shell import UtilsShell
 
@@ -74,9 +71,10 @@ class UtilsSmokeTests:
         project_dir = os.path.join(ROOT_DIR, "tests", name)
         build_dir = os.path.join(ROOT_DIR, "tmp", name)
         with FolderSwitcher(_log, project_dir) as _:
-            UtilsShell.run_command(
-                ["cmake", "-H" + project_dir, "-B" + build_dir,
-                "-DCMAKE_BUILD_TYPE=Release"],
+            UtilsShell.run_command([
+                "cmake", "-H" + project_dir, "-B" + build_dir,
+                "-DCMAKE_BUILD_TYPE=Release"
+                ],
                 _log=_log,
                 print_output_on_exit=True
             )
@@ -87,7 +85,6 @@ class UtilsSmokeTests:
             )
         _log.info(" ... Compiling done. [PASS]")
         return os.path.join(project_dir, "bin", name)
-
 
     @staticmethod
     def remove_if_dir_exists(_log, _parent_dir, _sub_dir):
@@ -160,6 +157,7 @@ class UtilsSmokeTests:
 
     @staticmethod
     def step_generated_client_code(_log):
+        """ Generating client's libs """
         _log.info("-> Generating client's libs ...")
         _server_bin = os.path.join(ROOT_DIR, "s5run")
         _todo_generate = {
@@ -176,7 +174,7 @@ class UtilsSmokeTests:
         for _lang in _langs:
             _log.info(" ... generate client for %s", _lang)
             UtilsShell.run_command(
-                [_server_bin, "generate", "client", "--language", _lang], # , "--output-dir", _todo_generate[_lang]],
+                [_server_bin, "generate", "client", "--language", _lang],  # , "--output-dir", _todo_generate[_lang]],
                 _log=_log,
                 print_output_on_exit=True
             )
@@ -185,12 +183,13 @@ class UtilsSmokeTests:
 
     @staticmethod
     def step_generated_providers_code(_log):
+        """ Generating provider's libs """
         _log.info("-> Generating provider's libs ...")
         _server_bin = os.path.join(ROOT_DIR, "s5run")
 
         _log.info(" ... generate provider for cpp98")
-        UtilsShell.run_command(
-            [_server_bin, "generate", "provider", "--language", "cpp98",
+        UtilsShell.run_command([
+            _server_bin, "generate", "provider", "--language", "cpp98",
             "--output-dir", os.path.join(ROOT_DIR, "tests", "cpp98-provider", "s5run_provider"),
             "--schema", os.path.join(ROOT_DIR, "tests", "cpp98-provider", "s5run-schema.json")],
             _log=_log,

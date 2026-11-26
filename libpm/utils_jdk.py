@@ -43,9 +43,6 @@ import os
 import shutil
 import subprocess
 
-from .pm_config import FolderSwitcher
-from .utils_shell import UtilsShell
-
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 ROOT_DIR = os.path.join(ROOT_DIR, "..")
 ROOT_DIR = os.path.normpath(ROOT_DIR)

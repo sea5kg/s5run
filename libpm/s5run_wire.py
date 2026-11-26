@@ -149,8 +149,8 @@ class Writer:
                 self.val(e)
         elif isinstance(v, Ref):
             self.b.append(T_REF)
-            self.i32(v.this_id)
-            self.s(v.type)
+            self.i32(v.get_id())
+            self.s(v.get_type())
         else:
             raise WireError(f"cannot encode: {v!r}")
 
@@ -158,11 +158,19 @@ class Writer:
 class Ref:
     """ Ref """
     def __init__(self, this_id, _type):
-        self.this_id = this_id
-        self.type = _type
+        self.__this_id = this_id
+        self.__type = _type
 
     def __repr__(self):
-        return f"Ref({self.this_id}, {self.type!r})"
+        return f"Ref({self.__this_id}, {self.__type!r})"
+
+    def get_id(self):
+        """ return id """
+        return self.__this_id
+
+    def get_type(self):
+        """ return id """
+        return self.__type
 
 
 class Reader:
@@ -210,13 +218,24 @@ class Reader:
         self.p += n
         return v
 
-    def val(self):
-        """ read value """
-        t = self.u8()
+    def __val_simple(self, t):
         if t == T_UNDEF:
             return None
         if t == T_BOOL:
             return self.u8() != 0
+        if t == T_FLOAT32:
+            v = struct.unpack_from('<f', self.d, self.p)[0]
+            self.p += 4
+            return v
+        if t == T_FLOAT64:
+            v = struct.unpack_from('<d', self.d, self.p)[0]
+            self.p += 8
+            return v
+        if t == T_STRING:
+            return self.s()
+        raise WireError(f"bad value tag {t:02X}")
+
+    def __val_int(self, t):
         if t == T_INT8:
             v = struct.unpack_from('<b', self.d, self.p)[0]
             self.p += 1
@@ -231,6 +250,9 @@ class Reader:
             v = struct.unpack_from('<q', self.d, self.p)[0]
             self.p += 8
             return v
+        raise WireError(f"bad value tag {t:02X}")
+
+    def __val_uint(self, t):
         if t == T_UINT8:
             return self.u8()
         if t == T_UINT16:
@@ -241,16 +263,17 @@ class Reader:
             v = struct.unpack_from('<Q', self.d, self.p)[0]
             self.p += 8
             return v
-        if t == T_FLOAT32:
-            v = struct.unpack_from('<f', self.d, self.p)[0]
-            self.p += 4
-            return v
-        if t == T_FLOAT64:
-            v = struct.unpack_from('<d', self.d, self.p)[0]
-            self.p += 8
-            return v
-        if t == T_STRING:
-            return self.s()
+        raise WireError(f"bad value tag {t:02X}")
+
+    def val(self):
+        """ read value """
+        t = self.u8()
+        if t in [T_UNDEF, T_BOOL, T_FLOAT32, T_FLOAT64, T_STRING]:
+            return self.__val_simple(t)
+        if t in [T_INT8, T_INT16, T_INT32, T_INT64]:
+            return self.__val_int(t)
+        if t in [T_UINT8, T_UINT16, T_UINT32, T_UINT64]:
+            return self.__val_uint(t)
         if t == T_ARRAY:
             return [self.val() for _ in range(self.u32())]
         if t == T_OBJECT:

@@ -39,8 +39,6 @@
 
 import sys
 import os
-import shutil
-import logging
 
 
 class UtilsFiles:
@@ -92,7 +90,7 @@ class UtilsFiles:
     @staticmethod
     def safe_read_file_no_empty(_filepath, exit_on_error=True):
         """ __test_utf8_encoding """
-        _lines = UtilsFiles.safe_read_file(_filepath)
+        _lines = UtilsFiles.safe_read_file(_filepath, exit_on_error)
         ret = []
         for _line in _lines:
             _line = _line.strip()

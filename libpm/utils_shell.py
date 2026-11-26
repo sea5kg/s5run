@@ -81,20 +81,14 @@ class UtilsShell:
             shell=False,
             env=env
         ) as _proc:
-            _returncode = _proc.poll()
-            while _returncode is None:
-                _returncode = _proc.poll()
+            # drain the output until EOF (works even if the process
+            # exits before the first poll), then wait for the exit code
+            while True:
                 _line = _proc.stdout.readline()
-                if _line:
-                    _line = _line.decode("utf-8").rstrip()
-                    output.debug(_line)
-            while _line:
-                _line = _proc.stdout.readline()
-                if _line:
-                    _line = _line.decode("utf-8").rstrip()
-                    output.debug(_line)
-                else:
+                if not _line:
                     break
+                output.debug(_line.decode("utf-8").rstrip())
+            _returncode = _proc.wait()
             if _returncode != 0:
                 _msg = "ERROR: returncode " + str(_returncode) + "\n"
                 output.error(_msg)

@@ -61,7 +61,12 @@ class UtilsServer:
             self.__command.append(_cmd)
         # print(self.__command[0])
         self.__basename = os.path.basename(self.__command[0])
-        self.__server_log = open(os.path.join(ROOT_DIR, "tmp", self.__basename + "-server.log"), "w")
+        _log_path = os.path.join(ROOT_DIR, "tmp", self.__basename + "-server.log")
+        self.__server_log = open(  # pylint: disable=consider-using-with
+            _log_path,
+            "w",
+            encoding="utf-8"
+        )
         self.__dir = os.path.dirname(os.path.realpath(self.__command[0]))
 
     @staticmethod
@@ -80,7 +85,7 @@ class UtilsServer:
     def start(self):
         """ start """
         self.__log.info("-> Start server %s on %d port... ", self.__basename, self.__port)
-        self.__proc = subprocess.Popen(
+        self.__proc = subprocess.Popen(  # pylint: disable=consider-using-with
             self.__command,
             cwd=self.__dir,
             stdout=self.__server_log,
@@ -92,9 +97,11 @@ class UtilsServer:
                 s = socket.create_connection(("127.0.0.1", self.__port), timeout=0.5)
                 s.close()
                 return self.__proc
-            except OSError:
+            except OSError as exc:
                 if self.__proc.poll() is not None:
-                    raise SystemExit("!!! FAIL: server exited with code %d" % self.__proc.returncode)
+                    msg = "!!! FAIL: server exited with code " + str(self.__proc.returncode)
+                    msg += ". OSError=" + str(exc)
+                    raise SystemExit(msg)  # pylint: disable=raise-missing-from
                 time.sleep(0.05)
         self.__proc.terminate()
         raise SystemExit("!!! FAIL: server did not start in 10s")
