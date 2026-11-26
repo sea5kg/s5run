@@ -1,27 +1,20 @@
 // Smoke test for the GENERATED C++98 PROVIDER (MassageCrew).
 //
-// Usage: ./cpp98-provider [host] [port]
+// Usage: ./cpp98-provider <host:port>   (required)
 //
-// The provider registers the schema context (getQueue function and the
-// MassageCrew_Queue class) and serves script requests against it.
+// The provider registers the schema context (classes, functions and
+// global objects), starts a server on host:port, waits for a client,
+// serves metadata requests and API calls until the client disconnects.
 
 #include "d2_s5run_provider.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-static const char *K_SCRIPT =
-    "function main(queue_name) {\n"
-    "    var q = getQueue(queue_name);\n"
-    "    q.publish(\"m1\", \"hello\");\n"
-    "    q.publish(\"m2\", \"world\");\n"
-    "    return \"published\";\n"
-    "}\n";
 
 // -----------------------------------------------------------------------
 // MassageCrew implementations
@@ -61,43 +54,47 @@ static void check(bool cond, const std::string &what) {
 }
 
 int main(int argc, char **argv) {
-    std::string host = argc > 1 ? argv[1] : "127.0.0.1";
-    int port = argc > 2 ? atoi(argv[2]) : 7777;
-
-    char address[64];
-    snprintf(address, sizeof(address), "s5run://%s:%d", host.c_str(), port);
-
-    std::printf("== cpp98-provider: MassageCrew\n");
-
-    s5run_provider::context *ctx = s5run_provider::make_context();
-    s5run_provider::remote_server_info server0;
-    server0.set_address(address);
-    ctx->add_server(&server0);
-    ctx->add_class(new MyQueue("preload"));
-    ctx->add_function(new MyGetQueue());
-    ctx->set_script(K_SCRIPT);
-
-    std::vector<s5run_provider::s5run_variable> args;
-    args.push_back(s5run_provider::s5run_variable(std::string("orders")));
-    s5run_provider::run_result result = s5run_provider::run_script(ctx, "main", args);
-    if (result.has_error()) {
-        std::printf("!!! FAIL: %s\n", result.error().c_str());
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <host:port>" << std::endl;
         return 1;
     }
-    std::printf("  script result: %s\n", result.get_value().as_string().c_str());
 
-    // checks
-    check(result.get_value().as_string() == "published", "script result");
+    // host:port (required)
+    std::string host = "127.0.0.1";
+    int port = 7777;
+    {
+        std::string host_port = argv[1];
+        std::string::size_type colon = host_port.rfind(':');
+        if (colon == std::string::npos) {
+            std::cerr << "Usage: " << argv[0] << " <host:port>" << std::endl;
+            return 1;
+        }
+        host = host_port.substr(0, colon);
+        port = atoi(host_port.substr(colon + 1).c_str());
+    }
+
+    std::cout << "== cpp98-provider: MassageCrew on " << host << ":" << port << std::endl;
+
+    // 2.1 register the context (classes, functions, global objects)
+    s5run_provider::context *ctx = s5run_provider::make_context();
+    ctx->add_class(new MyQueue("preload"));
+    ctx->add_function(new MyGetQueue());
+
+    // 2.2 start the server and wait for a client; serve until it disconnects
+    if (!s5run_provider::serve(ctx, host, port)) {
+        std::cout << "!!! FAIL: cannot serve on " << host << ":" << port << std::endl;
+        return 1;
+    }
+    delete ctx;
+
+    // checks: the client published two messages via the API
     check(g_last_queue_name == "orders", "getQueue queue_name");
     check(g_published.size() == 2, "publish count");
     check(g_published[0] == "orders|m1|hello", "publish m1");
     check(g_published[1] == "orders|m2|world", "publish m2");
-    std::printf("  published: %s, %s\n",
-                g_published[0].c_str(),
-                g_published[1].c_str());
+    std::cout << "  published: " << g_published[0] << ", " << g_published[1] << std::endl;
 
-    delete ctx;
-    std::printf("  PASS\n");
-    std::printf("cpp98-provider: all smoke tests passed\n");
+    std::cout << "  PASS" << std::endl;
+    std::cout << "cpp98-provider: all smoke tests passed" << std::endl;
     return 0;
 }

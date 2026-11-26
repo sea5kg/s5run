@@ -107,6 +107,31 @@ struct s5run_property_descriptor {
         : name(n), getter(g), setter(s) {}
 };
 
+struct s5run_arg_metadata {
+    std::string name;
+    std::string type;
+    s5run_arg_metadata() {}
+    s5run_arg_metadata(const std::string &n, const std::string &t) : name(n), type(t) {}
+};
+
+struct s5run_method_metadata {
+    std::string name;
+    std::string return_type;
+    std::vector<s5run_arg_metadata> args;
+};
+
+struct s5run_class_metadata {
+    std::string name;
+    std::vector<s5run_method_metadata> methods;
+    std::vector<s5run_property_descriptor> properties;
+};
+
+struct s5run_function_metadata {
+    std::string name;
+    std::string return_type;
+    std::vector<s5run_arg_metadata> args;
+};
+
 class s5run_object {
 public:
     virtual ~s5run_object() {}
@@ -116,12 +141,16 @@ public:
     virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
         return std::vector<s5run_property_descriptor>();
     }
+    // full class metadata (NULL for custom classes without a base)
+    virtual const s5run_class_metadata *s5run_metadata() const { return 0; }
 };
 
 class s5run_function {
 public:
     virtual ~s5run_function() {}
     virtual std::string s5run_function_name() const = 0;
+    // full function metadata (NULL for custom functions without a base)
+    virtual const s5run_function_metadata *s5run_metadata() const { return 0; }
 };
 
 class base_context_class_MassageCrew_Queue : public s5run_object {
@@ -132,6 +161,8 @@ public:
         std::vector<s5run_property_descriptor> out;
         return out;
     }
+    virtual const s5run_class_metadata *s5run_metadata() const;
+    static const s5run_class_metadata &metadata();
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
         out.push_back("publish");
@@ -144,6 +175,8 @@ class base_context_function_getQueue : public s5run_function {
 public:
     virtual std::string s5run_function_name() const { return "getQueue"; }
     virtual ~base_context_function_getQueue() {}
+    virtual const s5run_function_metadata *s5run_metadata() const;
+    static const s5run_function_metadata &metadata();
     virtual base_context_class_MassageCrew_Queue * execute(const std::string & queue_name) = 0;
 };
 
@@ -160,7 +193,7 @@ public:
 private:
     friend run_result run_script(context *ctx, const std::string &entry,
                                  const std::vector<s5run_variable> &args);
-    friend bool serve(context *ctx);
+    friend bool serve(context *ctx, const std::string &host, int port);
     context_impl *m_impl;
 };
 
@@ -182,7 +215,7 @@ run_result run_script(context *ctx, const std::string &entry, const std::vector<
 // Provider mode: connect, register the context and serve incoming
 // callback requests until the connection closes.
 // Returns false on a disconnect or an error.
-bool serve(context *ctx);
+bool serve(context *ctx, const std::string &host, int port);
 
 } // namespace s5run_provider
 

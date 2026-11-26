@@ -743,6 +743,7 @@ void context::context_impl::add_object(s5run_object *obj) {
     const std::vector<s5run_property_descriptor> props = obj->s5run_property_descriptors();
     i32 id = ++m_next_this_id;
     store_instance(cls, id, obj);
+
     if (m_sock != S5RUN_BAD_SOCKET) {
         Writer w;
         w.put_string(cls); w.put_i32(id); w.put_string(cls);
@@ -756,6 +757,7 @@ void context::context_impl::add_object(s5run_object *obj) {
     PendingObject o; o.name = cls; o.this_id = id; o.methods = methods; o.props = props;
     m_pending_objects.push_back(o);
 }
+
 
 void context::context_impl::add_function(s5run_function *fn) {
     if (fn->s5run_function_name() == "GetFile") {
@@ -785,6 +787,7 @@ void context::context_impl::add_function(s5run_function *fn) {
     if (fn->s5run_function_name() == "GetServerPort") {
         m_fn_GetServerPort = (base_context_function_GetServerPort *)fn;
     }
+
     if (m_sock != S5RUN_BAD_SOCKET) {
         Writer w;
         w.put_string(fn->s5run_function_name());

@@ -46,6 +46,7 @@ import glob
 import json
 import os
 import shutil
+import struct
 import socket
 import subprocess
 import sys
@@ -112,6 +113,42 @@ def test_cpp_gen_client(cpp_version, port):
     LOG.get_logger().info(" ... %s-client: [PASS]", cpp_version)
 
 
+def _provider_read_exact(sock, n):
+    b = b""
+    while len(b) < n:
+        c = sock.recv(n - len(b))
+        if not c:
+            raise RuntimeError("provider: connection closed")
+        b += c
+    return b
+
+def _provider_read_frame(sock):
+    head = _provider_read_exact(sock, 5)
+    length = struct.unpack(">I", head[:4])[0]
+    return head[4], _provider_read_exact(sock, length - 1)
+
+def _provider_send_frame(sock, msg_type, body):
+    payload = bytes([msg_type]) + body
+    sock.sendall(struct.pack(">I", len(payload)) + payload)
+
+def _provider_put_str(v):
+    raw = v.encode()
+    if len(raw) <= 0xFF:
+        return bytes([0x00, len(raw)]) + raw
+    if len(raw) <= 0xFFFF:
+        return bytes([0x01]) + struct.pack("<H", len(raw)) + raw
+    return bytes([0x02]) + struct.pack("<I", len(raw)) + raw
+
+def _provider_put_int64(v):
+    if -128 <= v <= 127:
+        return bytes([0x02, v & 0xFF])
+    if -32768 <= v <= 32767:
+        return bytes([0x03]) + struct.pack("<h", v)
+    return bytes([0x04]) + struct.pack("<i", v)
+
+def _provider_put_str_value(v):
+    return bytes([0x0C]) + _provider_put_str(v)
+
 def test_cpp98_provider(port):
     LOG.get_logger().info(" -> cpp provider test: cpp98-provider")
     provider_dir = os.path.join(ROOT, "tests", "cpp98-provider")
@@ -129,13 +166,93 @@ def test_cpp98_provider(port):
             _log=LOG.get_logger(),
             print_output_on_exit=True
         )
-        LOG.get_logger().info(" ... cpp98-provider: scenarios")
-        ret, _ = UtilsShell.run_command(
-            [provider_bin, "127.0.0.1", str(port)],
-            _log=LOG.get_logger(),
-            print_output_on_exit=True
-        )
+
+    # the provider serves its own port (not the s5run server port)
+    provider_port = _free_port()
+    LOG.get_logger().info(" ... cpp98-provider: start on 127.0.0.1:%d", provider_port)
+    proc = subprocess.Popen([provider_bin, "127.0.0.1:" + str(provider_port)],
+                            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        # wait for the listen socket
+        for _ in range(50):
+            try:
+                sock = socket.create_connection(("127.0.0.1", provider_port), timeout=2)
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("cpp98-provider: cannot connect")
+
+        # hello
+        t, b = _provider_read_frame(sock)
+        assert t == 0x0F, "expected provider hello, got 0x%02x" % t
+        hello = b.decode()
+        assert hello.startswith("s5run "), hello
+        print("      provider hello: %s" % hello)
+
+        # metadata: getQueue (function)
+        _provider_send_frame(sock, 0x10, _provider_put_str("getQueue"))
+        t, b = _provider_read_frame(sock)
+        assert t == 0x11 and b[0] == 1 and b[1] == 1, "bad getQueue meta"
+        assert b"getQueue" in b and b"MassageCrew_Queue" in b and b"queue_name" in b
+        print("      meta getQueue: ok")
+
+        # metadata: MassageCrew_Queue (class with publish)
+        _provider_send_frame(sock, 0x10, _provider_put_str("MassageCrew_Queue"))
+        t, b = _provider_read_frame(sock)
+        assert t == 0x11 and b[0] == 1 and b[1] == 2, "bad class meta"
+        assert b"publish" in b and b"msg_id" in b and b"msg_text" in b
+        print("      meta MassageCrew_Queue: ok")
+
+        # metadata: list all
+        _provider_send_frame(sock, 0x10, _provider_put_str(""))
+        t, b = _provider_read_frame(sock)
+        assert t == 0x11 and b[0] == 2, "expected 2 entries"
+        print("      meta list: %d entries" % b[0])
+
+        # metadata: unknown
+        _provider_send_frame(sock, 0x10, _provider_put_str("nope"))
+        t, b = _provider_read_frame(sock)
+        assert t == 0x11 and b[0] == 0, "expected not-found"
+        print("      meta unknown: ok")
+
+        # invoke getQueue("orders") -> ref
+        body = struct.pack("<i", 1) + _provider_put_str("getQueue") \
+            + struct.pack("<I", 1) + _provider_put_str_value("orders")
+        _provider_send_frame(sock, 0x03, body)
+        t, b = _provider_read_frame(sock)
+        assert t == 0x04 and b[4] == 1, "getQueue invoke failed"
+        assert b[5] == 0x0F, "expected a ref"
+        this_id = struct.unpack("<i", b[6:10])[0]
+        print("      invoke getQueue: this_id=%d" % this_id)
+
+        # invoke publish(this_id, "m1", "hello")
+        body = struct.pack("<i", 2) + _provider_put_str("publish") \
+            + struct.pack("<I", 3) + _provider_put_int64(this_id) \
+            + _provider_put_str_value("m1") + _provider_put_str_value("hello")
+        _provider_send_frame(sock, 0x03, body)
+        t, b = _provider_read_frame(sock)
+        assert t == 0x04 and b[4] == 1, "publish m1 failed"
+
+        # invoke publish(this_id, "m2", "world")
+        body = struct.pack("<i", 3) + _provider_put_str("publish") \
+            + struct.pack("<I", 3) + _provider_put_int64(this_id) \
+            + _provider_put_str_value("m2") + _provider_put_str_value("world")
+        _provider_send_frame(sock, 0x03, body)
+        t, b = _provider_read_frame(sock)
+        assert t == 0x04 and b[4] == 1, "publish m2 failed"
+        print("      invoke publish m1/m2: ok")
+
+        sock.close()
+
+        # the provider exits after the client disconnects (with its own checks)
+        out, _ = proc.communicate(timeout=30)
+        ret = proc.returncode
+        print("      provider output: %s" % out.decode().strip().replace("\n", " | "))
         assert ret == 0, "cpp98-provider failed with code %d" % ret
+    finally:
+        if proc.poll() is None:
+            proc.kill()
     LOG.get_logger().info(" ... cpp98-provider: [PASS]")
 
 

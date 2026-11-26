@@ -404,6 +404,17 @@ static const char *UNDEF_WIN32_MACROS =
   "#undef FindWindow\n"
   "#undef GetTickCount\n";
 
+static std::string s5run_replace_token(const std::string &text, const std::string &token,
+                                        const std::string &replacement) {
+  std::string out = text;
+  std::string::size_type pos = 0;
+  while ((pos = out.find(token, pos)) != std::string::npos) {
+    out.replace(pos, token.size(), replacement);
+    pos += replacement.size();
+  }
+  return out;
+}
+
 static std::string include_guard(const std::string &ns) {
   std::string out;
   for (size_t i = 0; i < ns.size(); ++i) {
@@ -480,14 +491,44 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    s5run_property_descriptor(const std::string &n, const std::string &g, const std::string &s)\n";
   out += "        : name(n), getter(g), setter(s) {}\n";
   out += "};\n\n";
+  if (m_provider) {
+    out += "struct s5run_arg_metadata {\n";
+    out += "    std::string name;\n    std::string type;\n";
+    out += "    s5run_arg_metadata() {}\n";
+    out += "    s5run_arg_metadata(const std::string &n, const std::string &t) : name(n), type(t) {}\n";
+    out += "};\n\n";
+    out += "struct s5run_method_metadata {\n";
+    out += "    std::string name;\n    std::string return_type;\n";
+    out += "    std::vector<s5run_arg_metadata> args;\n";
+    out += "};\n\n";
+    out += "struct s5run_class_metadata {\n";
+    out += "    std::string name;\n";
+    out += "    std::vector<s5run_method_metadata> methods;\n";
+    out += "    std::vector<s5run_property_descriptor> properties;\n";
+    out += "};\n\n";
+    out += "struct s5run_function_metadata {\n";
+    out += "    std::string name;\n    std::string return_type;\n";
+    out += "    std::vector<s5run_arg_metadata> args;\n";
+    out += "};\n\n";
+  }
   out += "class s5run_object {\npublic:\n    virtual ~s5run_object() {}\n";
   out += "    virtual std::string s5run_class_name() const = 0;\n";
   out += "    virtual std::vector<std::string> s5run_method_names() const = 0;\n";
   out += "    // property descriptors {name, getter, setter}; JS: obj.<name> read/write\n";
   out += "    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {\n";
-  out += "        return std::vector<s5run_property_descriptor>();\n    }\n};\n\n";
+  out += "        return std::vector<s5run_property_descriptor>();\n    }\n";
+  if (m_provider) {
+    out += "    // full class metadata (NULL for custom classes without a base)\n";
+    out += "    virtual const s5run_class_metadata *s5run_metadata() const { return 0; }\n";
+  }
+  out += "};\n\n";
   out += "class s5run_function {\npublic:\n    virtual ~s5run_function() {}\n";
-  out += "    virtual std::string s5run_function_name() const = 0;\n};\n\n";
+  out += "    virtual std::string s5run_function_name() const = 0;\n";
+  if (m_provider) {
+    out += "    // full function metadata (NULL for custom functions without a base)\n";
+    out += "    virtual const s5run_function_metadata *s5run_metadata() const { return 0; }\n";
+  }
+  out += "};\n\n";
 
   for (size_t i = 0; i < s.classes.size(); ++i) {
     const schema_class &c = s.classes[i];
@@ -501,6 +542,10 @@ std::string generator_cpp98::generate_header(const schema &s) const {
               p.getter + "\", \"" + p.setter + "\"));\n";
     }
     out += "        return out;\n    }\n";
+    if (m_provider) {
+      out += "    virtual const s5run_class_metadata *s5run_metadata() const;\n";
+      out += "    static const s5run_class_metadata &metadata();\n";
+    }
     out += "    virtual std::vector<std::string> s5run_method_names() const {\n";
     out += "        std::vector<std::string> out;\n";
     for (size_t j = 0; j < c.methods.size(); ++j)
@@ -531,6 +576,10 @@ std::string generator_cpp98::generate_header(const schema &s) const {
     out += "class base_context_function_" + f.name + " : public s5run_function {\npublic:\n";
     out += "    virtual std::string s5run_function_name() const { return \"" + f.name + "\"; }\n";
     out += "    virtual ~base_context_function_" + f.name + "() {}\n";
+    if (m_provider) {
+      out += "    virtual const s5run_function_metadata *s5run_metadata() const;\n";
+      out += "    static const s5run_function_metadata &metadata();\n";
+    }
     out += "    virtual " + ret + " execute(" + args + ") = 0;\n};\n\n";
   }
 
@@ -545,7 +594,7 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    friend run_result run_script(context *ctx, const std::string &entry,\n";
   out += "                                 const std::vector<s5run_variable> &args);\n";
   if (m_provider) {
-    out += "    friend bool serve(context *ctx);\n";
+    out += "    friend bool serve(context *ctx, const std::string &host, int port);\n";
   }
   out += "    context_impl *m_impl;\n};\n\n";
 
@@ -564,7 +613,7 @@ std::string generator_cpp98::generate_header(const schema &s) const {
     out += "// Provider mode: connect, register the context and serve incoming\n";
     out += "// callback requests until the connection closes.\n";
     out += "// Returns false on a disconnect or an error.\n";
-    out += "bool serve(context *ctx);\n\n";
+    out += "bool serve(context *ctx, const std::string &host, int port);\n\n";
   }
   out += "} // namespace " + ns + "\n\n";
   out += "#endif // " + guard + "\n";
@@ -768,6 +817,50 @@ std::string generator_cpp98::generate_impl(const schema &s) const {
   // Platform layer
   out += PLATFORM_LAYER;
   out += "\n";
+
+  if (m_provider) {
+    for (const auto &c : s.classes) {
+      out += "const s5run_class_metadata &base_context_class_" + c.name + "::metadata() {\n";
+      out += "    static s5run_class_metadata meta;\n";
+      out += "    if (meta.name.empty()) {\n";
+      out += "        meta.name = \"" + c.name + "\";\n";
+      for (const auto &m : c.methods) {
+        out += "        {\n";
+        out += "            s5run_method_metadata mm;\n";
+        out += "            mm.name = \"" + m.name + "\";\n";
+        out += "            mm.return_type = \"" + m.return_type + "\";\n";
+        for (const auto &a : m.arguments) {
+          out += "            mm.args.push_back(s5run_arg_metadata(\"" + a.name + "\", \"" + a.type + "\"));\n";
+        }
+        out += "            meta.methods.push_back(mm);\n";
+        out += "        }\n";
+      }
+      for (const auto &p : c.properties) {
+        out += "        meta.properties.push_back(s5run_property_descriptor(\"" + p.name + "\", \"" +
+                p.getter + "\", \"" + p.setter + "\"));\n";
+      }
+      out += "    }\n";
+      out += "    return meta;\n";
+      out += "}\n";
+      out += "const s5run_class_metadata *base_context_class_" + c.name +
+             "::s5run_metadata() const { return &metadata(); }\n\n";
+    }
+    for (const auto &f : s.functions) {
+      out += "const s5run_function_metadata &base_context_function_" + f.name + "::metadata() {\n";
+      out += "    static s5run_function_metadata meta;\n";
+      out += "    if (meta.name.empty()) {\n";
+      out += "        meta.name = \"" + f.name + "\";\n";
+      out += "        meta.return_type = \"" + f.return_type + "\";\n";
+      for (const auto &a : f.arguments) {
+        out += "        meta.args.push_back(s5run_arg_metadata(\"" + a.name + "\", \"" + a.type + "\"));\n";
+      }
+      out += "    }\n";
+      out += "    return meta;\n";
+      out += "}\n";
+      out += "const s5run_function_metadata *base_context_function_" + f.name +
+             "::s5run_metadata() const { return &metadata(); }\n\n";
+    }
+  }
 
   // Codec
   out += CODEC_TEXT;
@@ -1130,7 +1223,12 @@ int remote_server_info::get_port() const { return m_port; }
   out += "    void add_function(s5run_function *fn);\n";
   out += "    run_result run(const std::string &entry, const std::vector<s5run_variable> &args);\n";
   if (m_provider) {
-    out += "    bool serve_loop();\n";
+    out += "    // Provider: listen on host:port, serve one client until it\n";
+    out += "    // disconnects (metadata requests + API calls).\n";
+    out += "    bool serve(const std::string &host, int port);\n";
+    out += "    // registry fills (metadata comes from the generated base classes)\n";
+    out += "    void provider_note_class(s5run_object *sample);\n";
+    out += "    void provider_note_function(s5run_function *fn);\n";
   }
   out += "\n";
   out += "private:\n";
@@ -1166,6 +1264,17 @@ int remote_server_info::get_port() const { return m_port; }
   out += "    std::vector<PendingObject> m_pending_objects;\n";
   out += "    std::vector<std::string> m_pending_functions;\n";
   out += "    sock_t m_sock;\n    i32 m_next_this_id;\n";
+  if (m_provider) {
+    out += "    // provider metadata registry (filled by add_class/add_object/add_function)\n";
+    out += "    std::map<std::string, s5run_class_metadata> m_meta_classes;\n";
+    out += "    std::map<std::string, s5run_function_metadata> m_meta_functions;\n";
+    out += "    // global objects: name -> (class metadata, this_id)\n";
+    out += "    struct MetaObject { s5run_class_metadata meta; i32 this_id; };\n";
+    out += "    std::map<std::string, MetaObject> m_meta_objects;\n";
+    out += "    void handle_meta_req(const std::vector<u8> &body);\n";
+    out += "    void send_meta_class(Writer &w, u8 kind, const s5run_class_metadata &meta, i32 this_id);\n";
+    out += "    void send_meta_function(Writer &w, const s5run_function_metadata &meta);\n";
+  }
   for (auto &f : s.functions)
     out += "    base_context_function_" + f.name + " *m_fn_" + f.name + ";\n";
   for (auto &c : s.classes)
@@ -1173,7 +1282,8 @@ int remote_server_info::get_port() const { return m_port; }
   out += "};\n\n";
 
   // Static methods of context_impl
-  out += R"CODE(
+  {
+    std::string block = R"CODE(
 void context::context_impl::set_script(const std::string &script) { m_script = script; }
 void context::context_impl::add_server(remote_server_info *server) { m_servers.push_back(server); }
 
@@ -1210,6 +1320,7 @@ void context::context_impl::add_object(s5run_object *obj) {
     const std::vector<s5run_property_descriptor> props = obj->s5run_property_descriptors();
     i32 id = ++m_next_this_id;
     store_instance(cls, id, obj);
+@@PROVIDER_OBJECT@@
     if (m_sock != S5RUN_BAD_SOCKET) {
         Writer w;
         w.put_string(cls); w.put_i32(id); w.put_string(cls);
@@ -1224,15 +1335,45 @@ void context::context_impl::add_object(s5run_object *obj) {
     m_pending_objects.push_back(o);
 }
 
+@@PROVIDER_FUNCTION@@
 void context::context_impl::add_function(s5run_function *fn) {
 )CODE";
+    if (m_provider) {
+      block = s5run_replace_token(block, "@@PROVIDER_OBJECT@@", R"CODE(    if (obj->s5run_metadata() != 0) {
+        MetaObject mo;
+        mo.meta = *obj->s5run_metadata();
+        mo.this_id = id;
+        m_meta_objects[mo.meta.name] = mo;
+    }
+)CODE");
+      block = s5run_replace_token(block, "@@PROVIDER_FUNCTION@@", R"CODE(void context::context_impl::provider_note_class(s5run_object *sample) {
+    const s5run_class_metadata *m = sample->s5run_metadata();
+    if (m != 0)
+        m_meta_classes[m->name] = *m;
+}
+
+void context::context_impl::provider_note_function(s5run_function *fn) {
+    const s5run_function_metadata *m = fn->s5run_metadata();
+    if (m != 0)
+        m_meta_functions[m->name] = *m;
+}
+
+)CODE");
+    } else {
+      block = s5run_replace_token(block, "@@PROVIDER_OBJECT@@", "");
+      block = s5run_replace_token(block, "@@PROVIDER_FUNCTION@@", "");
+    }
+    out += block;
+  }
 
   // add_function: if/else chain by name
   for (auto &f : s.functions) {
     out += "    if (fn->s5run_function_name() == \"" + f.name + "\") {\n";
     out += "        m_fn_" + f.name + " = (base_context_function_" + f.name + " *)fn;\n    }\n";
   }
-  out += R"CODE(    if (m_sock != S5RUN_BAD_SOCKET) {
+  {
+    std::string block = R"CODE(@@PROVIDER_NOTE_FN@@
+    if (m_sock != S5RUN_BAD_SOCKET) {
         Writer w;
         w.put_string(fn->s5run_function_name());
         send_message(M_REGISTER_FUNC, w.data());
@@ -1244,6 +1385,12 @@ void context::context_impl::add_function(s5run_function *fn) {
 
 void context::context_impl::store_instance(const std::string &cls, i32 id, s5run_object *obj) {
 )CODE";
+    if (m_provider)
+      block = s5run_replace_token(block, "@@PROVIDER_NOTE_FN@@", "    provider_note_function(fn);\n");
+    else
+      block = s5run_replace_token(block, "@@PROVIDER_NOTE_FN@@", "");
+    out += block;
+  }
   for (auto &c : s.classes) {
     out += "    if (cls == \"" + c.name + "\") { m_instances_" + c.name + "[id] = (base_context_class_" + c.name + " *)obj; return; }\n";
   }
@@ -1475,36 +1622,139 @@ run_result context::context_impl::run(const std::string &entry,
   out += "context::~context() { delete m_impl; }\n\n";
   out += "void context::set_script(const std::string &s) { m_impl->set_script(s); }\n";
   out += "void context::add_server(remote_server_info *s) { m_impl->add_server(s); }\n";
-  out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }\n";
+  if (m_provider) {
+    out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); m_impl->provider_note_class(o); }\n";
+  } else {
+    out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }\n";
+  }
   out += "void context::add_object(s5run_object *o) { m_impl->add_object(o); }\n";
   out += "void context::add_function(s5run_function *f) { m_impl->add_function(f); }\n\n";
   out += "context * make_context() { return new context(); }\n\n";
   out += "run_result run_script(context *ctx, const std::string &entry, ";
   out += "const std::vector<s5run_variable> &args) { return ctx->m_impl->run(entry, args); }\n\n";
   if (m_provider) {
-    out += R"CODE(bool context::context_impl::serve_loop() {
-    try {
-        connect();
-        flush_pending();
-    } catch (const std::exception &) {
+    out += R"CODE(// ---- provider: metadata + serving ----
+
+enum { M_PROVIDER_META_REQ = 0x10, M_PROVIDER_META_RESP = 0x11 };
+
+void context::context_impl::send_meta_function(Writer &w, const s5run_function_metadata &meta) {
+    w.put_u8(1); // function
+    w.put_string(meta.name);
+    w.put_string(meta.return_type);
+    w.put_u32((u32)meta.args.size());
+    for (std::size_t i = 0; i < meta.args.size(); ++i) {
+        w.put_string(meta.args[i].name);
+        w.put_string(meta.args[i].type);
+    }
+}
+
+void context::context_impl::send_meta_class(Writer &w, u8 kind,
+                                             const s5run_class_metadata &meta, i32 this_id) {
+    w.put_u8(kind);
+    w.put_string(meta.name);
+    w.put_u32((u32)meta.methods.size());
+    for (std::size_t i = 0; i < meta.methods.size(); ++i) {
+        w.put_string(meta.methods[i].name);
+        w.put_string(meta.methods[i].return_type);
+        w.put_u32((u32)meta.methods[i].args.size());
+        for (std::size_t j = 0; j < meta.methods[i].args.size(); ++j) {
+            w.put_string(meta.methods[i].args[j].name);
+            w.put_string(meta.methods[i].args[j].type);
+        }
+    }
+    s5run__put_property_descriptors(w, meta.properties);
+    if (kind == 3)
+        w.put_i32(this_id);
+}
+
+void context::context_impl::handle_meta_req(const std::vector<u8> &body) {
+    Reader r(body.empty() ? 0 : &body[0], body.size());
+    std::string name = r.get_string();
+    Writer w;
+    if (name.empty()) {
+        // list everything registered
+        u8 count = (u8)(m_meta_functions.size() + m_meta_classes.size() + m_meta_objects.size());
+        w.put_u8(count);
+        for (std::map<std::string, s5run_function_metadata>::const_iterator it = m_meta_functions.begin();
+             it != m_meta_functions.end(); ++it)
+            send_meta_function(w, it->second);
+        for (std::map<std::string, MetaObject>::const_iterator it = m_meta_objects.begin();
+             it != m_meta_objects.end(); ++it)
+            send_meta_class(w, 3, it->second.meta, it->second.this_id);
+        for (std::map<std::string, s5run_class_metadata>::const_iterator it = m_meta_classes.begin();
+             it != m_meta_classes.end(); ++it)
+            send_meta_class(w, 2, it->second, 0);
+    } else if (m_meta_functions.count(name) != 0) {
+        w.put_u8(1);
+        send_meta_function(w, m_meta_functions[name]);
+    } else if (m_meta_objects.count(name) != 0) {
+        w.put_u8(1);
+        send_meta_class(w, 3, m_meta_objects[name].meta, m_meta_objects[name].this_id);
+    } else if (m_meta_classes.count(name) != 0) {
+        w.put_u8(1);
+        send_meta_class(w, 2, m_meta_classes[name], 0);
+    } else {
+        w.put_u8(0); // not found
+    }
+    send_message(M_PROVIDER_META_RESP, w.data());
+}
+
+bool context::context_impl::serve(const std::string &host, int port) {
+    disconnect();
+
+    sock_t lfd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (lfd == S5RUN_BAD_SOCKET)
+        return false;
+    int opt = 1;
+    ::setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
+
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((u16)port);
+    addr.sin_addr.s_addr = host.empty() ? htonl(INADDR_ANY) : inet_addr(host.c_str());
+    if (::bind(lfd, (sockaddr *)&addr, sizeof(addr)) < 0) {
+        s5run_close_socket(lfd);
         return false;
     }
+    if (::listen(lfd, 1) < 0) {
+        s5run_close_socket(lfd);
+        return false;
+    }
+    m_sock = ::accept(lfd, 0, 0);
+    s5run_close_socket(lfd);
+    if (m_sock == S5RUN_BAD_SOCKET)
+        return false;
+    s5run_set_nodelay(m_sock);
+
+    // hello: "s5run <version> <protocol>"
+    {
+        std::string hello = std::string("s5run ") + client_version() + " 2";
+        std::vector<u8> hb(hello.begin(), hello.end());
+        send_message(M_SERVER_HELLO, hb);
+    }
+
     while (true) {
         u8 msg_type = 0;
         std::vector<u8> body;
         if (!read_frame(m_sock, msg_type, body))
-            return false; // connection closed
+            break; // client disconnected
+        if (msg_type == M_PROVIDER_META_REQ) {
+            handle_meta_req(body);
+            continue;
+        }
         if (msg_type == M_CALLBACK_REQ) {
             try { dispatch_callback(body); }
             catch (const std::exception &) {}
             continue;
         }
-        // unexpected message for a provider
-        return false;
+        break; // unexpected message
     }
+    disconnect();
+    return true;
 }
 
-bool serve(context *ctx) { return ctx->m_impl->serve_loop(); }
+bool serve(context *ctx, const std::string &host, int port) { return ctx->m_impl->serve(host, port); }
 
 )CODE";
   }

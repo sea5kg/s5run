@@ -59,6 +59,25 @@ enum protocol_msg_type : uint8_t {
   M_JOB_RESULT_RESP = 0x0E, // server -> client: u8 status, [u8 ok, value | error]
   M_SERVER_HELLO = 0x0F,   // server -> client (first frame): plain text
                            // "s5run <server-version> <protocol-version>"
+
+  // ---- provider protocol ----
+  // The provider is a backend server: it publishes the schema context
+  // metadata and serves API calls (reuses M_CALLBACK_REQ/M_CALLBACK_RESP
+  // for invocations: req id, method, [this_id, args...]).
+
+  M_PROVIDER_META_REQ = 0x10, // client -> provider: str name ("" = list all)
+  M_PROVIDER_META_RESP = 0x11, // provider -> client:
+                              //   u8 count, entries[]:
+                              //     u8 kind (1=function, 2=class, 3=global object)
+                              //     str name
+                              //     [function] str return_type; u32 argc;
+                              //                { str arg_name; str arg_type }[]
+                              //     [class/object] u32 method_count;
+                              //                { str name; str return_type; u32 argc;
+                              //                  { str arg_name; str arg_type }[] }[]
+                              //                u32 prop_count;
+                              //                { str name; str getter; str setter }[]
+                              //     [object] i32 this_id
 };
 
 } // namespace s5run
