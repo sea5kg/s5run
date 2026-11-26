@@ -120,7 +120,8 @@ def _decode_value(buf: _Reader) -> Any:
 def _value_to_string(v: Any) -> str:
     match v:
         case None:
-            return "null"
+            # Python None decodes from T_UNDEFINED -> JS undefined
+            return "undefined"
         case bool():
             return "true" if v else "false"
         case int() | float():

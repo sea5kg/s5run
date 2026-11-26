@@ -285,7 +285,9 @@ public class Main {
             }
             S5RunResult result = S5RunContext.runScript(ctx, "main", args);
             if (result.hasError()) {
-                throw new RuntimeException("unexpected error: " + result.error());
+                System.out.println("  SCRIPT ERROR: " + result.error());
+                System.out.flush();
+                throw new RuntimeException(test.name + ": script error: " + result.error());
             }
             System.out.println("  duration: " + result.durationMs() + " ms");
 

@@ -195,7 +195,8 @@ def scenarios(address: str) -> None:
             result = m.run_script(ctx, "main",
                                   [_parse_input_argument(a) for a in test.input_arguments])
             if result.has_error:
-                raise RuntimeError("unexpected error: " + result.error)
+                print(f"  SCRIPT ERROR: {result.error}", flush=True)
+                raise RuntimeError(f"{test.name}: script error: {result.error}")
             print(f"  duration: {result.duration_ms:.1f} ms")
 
             # return value: compare with output_return_expected.txt

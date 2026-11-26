@@ -350,7 +350,9 @@ int main(int argc, char **argv) {
         args.push_back(parse_input_argument(raw));
       std::shared_ptr<s5run_cli_example::run_result> result = s5run_cli_example::run_script(ctx, "main", args);
       if (result->has_error()) {
-        throw std::runtime_error("unexpected error: " + result->error());
+        std::printf("  SCRIPT ERROR: %s\n", result->error().c_str());
+        std::fflush(stdout);
+        throw std::runtime_error(test.name + ": script error: " + result->error());
       }
       std::printf("  duration: %lld ms\n", (long long)result->duration());
 

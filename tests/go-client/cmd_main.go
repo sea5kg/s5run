@@ -254,7 +254,8 @@ func main() {
 			}
 			result := s5runcli.RunScript(ctx, "main", args)
 			if result.HasError {
-				fmt.Fprintf(os.Stderr, "!!! FAIL: unexpected error: %s\n", result.Error)
+				fmt.Printf("  SCRIPT ERROR: %s\n", result.Error)
+				fmt.Fprintf(os.Stderr, "!!! FAIL: %s: script error: %s\n", test.name, result.Error)
 				os.Exit(1)
 			}
 			fmt.Printf("  duration: %dms\n", result.DurationMs)
