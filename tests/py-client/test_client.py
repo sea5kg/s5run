@@ -11,7 +11,75 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import libs5run_cli_example as m
 
-K_SCRIPT = (Path(__file__).resolve().parent.parent / "__test_data/client_scenario0/script.js").read_text()
+# ---- data-driven scenarios (like the cpp/java/go clients) ----
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Scenario:
+    name: str
+    script_js: str
+    output_console_expected: str
+    output_return_expected: str
+    input_arguments: list
+
+
+def _split_lines(text: str) -> list:
+    return [ln.rstrip("\r") for ln in text.split("\n") if ln.strip()]
+
+
+def _load_scenario(base: Path) -> Scenario:
+    def read(name: str, default: str = "") -> str:
+        p = base / name
+        return p.read_text(encoding="utf-8") if p.is_file() else default
+
+    script = read("script.js", None)
+    if script is None:
+        raise RuntimeError(f"cannot find {base / 'script.js'}")
+    return Scenario(
+        name=base.name,
+        script_js=script,
+        output_console_expected=read("output_console_expected.txt"),
+        output_return_expected=read("output_return_expected.txt"),
+        input_arguments=_split_lines(read("input_arguments.txt")),
+    )
+
+
+def _list_scenarios() -> list:
+    root = Path(__file__).resolve().parent.parent / "__test_data"
+    out = [ _load_scenario(d) for d in sorted(root.iterdir())
+            if d.is_dir() and d.name.startswith("client_") and "_scenario" in d.name ]
+    if not out:
+        raise RuntimeError("no client_scenarioX found in __test_data")
+    return out
+
+
+def _parse_input_argument(raw: str):
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    if raw == "true":
+        return True
+    if raw == "false":
+        return False
+    return raw
+
+
+def _check_scenario_return(name: str, got, expected_raw: str) -> None:
+    expected = _split_lines(expected_raw)
+    got_lines = _split_lines(m.to_string_s5run(got))
+    if got_lines == expected:
+        return
+    n = max(len(got_lines), len(expected))
+    details = "\n".join(
+        f'  line {i + 1}: got "{got_lines[i] if i < len(got_lines) else "<missing>"}" '
+        f'expected "{expected[i] if i < len(expected) else "<missing>"}"'
+        for i in range(n)
+        if (got_lines[i] if i < len(got_lines) else None) != (expected[i] if i < len(expected) else None)
+    )
+    raise RuntimeError(f"{name}: return value mismatch:\n{details}")
 
 
 class MyFile(m.File):
@@ -106,41 +174,59 @@ def check(cond: bool, what: str) -> None:
         raise RuntimeError(f"unexpected {what}")
 
 
-def happy_path(address: str) -> None:
-    print("== py-gen-client: happy path")
-    with m.Context() as ctx:
-        ctx.add_class(MyFile(1024)) \
-           .add_function(MyGetFile()) \
-           .add_function(MyGetFileSize()) \
-           .add_function(MyGetTimeNow()) \
-           .add_function(MyGetOpenedFiles()) \
-           .add_function(MyCloseFiles()) \
-           .add_function(MyGetPi()) \
-           .add_function(MyGetServerPort()) \
-           .add_object(MyFileSystem()) \
-           .add_object(MyConsole()) \
-           .add_server(m.RemoteServerInfo().address(address).api_key("some api key runner")) \
-           .set_script(K_SCRIPT)
+def scenarios(address: str) -> None:
+    for test in _list_scenarios():
+        print(f"== py-gen-client: {test.name}")
+        with m.Context() as ctx:
+            ctx.add_class(MyFile(1024)) \
+               .add_function(MyGetFile()) \
+               .add_function(MyGetFileSize()) \
+               .add_function(MyGetTimeNow()) \
+               .add_function(MyGetOpenedFiles()) \
+               .add_function(MyCloseFiles()) \
+               .add_function(MyGetPi()) \
+               .add_function(MyGetServerPort()) \
+               .add_object(MyFileSystem()) \
+               .add_object(MyConsole()) \
+               .add_server(m.RemoteServerInfo().address(address).api_key("some api key runner")) \
+               .set_script(test.script_js)
 
-        result = m.run_script(ctx, "main", ["test.txt"])
-        if result.has_error:
-            raise RuntimeError("unexpected error: " + result.error)
-        print(f"  duration: {result.duration_ms:.1f} ms")
+            MyConsole.logs.clear()
+            result = m.run_script(ctx, "main",
+                                  [_parse_input_argument(a) for a in test.input_arguments])
+            if result.has_error:
+                raise RuntimeError("unexpected error: " + result.error)
+            print(f"  duration: {result.duration_ms:.1f} ms")
 
-        check(result.value["size"] == 1024, "size")
-        check(result.value["sizeByRef"] == 1024, "sizeByRef")
-        check(result.value["openedCount"] == 2, "openedCount")
-        check(result.value["openedSum"] == 300, "openedSum")
-        check(result.value["fileListCount"] == 3, "fileListCount")
-        check(result.value["time"] == 1737000000, "time")
-        check(MyGetFile.last_path == "test.txt", "GetFile path")
-        check(MyFileSystem.last_path == "test.txt", "FileSystem.GetList path")
-        check(MyConsole.logs[0] == "hello test.txt 1 2", "console.log")
-        check(MyConsole.logs[1] == "name: example.txt", "property Name getter")
-        check(MyConsole.logs[2] == "bufsize: 4096", "property BufferSize getter")
-        check(MyConsole.logs[3] == "bufsize-after: 2048", "property BufferSize setter")
-        check(MyCloseFiles.closed_sizes == [100, 200], "CloseFiles sizes")
-    print("  PASS")
+            # return value: compare with output_return_expected.txt
+            if test.output_return_expected:
+                _check_scenario_return(test.name, result.value, test.output_return_expected)
+                print(f"  return value: {m.to_string_s5run(result.value).replace(chr(10), ' | ')}")
+                print(f"  return json:  {m.to_string_json(result.value)}")
+                print("  return value matches output_return_expected.txt")
+            else:
+                print("  return value: no output_return_expected.txt, skipped")
+
+            # console output: compare with output_console_expected.txt (line per log)
+            expected_console = _split_lines(test.output_console_expected)
+            if MyConsole.logs != expected_console:
+                n = max(len(MyConsole.logs), len(expected_console))
+                details = "\n".join(
+                    f'  line {i + 1}: got "{MyConsole.logs[i] if i < len(MyConsole.logs) else "<missing>"}" '
+                    f'expected "{expected_console[i] if i < len(expected_console) else "<missing>"}"'
+                    for i in range(n)
+                    if (MyConsole.logs[i] if i < len(MyConsole.logs) else None)
+                    != (expected_console[i] if i < len(expected_console) else None)
+                )
+                raise RuntimeError(f"{test.name}: console output mismatch:\n{details}")
+            print(f"  console output matches {len(MyConsole.logs)} lines")
+
+            # side-effect checks (callback state, to be moved into data files)
+            if test.name == "client_scenario0":
+                check(MyGetFile.last_path == "test.txt", "GetFile path")
+                check(MyFileSystem.last_path == "test.txt", "FileSystem.GetList path")
+                check(MyCloseFiles.closed_sizes == [100, 200], "CloseFiles sizes")
+        print("  PASS")
 
 
 def primitives_two_servers(address: str) -> None:
@@ -182,7 +268,7 @@ def main() -> None:
 
     check(m.client_version() == "1.0.0", "client version")
 
-    happy_path(address)
+    scenarios(address)
     primitives_two_servers(address)
     error_path(address)
     print("py-gen-client: all smoke tests passed")

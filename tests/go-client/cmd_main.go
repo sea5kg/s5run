@@ -3,21 +3,124 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
 	"s5runcli/s5runcli"
 )
 
-var kScript = loadBaseScript()
+// ---- data-driven scenarios (like the cpp/java clients) ----
 
-func loadBaseScript() string {
-	for _, p := range []string{"tests/__test_data/client_scenario0/script.js", "../__test_data/client_scenario0/script.js"} {
-		if b, err := os.ReadFile(p); err == nil {
-			return string(b)
+type scenario struct {
+	name                  string
+	scriptJs              string
+	outputConsoleExpected string
+	outputReturnExpected  string // "" = no return check
+	inputArguments        []string
+}
+
+func readOrDefault(path, def string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return def
+	}
+	return string(b)
+}
+
+func splitLines(text string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if line != "" {
+			out = append(out, line)
 		}
 	}
-	panic("cannot find tests/__test_data/client_scenario0/script.js")
+	return out
+}
+
+func loadScenario(base string) scenario {
+	name := base
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		name = base[i+1:]
+	}
+	return scenario{
+		name:                  name,
+		scriptJs:              readOrDefault(base+"/script.js", ""),
+		outputConsoleExpected: readOrDefault(base+"/output_console_expected.txt", ""),
+		outputReturnExpected:  readOrDefault(base+"/output_return_expected.txt", ""),
+		inputArguments:        splitLines(readOrDefault(base+"/input_arguments.txt", "")),
+	}
+}
+
+// listScenarios scans __test_data for client_scenarioX directories.
+func listScenarios() []scenario {
+	var out []scenario
+	for _, root := range []string{"tests/__test_data", "../__test_data"} {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		var names []string
+		for _, e := range entries {
+			n := e.Name()
+			if e.IsDir() && strings.HasPrefix(n, "client_") && strings.Contains(n, "_scenario") {
+				names = append(names, n)
+			}
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			out = append(out, loadScenario(root+"/"+n))
+		}
+		if len(out) > 0 {
+			return out // the first root that has scenarios
+		}
+	}
+	panic("no client_scenarioX found in __test_data")
+}
+
+// parseInputArgument: int -> bool -> string.
+func parseInputArgument(raw string) s5runcli.S5RunVariable {
+	if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		return s5runcli.Int(v)
+	}
+	if raw == "true" {
+		return s5runcli.Bool(true)
+	}
+	if raw == "false" {
+		return s5runcli.Bool(false)
+	}
+	return s5runcli.Str(raw)
+}
+
+// checkScenarioReturn compares the script return value with
+// output_return_expected.txt (both use ToStringS5Run()).
+func checkScenarioReturn(name string, got s5runcli.S5RunVariable, expectedRaw string) {
+	expected := splitLines(expectedRaw)
+	gotLines := splitLines(s5runcli.ToStringS5Run(got))
+	if strings.Join(gotLines, "\n") == strings.Join(expected, "\n") {
+		return
+	}
+	var details strings.Builder
+	n := len(gotLines)
+	if len(expected) > n {
+		n = len(expected)
+	}
+	for i := 0; i < n; i++ {
+		gotLine := "<missing>"
+		if i < len(gotLines) {
+			gotLine = gotLines[i]
+		}
+		expLine := "<missing>"
+		if i < len(expected) {
+			expLine = expected[i]
+		}
+		if gotLine != expLine {
+			fmt.Fprintf(&details, "  line %d: got %q expected %q\n", i+1, gotLine, expLine)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "!!! FAIL: %s: return value mismatch:\n%s\n", name, details.String())
+	os.Exit(1)
 }
 
 type MyFile struct {
@@ -128,45 +231,80 @@ func main() {
 	}
 	address := fmt.Sprintf("s5run://%s:%d", host, port)
 
-	// happy path
-	fmt.Println("== go-client: happy path")
-	{
-		ctx := s5runcli.NewContext()
-		ctx.AddClass(newMyFile(1024)).
-			AddFunction(MyGetFile{}).
-			AddFunction(MyGetFileSize{}).
-			AddFunction(MyGetTimeNow{}).
-			AddFunction(MyGetOpenedFiles{}).
-			AddFunction(MyCloseFiles{}).
-			AddObject(MyFileSystem{}).
-			AddObject(MyConsole{}).
-			AddServer(s5runcli.NewRemoteServerInfo().Address(address)).
-			SetScript(kScript)
+	// data-driven scenarios
+	for _, test := range listScenarios() {
+		fmt.Printf("== go-client: %s\n", test.name)
+		func() {
+			ctx := s5runcli.NewContext()
+			ctx.AddClass(newMyFile(1024)).
+				AddFunction(MyGetFile{}).
+				AddFunction(MyGetFileSize{}).
+				AddFunction(MyGetTimeNow{}).
+				AddFunction(MyGetOpenedFiles{}).
+				AddFunction(MyCloseFiles{}).
+				AddObject(MyFileSystem{}).
+				AddObject(MyConsole{}).
+				AddServer(s5runcli.NewRemoteServerInfo().Address(address)).
+				SetScript(test.scriptJs)
 
-		result := s5runcli.RunScript(ctx, "main", []s5runcli.S5RunVariable{s5runcli.Str("test.txt")})
-		if result.HasError {
-			fmt.Fprintf(os.Stderr, "!!! FAIL: %s\n", result.Error)
-			os.Exit(1)
-		}
-		fmt.Printf("  duration: %dms\n", result.DurationMs)
+			consoleLogs = consoleLogs[:0]
+			var args []s5runcli.S5RunVariable
+			for _, raw := range test.inputArguments {
+				args = append(args, parseInputArgument(raw))
+			}
+			result := s5runcli.RunScript(ctx, "main", args)
+			if result.HasError {
+				fmt.Fprintf(os.Stderr, "!!! FAIL: unexpected error: %s\n", result.Error)
+				os.Exit(1)
+			}
+			fmt.Printf("  duration: %dms\n", result.DurationMs)
 
-		obj := result.Value.(s5runcli.Obj)
-		check(obj["size"].(s5runcli.Int) == 1024, "size")
-		check(obj["sizeByRef"].(s5runcli.Int) == 1024, "sizeByRef")
-		check(obj["openedCount"].(s5runcli.Int) == 2, "openedCount")
-		check(obj["openedSum"].(s5runcli.Int) == 300, "openedSum")
-		check(obj["fileListCount"].(s5runcli.Int) == 3, "fileListCount")
-		check(obj["time"].(s5runcli.Int) == 1737000000, "time")
-		check(lastGetFilePath == "test.txt", "GetFile path")
-		check(lastGetListPath == "test.txt", "FileSystem.GetList path")
-		check(len(consoleLogs) == 4, "console.log count")
-		check(consoleLogs[0] == "hello test.txt 1 2", "console.log")
-		check(consoleLogs[1] == "name: example.txt", "property Name getter")
-		check(consoleLogs[2] == "bufsize: 4096", "property BufferSize getter")
-		check(consoleLogs[3] == "bufsize-after: 2048", "property BufferSize setter")
-		check(len(closeFilesSizes) == 2 && closeFilesSizes[0] == 100 && closeFilesSizes[1] == 200,
-			"CloseFiles sizes")
-		fmt.Println("  PASS")
+			// return value: compare with output_return_expected.txt
+			if test.outputReturnExpected != "" {
+				checkScenarioReturn(test.name, result.Value, test.outputReturnExpected)
+				fmt.Printf("  return value: %s\n", strings.ReplaceAll(s5runcli.ToStringS5Run(result.Value), "\n", " | "))
+				fmt.Printf("  return json:  %s\n", s5runcli.ToStringJSON(result.Value))
+				fmt.Println("  return value matches output_return_expected.txt")
+			} else {
+				fmt.Println("  return value: no output_return_expected.txt, skipped")
+			}
+
+			// console output: compare with output_console_expected.txt (line per log)
+			expectedConsole := splitLines(test.outputConsoleExpected)
+			if strings.Join(consoleLogs, "\n") != strings.Join(expectedConsole, "\n") {
+				var details strings.Builder
+				n := len(consoleLogs)
+				if len(expectedConsole) > n {
+					n = len(expectedConsole)
+				}
+				for i := 0; i < n; i++ {
+					gotLine := "<missing>"
+					if i < len(consoleLogs) {
+						gotLine = consoleLogs[i]
+					}
+					expLine := "<missing>"
+					if i < len(expectedConsole) {
+						expLine = expectedConsole[i]
+					}
+					if gotLine != expLine {
+						fmt.Fprintf(&details, "  line %d: got %q expected %q\n", i+1, gotLine, expLine)
+					}
+				}
+				fmt.Fprintf(os.Stderr, "!!! FAIL: %s: console output mismatch:\n%s\n",
+					test.name, details.String())
+				os.Exit(1)
+			}
+			fmt.Printf("  console output matches %d lines\n", len(consoleLogs))
+
+			// side-effect checks (callback state, to be moved into data files)
+			if test.name == "client_scenario0" {
+				check(lastGetFilePath == "test.txt", "GetFile path")
+				check(lastGetListPath == "test.txt", "FileSystem.GetList path")
+				check(len(closeFilesSizes) == 2 && closeFilesSizes[0] == 100 && closeFilesSizes[1] == 200,
+					"CloseFiles sizes")
+			}
+			fmt.Println("  PASS")
+		}()
 	}
 
 	// error path

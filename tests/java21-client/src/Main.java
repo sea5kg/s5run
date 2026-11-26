@@ -19,7 +19,11 @@ public class Main {
 
         @Override
         public List<Byte> ReadBytes(long readBytes) {
-            return List.of();
+            java.util.List<Byte> out = new java.util.ArrayList<>();
+            for (long i = 0; i < readBytes; ++i) {
+                out.add((byte) ('a' + (int) (i % 26)));
+            }
+            return out;
         }
 
         @Override
@@ -128,19 +132,114 @@ public class Main {
         }
     }
 
-    static final String K_SCRIPT = loadBaseScript();
+    // ---- data-driven scenarios (like the cpp clients) ----
 
-    private static String loadBaseScript() {
-        String[] paths = {"tests/__test_data/client_scenario0/script.js", "../__test_data/client_scenario0/script.js"};
-        for (String p : paths) {
-            try {
-                return new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(p)),
-                        java.nio.charset.StandardCharsets.UTF_8);
-            } catch (Exception e) {
-                // try the next path
+    static final class Scenario {
+        String name;
+        String scriptJs;
+        String outputConsoleExpected;
+        String outputReturnExpected; // "" = no return check
+        java.util.List<String> inputArguments = new java.util.ArrayList<>();
+    }
+
+    static String readFileOrDefault(String path, String def) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(path)),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
+    static java.util.List<String> splitLines(String text) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String line : text.split("\n")) {
+            if (line.endsWith("\r")) {
+                line = line.substring(0, line.length() - 1);
+            }
+            if (!line.isEmpty()) {
+                out.add(line);
             }
         }
-        throw new RuntimeException("cannot find tests/__test_data/client_scenario0/script.js");
+        return out;
+    }
+
+    static Scenario loadScenario(String base) {
+        Scenario s = new Scenario();
+        s.name = base.substring(base.lastIndexOf('/') + 1);
+        s.scriptJs = readFileOrDefault(base + "/script.js", null);
+        if (s.scriptJs == null) {
+            throw new RuntimeException("cannot find " + base + "/script.js");
+        }
+        s.outputConsoleExpected = readFileOrDefault(base + "/output_console_expected.txt", "");
+        s.outputReturnExpected = readFileOrDefault(base + "/output_return_expected.txt", "");
+        s.inputArguments = splitLines(readFileOrDefault(base + "/input_arguments.txt", ""));
+        return s;
+    }
+
+    // Scan __test_data for client_scenarioX directories.
+    static java.util.List<Scenario> listScenarios() {
+        String[] roots = {"tests/__test_data", "../__test_data"};
+        java.util.List<Scenario> out = new java.util.ArrayList<>();
+        for (String root : roots) {
+            java.io.File dir = new java.io.File(root);
+            java.io.File[] sub = dir.listFiles();
+            if (sub == null) {
+                continue;
+            }
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (java.io.File f : sub) {
+                String n = f.getName();
+                if (f.isDirectory() && n.startsWith("client_") && n.contains("_scenario")) {
+                    names.add(n);
+                }
+            }
+            java.util.Collections.sort(names);
+            for (String n : names) {
+                out.add(loadScenario(root + "/" + n));
+            }
+            if (!out.isEmpty()) {
+                return out; // the first root that has scenarios
+            }
+        }
+        throw new RuntimeException("no client_scenarioX found in __test_data");
+    }
+
+    // Parse a raw argument into a typed value: int -> bool -> string.
+    static S5RunVariable parseInputArgument(String raw) {
+        try {
+            return new S5RunVariable.Int(Long.parseLong(raw));
+        } catch (NumberFormatException e) {
+            // not an int
+        }
+        if (raw.equals("true")) {
+            return new S5RunVariable.Bool(true);
+        }
+        if (raw.equals("false")) {
+            return new S5RunVariable.Bool(false);
+        }
+        return new S5RunVariable.Str(raw);
+    }
+
+    // Compare the script return value with output_return_expected.txt:
+    // both sides use S5RunVariable.toStringS5Run() format.
+    static void checkScenarioReturn(String name, S5RunVariable got, String expectedRaw) {
+        java.util.List<String> expected = splitLines(expectedRaw);
+        java.util.List<String> gotLines = splitLines(got.toStringS5Run());
+        if (gotLines.equals(expected)) {
+            return;
+        }
+        StringBuilder details = new StringBuilder();
+        int n = Math.max(gotLines.size(), expected.size());
+        for (int i = 0; i < n; i++) {
+            String gotLine = i < gotLines.size() ? gotLines.get(i) : "<missing>";
+            String expLine = i < expected.size() ? expected.get(i) : "<missing>";
+            if (!gotLine.equals(expLine)) {
+                details.append("  line ").append(i + 1).append(": got \"").append(gotLine)
+                       .append("\" expected \"").append(expLine).append("\"\n");
+            }
+        }
+        throw new RuntimeException(name + ": return value mismatch:\n" + details);
     }
 
     static String address;
@@ -154,51 +253,77 @@ public class Main {
             throw new RuntimeException("unexpected client version: " + S5RunContext.clientVersion());
         }
 
-        happyPath();
+        scenarios();
         primitivesWithTwoServers();
         errorPath();
 
         System.out.println("java21-client: all smoke tests passed");
     }
 
-    static void happyPath() {
-        System.out.println("== java21-client: happy path");
-        try (S5RunContext ctx = new S5RunContext()
-                .addClass(new MyFile(1024))
-                .addFunction(new MyGetFile())
-                .addFunction(new MyGetFileSize())
-                .addFunction(new MyGetTimeNow())
-                .addFunction(new MyGetOpenedFiles())
-                .addFunction(new MyCloseFiles())
-                .addFunction(new MyGetPi())
-                .addFunction(new MyGetServerPort())
-                .addObject(new MyFileSystem())
-                .addObject(new MyConsole())
-                .addServer(new S5RunRemoteServerInfo().address(address).apiKey("some api key runner"))
-                .setScript(K_SCRIPT)) {
+    static void scenarios() {
+        java.util.List<Scenario> tests = listScenarios();
+        for (Scenario test : tests) {
+            System.out.println("== java21-client: " + test.name);
+            try (S5RunContext ctx = new S5RunContext()
+                    .addClass(new MyFile(1024))
+                    .addFunction(new MyGetFile())
+                    .addFunction(new MyGetFileSize())
+                    .addFunction(new MyGetTimeNow())
+                    .addFunction(new MyGetOpenedFiles())
+                    .addFunction(new MyCloseFiles())
+                    .addFunction(new MyGetPi())
+                    .addFunction(new MyGetServerPort())
+                    .addObject(new MyFileSystem())
+                    .addObject(new MyConsole())
+                    .addServer(new S5RunRemoteServerInfo().address(address).apiKey("some api key runner"))
+                    .setScript(test.scriptJs)) {
 
-        S5RunResult result = S5RunContext.runScript(ctx, "main", List.of(new S5RunVariable.Str("test.txt")));
-        if (result.hasError()) {
-            throw new RuntimeException("unexpected error: " + result.error());
-        }
-        System.out.println("  duration: " + result.durationMs() + " ms");
+            MyConsole.logs.clear();
+            java.util.List<S5RunVariable> args = new java.util.ArrayList<>();
+            for (String raw : test.inputArguments) {
+                args.add(parseInputArgument(raw));
+            }
+            S5RunResult result = S5RunContext.runScript(ctx, "main", args);
+            if (result.hasError()) {
+                throw new RuntimeException("unexpected error: " + result.error());
+            }
+            System.out.println("  duration: " + result.durationMs() + " ms");
 
-        var obj = ((S5RunVariable.Obj) result.value()).v();
-        check(((S5RunVariable.Int) obj.get("size")).v() == 1024, "size");
-        check(((S5RunVariable.Int) obj.get("sizeByRef")).v() == 1024, "sizeByRef");
-        check(((S5RunVariable.Int) obj.get("openedCount")).v() == 2, "openedCount");
-        check(((S5RunVariable.Int) obj.get("openedSum")).v() == 300, "openedSum");
-        check(((S5RunVariable.Int) obj.get("fileListCount")).v() == 3, "fileListCount");
-        check(((S5RunVariable.Int) obj.get("time")).v() == 1737000000L, "time");
-        check(MyGetFile.lastPath.equals("test.txt"), "GetFile path");
-        check(MyFileSystem.lastPath.equals("test.txt"), "FileSystem.GetList path");
-        check(MyConsole.logs.get(0).equals("hello test.txt 1 2"), "console.log");
-        check(MyConsole.logs.size() == 4, "console.log count");
-        check(MyConsole.logs.get(1).equals("name: example.txt"), "property Name getter");
-        check(MyConsole.logs.get(2).equals("bufsize: 4096"), "property BufferSize getter");
-        check(MyConsole.logs.get(3).equals("bufsize-after: 2048"), "property BufferSize setter");
-        check(MyCloseFiles.closedSizes.equals(List.of(100L, 200L)), "CloseFiles sizes");
-        System.out.println("  PASS");
+            // return value: compare with output_return_expected.txt
+            if (!test.outputReturnExpected.isEmpty()) {
+                checkScenarioReturn(test.name, result.value(), test.outputReturnExpected);
+                System.out.println("  return value: " + result.value().toStringS5Run().replace("\n", " | "));
+                System.out.println("  return json:  " + result.value().toStringJson());
+                System.out.println("  return value matches output_return_expected.txt");
+            } else {
+                System.out.println("  return value: no output_return_expected.txt, skipped");
+            }
+
+            // console output: compare with output_console_expected.txt (line per log)
+            java.util.List<String> expectedConsole = splitLines(test.outputConsoleExpected);
+            if (!MyConsole.logs.equals(expectedConsole)) {
+                StringBuilder details = new StringBuilder();
+                int n = Math.max(MyConsole.logs.size(), expectedConsole.size());
+                for (int i = 0; i < n; i++) {
+                    String gotLine = i < MyConsole.logs.size() ? MyConsole.logs.get(i) : "<missing>";
+                    String expLine = i < expectedConsole.size() ? expectedConsole.get(i) : "<missing>";
+                    if (!gotLine.equals(expLine)) {
+                        details.append("  line ").append(i + 1).append(": got \"").append(gotLine)
+                               .append("\" expected \"").append(expLine).append("\"\n");
+                    }
+                }
+                throw new RuntimeException(test.name + ": console output mismatch:\n" + details);
+            }
+            System.out.println("  console output matches " + MyConsole.logs.size() + " lines");
+
+            // side-effect checks (callback state, to be moved into data files)
+            if (test.name.equals("client_scenario0")) {
+                check(MyGetFile.lastPath.equals("test.txt"), "GetFile path");
+                check(MyFileSystem.lastPath.equals("test.txt"), "FileSystem.GetList path");
+                check(MyCloseFiles.closedSizes.equals(List.of(100L, 200L)), "CloseFiles sizes");
+            }
+            System.out.println("  PASS");
+            }
         }
     }
 
