@@ -8,7 +8,7 @@
 - Added wsjcpp-yaml:v0.1.10 for a server
 - Added sea5kg-sqlite3-wrapper:v0.1.1 for a server
 - Added libhv:v1.3.3 for a server
-- Added new type 'var' to schema and added some implementation
+- Added new types 'var', 'undefined' to schema and added some implementation
 - In output client libraries renamed system classes and renaming class 'value' to 'variable'
 - Redesigned 's5run run': '--script' removed and removed implementation from stdin
 - Fixed run localhost:7777 (now possible run use a via domain)
@@ -18,7 +18,7 @@
 - Improved tests/cpp11-client prepare new tests without code-write just a files 'input_/script_/output_'
 - Added new methods to s5run_variable 'to_string_s5run' and 'to_string_json' to easy using
 - Implemented example for tests/cpp98-provider
-- Added docs/SCHEMA.md
+- Added docs: SCHEMA.md, PROTOCOL.md
 
 ## [v0.2.0] - (2026 Nov 24)
 
