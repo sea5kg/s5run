@@ -9,7 +9,7 @@ def client_version() -> str:
     return CLIENT_VERSION
 
 
-from .variable import Ref
+from .variable import Ref, to_string_json, to_string_s5run
 from .types import RemoteServerInfo, RunResult, S5RunFunction, S5RunObject
 from .types import File
 from .types import FileSystem

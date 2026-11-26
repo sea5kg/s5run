@@ -563,6 +563,60 @@ def _encode_value(out: _Writer, v: Any) -> None:
 
 def _read_count(buf: _Reader) -> int:
     return buf.u32()
+
+
+def _append_debug(v, out: list, indent: int) -> None:
+    pad = " " * indent
+    pad_in = " " * (indent + 2)
+    if v is None:
+        out.append("K_NULL\n")
+    elif isinstance(v, bool):
+        out.append("K_BOOL true\n" if v else "K_BOOL false\n")
+    elif isinstance(v, int):
+        out.append(f"K_INT {v}\n")
+    elif isinstance(v, float):
+        out.append(f"K_DOUBLE {v:g}\n")
+    elif isinstance(v, str):
+        out.append(f"K_STRING {json.dumps(v, ensure_ascii=False)}\n")
+    elif isinstance(v, Ref):
+        out.append(f"K_REF {v.this_id} {json.dumps(v.type, ensure_ascii=False)}\n")
+    elif isinstance(v, list):
+        out.append("K_ARRAY\n")
+        out.append(pad + "BEGIN\n")
+        for e in v:
+            out.append(pad_in)
+            _append_debug(e, out, indent + 2)
+        out.append(pad + "END\n")
+    elif isinstance(v, dict):
+        out.append("K_OBJECT\n")
+        out.append(pad + "BEGIN\n")
+        for k in sorted(v.keys()):
+            out.append(f"{pad_in}{k} ")
+            _append_debug(v[k], out, indent + 2)
+        out.append(pad + "END\n")
+    else:
+        raise RuntimeError("s5run variable: unknown value type: " + type(v).__name__)
+
+
+def to_string_s5run(v) -> str:
+    """Structured multi-line representation, handy for tests and debugging:
+    K_INT 1024 / K_STRING "text" / K_OBJECT BEGIN..END blocks.
+    Object fields are sorted by name."""
+    out: list = []
+    _append_debug(v, out, 0)
+    return "".join(out).rstrip("\n")
+
+
+def _ref_to_json(o):
+    if isinstance(o, Ref):
+        return {"__s5run_ref__": {"this_id": o.this_id, "type": o.type}}
+    raise TypeError(f"cannot serialize {type(o).__name__}")
+
+
+def to_string_json(v) -> str:
+    """JSON representation (the built-in json module, sorted keys).
+    A reference is encoded as {"__s5run_ref__": {"this_id": N, "type": "..."}}."""
+    return json.dumps(v, sort_keys=True, ensure_ascii=False, default=_ref_to_json)
 )PY";
 
 static const char *ROOTS_TEMPLATE = R"PY(
