@@ -14,6 +14,7 @@ import (
 type S5RunVariable interface{ isValue() }
 
 type Null struct{}
+type Undefined struct{}
 type Bool bool
 type Int int64
 type Float float64
@@ -28,6 +29,7 @@ type Ref struct {
 }
 
 func (Null) isValue()  {}
+func (Undefined) isValue() {}
 func (Bool) isValue()  {}
 func (Int) isValue()   {}
 func (Float) isValue() {}
@@ -72,6 +74,8 @@ func appendDebug(b *strings.Builder, v S5RunVariable, indent int) {
 	pad := strings.Repeat(" ", indent)
 	padIn := strings.Repeat(" ", indent+2)
 	switch t := v.(type) {
+	case Undefined:
+		b.WriteString("K_UNDEFINED\n")
 	case Null:
 		b.WriteString("K_NULL\n")
 	case Bool:
@@ -147,7 +151,7 @@ func appendJSONString(b *strings.Builder, s string) {
 // toJSONValue converts into plain Go values for encoding/json.
 func toJSONValue(v S5RunVariable) interface{} {
 	switch t := v.(type) {
-	case Null:
+	case Null, Undefined:
 		return nil
 	case Bool:
 		return bool(t)
@@ -182,7 +186,7 @@ func toJSONValue(v S5RunVariable) interface{} {
 
 func encodeValue(w *writer, v S5RunVariable) {
 	switch t := v.(type) {
-	case Null:
+	case Null, Undefined:
 		w.u8(tagUndefined)
 	case Bool:
 		w.boolValue(bool(t))
@@ -212,7 +216,7 @@ func decodeValue(r *reader) S5RunVariable {
 	tag := r.u8()
 	switch tag {
 	case tagUndefined:
-		return Null{}
+		return Undefined{}
 	case tagBool:
 		return Bool(r.u8() != 0)
 	case tagString:
@@ -244,6 +248,8 @@ func valueToString(v S5RunVariable) string {
 	switch t := v.(type) {
 	case Null:
 		return "null"
+	case Undefined:
+		return "undefined"
 	case Bool:
 		if t {
 			return "true"

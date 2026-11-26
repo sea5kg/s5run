@@ -42,6 +42,7 @@ namespace s5run {
 
 void value_to_wire(const variable &v, wire::Writer &w) {
   switch (v.kind()) {
+  case variable::K_UNDEFINED:
   case variable::K_NULL:
     w.put_u8(wire::T_UNDEFINED);
     return;

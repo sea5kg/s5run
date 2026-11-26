@@ -444,7 +444,7 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "typedef signed char i8;\ntypedef short i16;\ntypedef int i32;\n\n";
   out += "class context;\nclass run_result;\ncontext * make_context();\n\n";
   out += "class s5run_variable {\npublic:\n";
-  out += "    enum kind { K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF };\n";
+  out += "    enum kind { K_UNDEFINED, K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF };\n";
   out += "    s5run_variable(); s5run_variable(bool b); s5run_variable(i64 i); s5run_variable(double d); s5run_variable(const char *s);\n";
   out += "    s5run_variable(const std::string &s); s5run_variable(const std::vector<s5run_variable> &a);\n";
   out += "    s5run_variable(const std::map<std::string, s5run_variable> &o);\n";
@@ -461,7 +461,7 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    std::string to_string_s5run() const;\n";
   out += "    // JSON representation (hand-rolled, no external libraries).\n";
   out += "    std::string to_string_json() const;\n";
-  out += "    kind get_kind() const; bool is_null() const; bool as_bool() const;\n";
+  out += "    kind get_kind() const; bool is_undefined() const; bool is_null() const; bool as_bool() const;\n";
   out += "    i64 as_int() const; double as_double() const;\n";
   out += "    const std::string &as_string() const;\n";
   out += "    const std::vector<s5run_variable> &as_array() const;\n";
@@ -913,6 +913,7 @@ std::string generator_cpp98::generate_impl(const schema &s) const {
   out += R"CODE(
 static void encode_value(Writer &w, const s5run_variable &v) {
     switch (v.get_kind()) {
+    case s5run_variable::K_UNDEFINED:
     case s5run_variable::K_NULL: w.put_u8(T_UNDEFINED); break;
     case s5run_variable::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
     case s5run_variable::K_INT: write_int(w, v.as_int()); break;
@@ -985,6 +986,7 @@ static s5run_variable decode_value(Reader &r) {
 static std::string _value_to_string(const s5run_variable &v) {
     switch (v.get_kind()) {
     case s5run_variable::K_NULL: return "null";
+    case s5run_variable::K_UNDEFINED: return "undefined";
     case s5run_variable::K_BOOL: return v.as_bool() ? "true" : "false";
     case s5run_variable::K_INT: return num_to_str(v.as_int());
     case s5run_variable::K_DOUBLE: {
@@ -999,7 +1001,7 @@ static std::string _value_to_string(const s5run_variable &v) {
 
   // Value implementation
   out += R"CODE(
-s5run_variable::s5run_variable() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
+s5run_variable::s5run_variable() : m_kind(K_UNDEFINED), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
 s5run_variable::s5run_variable(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0), m_a(0), m_o(0) {}
 s5run_variable::s5run_variable(i64 i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0), m_a(0), m_o(0) {}
 s5run_variable::s5run_variable(double d) : m_kind(K_DOUBLE), m_b(false), m_i(0), m_d(d), m_a(0), m_o(0) {}
@@ -1007,7 +1009,7 @@ s5run_variable::s5run_variable(const char *s) : m_kind(K_STRING), m_b(false), m_
 s5run_variable::s5run_variable(const std::string &s) : m_kind(K_STRING), m_b(false), m_i(0), m_d(0.0), m_s(s), m_a(0), m_o(0) {}
 s5run_variable::s5run_variable(const std::vector<s5run_variable> &a) : m_kind(K_ARRAY), m_b(false), m_i(0), m_d(0.0), m_a(new std::vector<s5run_variable>(a)), m_o(0) {}
 s5run_variable::s5run_variable(const std::map<std::string, s5run_variable> &o) : m_kind(K_OBJECT), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(new std::map<std::string, s5run_variable>(o)) {}
-s5run_variable::s5run_variable(const s5run_variable &other) : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) { copy_from(other); }
+s5run_variable::s5run_variable(const s5run_variable &other) : m_kind(K_UNDEFINED), m_b(false), m_i(0), m_d(0.0), m_a(0), m_o(0) { copy_from(other); }
 s5run_variable &s5run_variable::operator=(const s5run_variable &other) {
     if (this != &other) { destroy(); copy_from(other); }
     return *this;
@@ -1017,6 +1019,7 @@ s5run_variable s5run_variable::make_ref(int this_id, const std::string &type) {
     s5run_variable v; v.m_kind = K_REF; v.m_i = this_id; v.m_s = type; return v;
 }
 s5run_variable::kind s5run_variable::get_kind() const { return m_kind; }
+bool s5run_variable::is_undefined() const { return m_kind == K_UNDEFINED; }
 bool s5run_variable::is_null() const { return m_kind == K_NULL; }
 bool s5run_variable::as_bool() const { return m_b; }
 i64 s5run_variable::as_int() const { return m_i; }
@@ -1029,7 +1032,7 @@ const std::string &s5run_variable::ref_type() const { return m_s; }
 void s5run_variable::destroy() {
     delete m_a; m_a = 0;
     delete m_o; m_o = 0;
-    m_kind = K_NULL;
+    m_kind = K_UNDEFINED;
 }
 void s5run_variable::copy_from(const s5run_variable &other) {
     m_kind = other.m_kind; m_b = other.m_b; m_i = other.m_i; m_d = other.m_d;
@@ -1060,6 +1063,9 @@ void s5run_variable::append_debug(std::string &out, int indent) const {
     std::string pad(indent, ' ');
     std::string pad_in(indent + 2, ' ');
     switch (m_kind) {
+    case K_UNDEFINED:
+        out += "K_UNDEFINED\n";
+        break;
     case K_NULL:
         out += "K_NULL\n";
         break;
@@ -1133,6 +1139,7 @@ void s5run_variable::append_json_string(std::string &out, const std::string &s) 
 void s5run_variable::append_json(std::string &out) const {
     char buf[64];
     switch (m_kind) {
+    case K_UNDEFINED:
     case K_NULL: out += "null"; break;
     case K_BOOL: out += m_b ? "true" : "false"; break;
     case K_INT:

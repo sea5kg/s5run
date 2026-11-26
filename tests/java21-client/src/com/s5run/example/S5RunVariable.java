@@ -5,6 +5,7 @@ import java.util.*;
 
 public sealed interface S5RunVariable {
     record Null() implements S5RunVariable {}
+    record Undefined() implements S5RunVariable {}
     record Bool(boolean v) implements S5RunVariable {}
     record Int(long v) implements S5RunVariable {}
     record Dbl(double v) implements S5RunVariable {}
@@ -35,7 +36,9 @@ public sealed interface S5RunVariable {
     private void appendS5Run(StringBuilder sb, int indent) {
         String pad = " ".repeat(indent);
         String padIn = " ".repeat(indent + 2);
-        if (this instanceof Null) {
+        if (this instanceof Undefined) {
+            sb.append("K_UNDEFINED\n");
+        } else if (this instanceof Null) {
             sb.append("K_NULL\n");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v() ? "K_BOOL true\n" : "K_BOOL false\n");
@@ -95,6 +98,8 @@ public sealed interface S5RunVariable {
 
     private void appendJson(StringBuilder sb) {
         if (this instanceof Null) {
+            sb.append("null");
+        } else if (this instanceof Undefined) {
             sb.append("null");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v());

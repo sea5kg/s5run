@@ -30,7 +30,9 @@ void check_json_roundtrip(const variable &v) {
   nlohmann::json parsed = nlohmann::json::parse(json_text);
   (void)parsed;
   variable back = variable::from_string_json(json_text);
-  if (back.to_string_s5run() != v.to_string_s5run())
+  // JSON has no undefined: both K_UNDEFINED and K_NULL become null
+  if (back.to_string_s5run() != v.to_string_s5run()
+      && !(v.is_undefined() && back.is_null()))
     throw std::runtime_error("json roundtrip mismatch:\n s5run: "
                              + v.to_string_s5run() + "\n back: " + back.to_string_s5run());
 }
@@ -39,6 +41,7 @@ void test_scalars() {
   std::fprintf(stderr, "== variable json: scalars\n");
 
   CHECK(variable().to_string_json() == "null");
+  CHECK(variable(nullptr).to_string_json() == "null");
   CHECK(variable(true).to_string_json() == "true");
   CHECK(variable(false).to_string_json() == "false");
   CHECK(variable((int64_t)1024).to_string_json() == "1024");
@@ -48,6 +51,7 @@ void test_scalars() {
         == "\"esc \\\" \\\\ \\n\"");
 
   check_json_roundtrip(variable());
+  check_json_roundtrip(variable(nullptr));
   check_json_roundtrip(variable(true));
   check_json_roundtrip(variable((int64_t)1737000000));
   check_json_roundtrip(variable(3.5));

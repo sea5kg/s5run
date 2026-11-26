@@ -371,6 +371,7 @@ static std::string encode_value_snippet(java_flavor f) {
     public static void encodeValue(Writer w, S5RunVariable v) {
         switch (v) {
             case S5RunVariable.Null n -> w.u8(T_UNDEFINED);
+            case S5RunVariable.Undefined u -> w.u8(T_UNDEFINED);
             case S5RunVariable.Bool b -> { w.u8(T_BOOL); w.bool(b.v()); }
             case S5RunVariable.Int i -> w.int64(i.v());
             case S5RunVariable.Dbl d -> { w.u8(T_FLOAT64); w.f64(d.v()); }
@@ -401,6 +402,8 @@ static std::string encode_value_snippet(java_flavor f) {
     public static void encodeValue(Writer w, S5RunVariable v) {
         if (v instanceof S5RunVariable.Null) {
             w.u8(T_UNDEFINED);
+        } else if (v instanceof S5RunVariable.Undefined) {
+            w.u8(T_UNDEFINED);
         } else if (v instanceof S5RunVariable.Bool b) {
             w.u8(T_BOOL); w.bool(b.v());
         } else if (v instanceof S5RunVariable.Int i) {
@@ -430,6 +433,8 @@ static std::string encode_value_snippet(java_flavor f) {
   return R"JAVA(
     public static void encodeValue(Writer w, S5RunVariable v) {
         if (v instanceof S5RunVariable.Null) {
+            w.u8(T_UNDEFINED);
+        } else if (v instanceof S5RunVariable.Undefined) {
             w.u8(T_UNDEFINED);
         } else if (v instanceof S5RunVariable.Bool) {
             w.u8(T_BOOL); w.bool(((S5RunVariable.Bool) v).v());
@@ -466,6 +471,7 @@ static std::string value_to_string_snippet(java_flavor f) {
     return R"JAVA(
     public static String valueToString(S5RunVariable v) {
         return switch (v) {
+            case S5RunVariable.Undefined u -> "undefined";
             case S5RunVariable.Null n -> "null";
             case S5RunVariable.Bool b -> Boolean.toString(b.v());
             case S5RunVariable.Int i -> Long.toString(i.v());
@@ -478,6 +484,7 @@ static std::string value_to_string_snippet(java_flavor f) {
   if (f == JAVA_17) {
     return R"JAVA(
     public static String valueToString(S5RunVariable v) {
+        if (v instanceof S5RunVariable.Undefined) return "undefined";
         if (v instanceof S5RunVariable.Null) return "null";
         if (v instanceof S5RunVariable.Bool b) return Boolean.toString(b.v());
         if (v instanceof S5RunVariable.Int i) return Long.toString(i.v());
@@ -488,6 +495,7 @@ static std::string value_to_string_snippet(java_flavor f) {
   }
   return R"JAVA(
     public static String valueToString(S5RunVariable v) {
+        if (v instanceof S5RunVariable.Undefined) return "undefined";
         if (v instanceof S5RunVariable.Null) return "null";
         if (v instanceof S5RunVariable.Bool) return Boolean.toString(((S5RunVariable.Bool) v).v());
         if (v instanceof S5RunVariable.Int) return Long.toString(((S5RunVariable.Int) v).v());
@@ -502,7 +510,7 @@ static std::string decode_value_snippet(java_flavor f) {
     return R"JAVA(    public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
         return switch (tag) {
-            case T_UNDEFINED -> new S5RunVariable.Null();
+            case T_UNDEFINED -> new S5RunVariable.Undefined();
             case T_BOOL -> new S5RunVariable.Bool(r.readBoolRaw());
             case T_INT8 -> new S5RunVariable.Int(r.readI8());
             case T_INT16 -> new S5RunVariable.Int(r.readI16());
@@ -533,7 +541,7 @@ static std::string decode_value_snippet(java_flavor f) {
   return R"JAVA(    public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
         switch (tag) {
-            case T_UNDEFINED: return S5RunVariable.Null.INSTANCE;
+            case T_UNDEFINED: return S5RunVariable.Undefined.INSTANCE;
             case T_BOOL: return new S5RunVariable.Bool(r.readBoolRaw());
             case T_INT8: return new S5RunVariable.Int(r.readI8());
             case T_INT16: return new S5RunVariable.Int(r.readI16());
@@ -626,6 +634,7 @@ static std::string value_file_snippet(java_flavor f) {
     return R"JAVA(
 public sealed interface S5RunVariable {
     record Null() implements S5RunVariable {}
+    record Undefined() implements S5RunVariable {}
     record Bool(boolean v) implements S5RunVariable {}
     record Int(long v) implements S5RunVariable {}
     record Dbl(double v) implements S5RunVariable {}
@@ -656,7 +665,9 @@ public sealed interface S5RunVariable {
     private void appendS5Run(StringBuilder sb, int indent) {
         String pad = " ".repeat(indent);
         String padIn = " ".repeat(indent + 2);
-        if (this instanceof Null) {
+        if (this instanceof Undefined) {
+            sb.append("K_UNDEFINED\n");
+        } else if (this instanceof Null) {
             sb.append("K_NULL\n");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v() ? "K_BOOL true\n" : "K_BOOL false\n");
@@ -717,6 +728,8 @@ public sealed interface S5RunVariable {
     private void appendJson(StringBuilder sb) {
         if (this instanceof Null) {
             sb.append("null");
+        } else if (this instanceof Undefined) {
+            sb.append("null");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v());
         } else if (this instanceof Int) {
@@ -764,6 +777,10 @@ public interface S5RunVariable {
     final class Null implements S5RunVariable {
         public static final Null INSTANCE = new Null();
         private Null() {}
+    }
+    final class Undefined implements S5RunVariable {
+        public static final Undefined INSTANCE = new Undefined();
+        private Undefined() {}
     }
     final class Bool implements S5RunVariable {
         final boolean val;
@@ -826,7 +843,9 @@ public interface S5RunVariable {
     private void appendS5Run(StringBuilder sb, int indent) {
         String pad = " ".repeat(indent);
         String padIn = " ".repeat(indent + 2);
-        if (this instanceof Null) {
+        if (this instanceof Undefined) {
+            sb.append("K_UNDEFINED\n");
+        } else if (this instanceof Null) {
             sb.append("K_NULL\n");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v() ? "K_BOOL true\n" : "K_BOOL false\n");
@@ -886,6 +905,8 @@ public interface S5RunVariable {
 
     private void appendJson(StringBuilder sb) {
         if (this instanceof Null) {
+            sb.append("null");
+        } else if (this instanceof Undefined) {
             sb.append("null");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v());

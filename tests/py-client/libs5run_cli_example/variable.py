@@ -220,7 +220,8 @@ def _append_debug(v, out: list, indent: int) -> None:
     pad = " " * indent
     pad_in = " " * (indent + 2)
     if v is None:
-        out.append("K_NULL\n")
+        # Python None covers both JS undefined and null on the wire
+        out.append("K_UNDEFINED\n")
     elif isinstance(v, bool):
         out.append("K_BOOL true\n" if v else "K_BOOL false\n")
     elif isinstance(v, int):

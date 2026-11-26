@@ -115,8 +115,10 @@ inline void free_handle(JsValue h) {
 // ---------------------------------------------------------------
 
 s5run::variable js_to_value(JSContext *ctx, JSValueConst v) {
-  if (JS_IsNull(v) || JS_IsUndefined(v))
-    return s5run::variable();
+  if (JS_IsNull(v))
+    return s5run::variable(nullptr); // JS null
+  if (JS_IsUndefined(v))
+    return s5run::variable(); // JS undefined
   if (JS_IsBool(v))
     return s5run::variable((bool)JS_ToBool(ctx, v));
   if (JS_IsNumber(v)) {
@@ -197,6 +199,8 @@ s5run::variable js_to_value(JSContext *ctx, JSValueConst v) {
 
 JSValue value_to_js(JSContext *ctx, const s5run::variable &v) {
   switch (v.kind()) {
+  case s5run::variable::K_UNDEFINED:
+    return JS_UNDEFINED;
   case s5run::variable::K_NULL:
     return JS_NULL;
   case s5run::variable::K_BOOL:

@@ -47,6 +47,8 @@ namespace s5run {
 
 std::string value_to_display_string(const variable &v) {
   switch (v.kind()) {
+  case variable::K_UNDEFINED:
+    return "undefined";
   case variable::K_NULL:
     return "null";
   case variable::K_BOOL:

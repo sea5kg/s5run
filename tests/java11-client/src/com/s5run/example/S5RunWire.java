@@ -151,6 +151,8 @@ public final class S5RunWire {
     public static void encodeValue(Writer w, S5RunVariable v) {
         if (v instanceof S5RunVariable.Null) {
             w.u8(T_UNDEFINED);
+        } else if (v instanceof S5RunVariable.Undefined) {
+            w.u8(T_UNDEFINED);
         } else if (v instanceof S5RunVariable.Bool) {
             w.u8(T_BOOL); w.bool(((S5RunVariable.Bool) v).v());
         } else if (v instanceof S5RunVariable.Int) {
@@ -183,7 +185,7 @@ public final class S5RunWire {
     public static S5RunVariable decodeValue(Reader r) {
         int tag = r.u8();
         switch (tag) {
-            case T_UNDEFINED: return S5RunVariable.Null.INSTANCE;
+            case T_UNDEFINED: return S5RunVariable.Undefined.INSTANCE;
             case T_BOOL: return new S5RunVariable.Bool(r.readBoolRaw());
             case T_INT8: return new S5RunVariable.Int(r.readI8());
             case T_INT16: return new S5RunVariable.Int(r.readI16());
@@ -212,6 +214,7 @@ public final class S5RunWire {
     }
 
     public static String valueToString(S5RunVariable v) {
+        if (v instanceof S5RunVariable.Undefined) return "undefined";
         if (v instanceof S5RunVariable.Null) return "null";
         if (v instanceof S5RunVariable.Bool) return Boolean.toString(((S5RunVariable.Bool) v).v());
         if (v instanceof S5RunVariable.Int) return Long.toString(((S5RunVariable.Int) v).v());

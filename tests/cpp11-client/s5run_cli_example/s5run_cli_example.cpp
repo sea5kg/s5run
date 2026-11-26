@@ -253,6 +253,7 @@ inline void write_array__string(Writer &w, const std::vector<std::string> &v) {
 
 void encode_value(Writer &w, const s5run_variable &v) {
     switch (v.get_kind()) {
+    case s5run_variable::K_UNDEFINED:
     case s5run_variable::K_NULL: w.put_u8(T_UNDEFINED); break;
     case s5run_variable::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
     case s5run_variable::K_INT: write_int(w, v.as_int()); break;
@@ -332,6 +333,7 @@ s5run_variable decode_value(Reader &r) {
 std::string _value_to_string(const s5run_variable &v) {
     switch (v.get_kind()) {
     case s5run_variable::K_NULL: return "null";
+    case s5run_variable::K_UNDEFINED: return "undefined";
     case s5run_variable::K_BOOL: return v.as_bool() ? "true" : "false";
     case s5run_variable::K_INT: return std::to_string(v.as_int());
     case s5run_variable::K_DOUBLE: return std::to_string(v.as_double());

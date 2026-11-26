@@ -18,10 +18,10 @@ std::shared_ptr<context> make_context();
 class s5run_variable {
 public:
     enum kind {
-        K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF
+        K_UNDEFINED, K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF
     };
 
-    s5run_variable() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0) {}
+    s5run_variable() : m_kind(K_UNDEFINED), m_b(false), m_i(0), m_d(0.0) {}
     s5run_variable(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0) {}
     s5run_variable(int i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
     s5run_variable(int64_t i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
@@ -40,6 +40,7 @@ public:
     }
 
     kind get_kind() const { return m_kind; }
+    bool is_undefined() const { return m_kind == K_UNDEFINED; }
     bool is_null() const { return m_kind == K_NULL; }
 
     bool as_bool() const { return m_b; }
@@ -85,6 +86,9 @@ private:
         std::string pad(indent, ' ');
         std::string pad_in(indent + 2, ' ');
         switch (m_kind) {
+        case K_UNDEFINED:
+            out += "K_UNDEFINED\n";
+            break;
         case K_NULL:
             out += "K_NULL\n";
             break;
@@ -159,6 +163,7 @@ private:
     void append_json(std::string &out) const {
         char buf[64];
         switch (m_kind) {
+        case K_UNDEFINED:
         case K_NULL: out += "null"; break;
         case K_BOOL: out += m_b ? "true" : "false"; break;
         case K_INT:

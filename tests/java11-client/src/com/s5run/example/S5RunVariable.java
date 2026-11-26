@@ -8,6 +8,10 @@ public interface S5RunVariable {
         public static final Null INSTANCE = new Null();
         private Null() {}
     }
+    final class Undefined implements S5RunVariable {
+        public static final Undefined INSTANCE = new Undefined();
+        private Undefined() {}
+    }
     final class Bool implements S5RunVariable {
         final boolean val;
         public Bool(boolean v) { this.val = v; }
@@ -69,7 +73,9 @@ public interface S5RunVariable {
     private void appendS5Run(StringBuilder sb, int indent) {
         String pad = " ".repeat(indent);
         String padIn = " ".repeat(indent + 2);
-        if (this instanceof Null) {
+        if (this instanceof Undefined) {
+            sb.append("K_UNDEFINED\n");
+        } else if (this instanceof Null) {
             sb.append("K_NULL\n");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v() ? "K_BOOL true\n" : "K_BOOL false\n");
@@ -129,6 +135,8 @@ public interface S5RunVariable {
 
     private void appendJson(StringBuilder sb) {
         if (this instanceof Null) {
+            sb.append("null");
+        } else if (this instanceof Undefined) {
             sb.append("null");
         } else if (this instanceof Bool) {
             sb.append(((Bool) this).v());

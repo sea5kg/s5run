@@ -54,7 +54,7 @@ context * make_context();
 
 class s5run_variable {
 public:
-    enum kind { K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF };
+    enum kind { K_UNDEFINED, K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF };
     s5run_variable(); s5run_variable(bool b); s5run_variable(i64 i); s5run_variable(double d); s5run_variable(const char *s);
     s5run_variable(const std::string &s); s5run_variable(const std::vector<s5run_variable> &a);
     s5run_variable(const std::map<std::string, s5run_variable> &o);
@@ -71,7 +71,7 @@ public:
     std::string to_string_s5run() const;
     // JSON representation (hand-rolled, no external libraries).
     std::string to_string_json() const;
-    kind get_kind() const; bool is_null() const; bool as_bool() const;
+    kind get_kind() const; bool is_undefined() const; bool is_null() const; bool as_bool() const;
     i64 as_int() const; double as_double() const;
     const std::string &as_string() const;
     const std::vector<s5run_variable> &as_array() const;

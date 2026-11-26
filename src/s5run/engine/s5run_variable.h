@@ -59,7 +59,8 @@ struct object_ref {
 class variable {
 public:
   enum Kind {
-    K_NULL = 0,
+    K_UNDEFINED = 0, // no value (JS undefined); wire: T_UNDEFINED
+    K_NULL,          // JS null; wire: T_UNDEFINED (no distinct tag)
     K_BOOL,
     K_INT,
     K_DOUBLE,
@@ -98,6 +99,7 @@ public:
   // ---- introspection ----
 
   Kind kind() const;
+  bool is_undefined() const;
   bool is_null() const;
   bool is_bool() const;
   bool is_int() const;

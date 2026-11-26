@@ -66,7 +66,7 @@ variable::Storage::Storage() {
 variable::Storage::~Storage() {
 }
 
-variable::variable() : kind_(K_NULL) {
+variable::variable() : kind_(K_UNDEFINED) {
 }
 
 variable::variable(std::nullptr_t) : kind_(K_NULL) {
@@ -139,6 +139,10 @@ variable &variable::operator=(const variable &other) {
 
 variable::Kind variable::kind() const {
   return kind_;
+}
+
+bool variable::is_undefined() const {
+  return kind_ == K_UNDEFINED;
 }
 
 bool variable::is_null() const {
@@ -246,6 +250,7 @@ void variable::destroy() {
   case K_REF:
     s5run_destroy_at(&u_.r);
     break;
+  case K_UNDEFINED:
   case K_NULL:
   case K_BOOL:
   case K_INT:
@@ -253,11 +258,12 @@ void variable::destroy() {
   default:
     break;
   }
-  kind_ = K_NULL;
+  kind_ = K_UNDEFINED;
 }
 
 void variable::copy_from(const variable &other) {
   switch (other.kind_) {
+  case K_UNDEFINED:
   case K_NULL:
     break;
   case K_BOOL:
@@ -355,6 +361,9 @@ void append_debug(const variable &v, std::string &out, int indent) {
   std::string pad(indent, ' ');
   std::string pad_in(indent + 2, ' ');
   switch (v.kind()) {
+  case variable::K_UNDEFINED:
+    out += "K_UNDEFINED\n";
+    break;
   case variable::K_NULL:
     out += "K_NULL\n";
     break;
@@ -399,8 +408,10 @@ void append_debug(const variable &v, std::string &out, int indent) {
 }
 
 variable parse_scalar_line(const std::string &line) {
-  if (line == "K_NULL")
+  if (line == "K_UNDEFINED")
     return variable();
+  if (line == "K_NULL")
+    return variable(nullptr);
   if (line == "K_BOOL true")
     return variable(true);
   if (line == "K_BOOL false")
@@ -480,6 +491,7 @@ variable parse_container(const std::string &header, const std::vector<std::strin
 
 nlohmann::json variable_to_json(const variable &v) {
   switch (v.kind()) {
+  case variable::K_UNDEFINED:
   case variable::K_NULL:
     return nullptr;
   case variable::K_BOOL:
@@ -511,7 +523,7 @@ nlohmann::json variable_to_json(const variable &v) {
 
 variable json_to_variable(const nlohmann::json &j) {
   if (j.is_null())
-    return variable();
+    return variable(nullptr); // JSON null
   if (j.is_boolean())
     return variable(j.get<bool>());
   if (j.is_number_integer())

@@ -107,10 +107,10 @@ static bool has_convert(const std::vector<schema_argument> &args) {
 static const char *VALUE_CLASS = R"GEN(class s5run_variable {
 public:
     enum kind {
-        K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF
+        K_UNDEFINED, K_NULL, K_BOOL, K_INT, K_DOUBLE, K_STRING, K_ARRAY, K_OBJECT, K_REF
     };
 
-    s5run_variable() : m_kind(K_NULL), m_b(false), m_i(0), m_d(0.0) {}
+    s5run_variable() : m_kind(K_UNDEFINED), m_b(false), m_i(0), m_d(0.0) {}
     s5run_variable(bool b) : m_kind(K_BOOL), m_b(b), m_i(0), m_d(0.0) {}
     s5run_variable(int i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
     s5run_variable(int64_t i) : m_kind(K_INT), m_b(false), m_i(i), m_d(0.0) {}
@@ -129,6 +129,7 @@ public:
     }
 
     kind get_kind() const { return m_kind; }
+    bool is_undefined() const { return m_kind == K_UNDEFINED; }
     bool is_null() const { return m_kind == K_NULL; }
 
     bool as_bool() const { return m_b; }
@@ -174,6 +175,9 @@ private:
         std::string pad(indent, ' ');
         std::string pad_in(indent + 2, ' ');
         switch (m_kind) {
+        case K_UNDEFINED:
+            out += "K_UNDEFINED\n";
+            break;
         case K_NULL:
             out += "K_NULL\n";
             break;
@@ -248,6 +252,7 @@ private:
     void append_json(std::string &out) const {
         char buf[64];
         switch (m_kind) {
+        case K_UNDEFINED:
         case K_NULL: out += "null"; break;
         case K_BOOL: out += m_b ? "true" : "false"; break;
         case K_INT:
@@ -664,6 +669,7 @@ inline void write_array__string(Writer &w, const std::vector<std::string> &v) {
 
 void encode_value(Writer &w, const s5run_variable &v) {
     switch (v.get_kind()) {
+    case s5run_variable::K_UNDEFINED:
     case s5run_variable::K_NULL: w.put_u8(T_UNDEFINED); break;
     case s5run_variable::K_BOOL: w.put_u8(T_BOOL); w.put_u8(v.as_bool() ? 1 : 0); break;
     case s5run_variable::K_INT: write_int(w, v.as_int()); break;
@@ -743,6 +749,7 @@ s5run_variable decode_value(Reader &r) {
 std::string _value_to_string(const s5run_variable &v) {
     switch (v.get_kind()) {
     case s5run_variable::K_NULL: return "null";
+    case s5run_variable::K_UNDEFINED: return "undefined";
     case s5run_variable::K_BOOL: return v.as_bool() ? "true" : "false";
     case s5run_variable::K_INT: return std::to_string(v.as_int());
     case s5run_variable::K_DOUBLE: return std::to_string(v.as_double());

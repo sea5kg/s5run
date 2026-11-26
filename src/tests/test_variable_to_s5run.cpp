@@ -23,7 +23,8 @@ namespace {
 void test_scalars() {
   std::fprintf(stderr, "== variable s5run: scalars\n");
 
-  CHECK(variable().to_string_s5run() == "K_NULL");
+  CHECK(variable().to_string_s5run() == "K_UNDEFINED");
+  CHECK(variable(nullptr).to_string_s5run() == "K_NULL");
   CHECK(variable(true).to_string_s5run() == "K_BOOL true");
   CHECK(variable(false).to_string_s5run() == "K_BOOL false");
   CHECK(variable((int64_t)1024).to_string_s5run() == "K_INT 1024");
@@ -92,6 +93,7 @@ void test_roundtrip() {
   std::fprintf(stderr, "== variable s5run: roundtrip\n");
 
   const char *cases[] = {
+    "K_UNDEFINED",
     "K_NULL",
     "K_BOOL true",
     "K_BOOL false",
