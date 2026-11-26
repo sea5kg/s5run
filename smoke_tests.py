@@ -379,11 +379,20 @@ def test_run_command_providers(ports):
             _providers_tests.append(os.path.join(_test_data, _dir))
 
     for _dir in _providers_tests:
+        _name = os.path.basename(_dir)
+        LOG.get_logger().info(" ... Running script %s", _name)
         in_args = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "input_arguments.txt"))
-        # TODO add to run args
-        providers = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "providers.txt"))
+        output_expected = UtilsFiles.safe_read_file(os.path.join(_dir, "output_console_expected.txt"))
+        output_expected = "".join(output_expected)
+        command = [S5RUN_BIN, "run", "127.0.0.1:" + str(ports["S5RUN_SERVER_PORT"])]
+        # TODO
+        # providers = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "providers.txt"))
+        # for _provider in providers:
+        #     for k,v in ports.items():
+        #         _provider = _provider.replace("$(" + k + ")", str(v))
+        #     command += ["--provider", _provider]
         script_js = os.path.join(_dir, "run_script.js")
-        command = [S5RUN_BIN, "run", "127.0.0.1:" + str(ports["S5RUN_SERVER_PORT"]), script_js]
+        command.append(script_js)
         command += in_args
         with FolderSwitcher(LOG.get_logger(), ROOT) as _:
             ret, out = UtilsShell.run_command(
@@ -391,16 +400,11 @@ def test_run_command_providers(ports):
                 _log=LOG.get_logger(),
                 print_output_on_exit=True
             )
-        # print(out)
-        # TODO improve
-        if _dir.endswith("provider_no"):
-            assert ret == 0, f"s5run run failed: ${out}"
-            assert "hello from test_run_script.js" in out, out
-            assert "a = 1, b = 2" in out, out
-            assert "a + b = 3" in out, out
-            assert "[warning] this is a warning message" in out
-            assert "{args: [1, 2], loopTotal: 55, ok: true, sum: 3}" in out, out
-        LOG.get_logger().info(" ... Run script test_run_script.js via command line [PASS]")
+        out = "\n".join(out.split("\n")[1:])  # remove first line with Run command
+        out = "\n".join(out.split("\n")[:-1])  # remove last line with duration
+        assert ret == 0, f"s5run run failed: ${out}"
+        assert out == output_expected, f"s5run run expected: [${output_expected}] but got [${out}]"
+        LOG.get_logger().info(" ... Run script %s via command line [PASS]", _name)
 
 
 def test_happy_path(host, port):

@@ -15,7 +15,7 @@ function main(a, b) {
   console.log("hello from test_run_script.js");
   console.log("a = " + a + ", b = " + b);
   console.log("a + b = " + (a + b));
-  console.warning("this is a warning message");
+  console.warning("this is a warning message from provider_cpp98-provider");
 
   var total = 0;
   for (var i = 1; i <= 10; ++i)
