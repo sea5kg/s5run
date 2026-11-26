@@ -12,12 +12,12 @@ import (
 var kScript = loadBaseScript()
 
 func loadBaseScript() string {
-	for _, p := range []string{"tests/__test_data/session0_scenario0/script.js", "../__test_data/session0_scenario0/script.js"} {
+	for _, p := range []string{"tests/__test_data/client_scenario0/script.js", "../__test_data/client_scenario0/script.js"} {
 		if b, err := os.ReadFile(p); err == nil {
 			return string(b)
 		}
 	}
-	panic("cannot find tests/__test_data/session0_scenario0/script.js")
+	panic("cannot find tests/__test_data/client_scenario0/script.js")
 }
 
 type MyFile struct {

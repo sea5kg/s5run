@@ -131,7 +131,7 @@ public class Main {
     static final String K_SCRIPT = loadBaseScript();
 
     private static String loadBaseScript() {
-        String[] paths = {"tests/__test_data/session0_scenario0/script.js", "../__test_data/session0_scenario0/script.js"};
+        String[] paths = {"tests/__test_data/client_scenario0/script.js", "../__test_data/client_scenario0/script.js"};
         for (String p : paths) {
             try {
                 return new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(p)),
@@ -140,7 +140,7 @@ public class Main {
                 // try the next path
             }
         }
-        throw new RuntimeException("cannot find tests/__test_data/session0_scenario0/script.js");
+        throw new RuntimeException("cannot find tests/__test_data/client_scenario0/script.js");
     }
 
     static String address;

@@ -1145,7 +1145,7 @@ std::vector<std::string> generator_python::generate_client(const schema &s, cons
   init += "CLIENT_VERSION = \"" + version + "\"\n\n\n";
   init += "def client_version() -> str:\n";
   init += "    return CLIENT_VERSION\n\n\n";
-  init += "from .variable import Ref\n";
+  init += "from .variable import Ref, to_string_json, to_string_s5run\n";
   init += "from .types import RemoteServerInfo, RunResult, S5RunFunction, S5RunObject\n";
   for (const auto &c : s.classes)
     init += "from .types import " + c.name + "\n";
@@ -1167,6 +1167,7 @@ std::vector<std::string> generator_python::generate_client(const schema &s, cons
   std::string variable;
   variable += "# AUTO-GENERATED. DO NOT EDIT.\n";
   variable += "\n";
+  variable += "import json\n";
   variable += "import struct\n";
   variable += "from dataclasses import dataclass\n";
   variable += "from typing import Any, Callable\n";

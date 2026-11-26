@@ -42,8 +42,7 @@
 #                                       # if needed, start server on a free port, run all
 #   python3 smoke_tests.py <port>       # run only python scenarios against 127.0.0.1:<port>
 #   python3 smoke_tests.py <host> <port>
-import glob
-import json
+
 import os
 import shutil
 import struct
@@ -54,11 +53,14 @@ import time
 from libpm import UtilsSmokeTests
 from libpm import UtilsLog
 from libpm import UtilsShell
+from libpm import UtilsJDK
+from libpm import UtilsServer
+from libpm import UtilsFiles
 from libpm import FolderSwitcher
 from libpm import s5run_wire
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SERVER_BIN = os.path.join(ROOT, "s5run")
+S5RUN_BIN = os.path.join(ROOT, "s5run")
 
 SMOKE_TESTS_LOG = os.path.join(ROOT, "smoke_tests.log")
 if os.path.isfile(SMOKE_TESTS_LOG):
@@ -149,26 +151,11 @@ def _provider_put_int64(v):
 def _provider_put_str_value(v):
     return bytes([0x0C]) + _provider_put_str(v)
 
-def test_cpp98_provider(port):
+def test_cpp98_provider(provider_bin):
     LOG.get_logger().info(" -> cpp provider test: cpp98-provider")
-    provider_dir = os.path.join(ROOT, "tests", "cpp98-provider")
-    build_dir = os.path.join(ROOT, "tmp", "cpp98-provider")
-    provider_bin = os.path.join(provider_dir, "bin", "cpp98-provider")
-    with FolderSwitcher(LOG.get_logger(), provider_dir) as _:
-        UtilsShell.run_command(
-            ["cmake", "-H" + provider_dir, "-B" + build_dir,
-              "-DCMAKE_BUILD_TYPE=Release"],
-            _log=LOG.get_logger(),
-            print_output_on_exit=True
-        )
-        UtilsShell.run_command(
-            ["cmake", "--build", build_dir, "--config", "Release"],
-            _log=LOG.get_logger(),
-            print_output_on_exit=True
-        )
 
     # the provider serves its own port (not the s5run server port)
-    provider_port = _free_port()
+    provider_port = UtilsServer.free_port()
     LOG.get_logger().info(" ... cpp98-provider: start on 127.0.0.1:%d", provider_port)
     proc = subprocess.Popen([provider_bin, "127.0.0.1:" + str(provider_port)],
                             cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -281,66 +268,13 @@ def test_go_client(port):
     LOG.get_logger().info(" ... go-client: [PASS]")
 
 
-def _have_jdk():
-    return all(shutil.which(cmd) for cmd in ("javac", "jar", "java"))
-
-
-def _jdk_path(version):
-    """JAVA_HOME override for a specific Java version, e.g. _jdk_path(11)."""
-    env = os.environ.get(f"JAVA{version}_HOME", "")
-    if env and os.path.isfile(os.path.join(env, "bin", "javac")):
-        return env
-    candidates = [
-        f"/usr/lib/jvm/java-{version}-openjdk-amd64",
-        f"/usr/lib/jvm/java-{version}-openjdk",
-        f"/usr/lib/jvm/java-{version}-openjdk-arm64",
-    ]
-    for c in candidates:
-        if os.path.isfile(os.path.join(c, "bin", "javac")):
-            return c
-    return None
-
-
-def _have_jdk_version(version):
-    """True if this Java version target is buildable: a matching JDK is
-    installed OR the default javac is new enough to cross-compile via
-    --release."""
-    if _jdk_path(version):
-        return True
-    if _have_jdk():
-        try:
-            out = subprocess.check_output(["javac", "--version"], stderr=subprocess.STDOUT, text=True)
-            major = int(out.strip().split()[1].split(".")[0])
-            return major >= version
-        except (ValueError, subprocess.CalledProcessError, FileNotFoundError):
-            return False
-    return False
-
-
-def _java_build_env(version):
-    """Env with JAVA_HOME and JAVA_RELEASE for the target version.
-
-    Uses the system javac with --release N when no dedicated JDK<N> is
-    installed (cross-compilation)."""
-    env = os.environ.copy()
-    jdk = _jdk_path(version)
-    if jdk:
-        env["JAVA_HOME"] = jdk
-        env["PATH"] = os.path.join(jdk, "bin") + os.pathsep + env["PATH"]
-        env["JAVA_RELEASE"] = str(version)
-    elif _have_jdk():
-        # cross-compile through the default (newer) javac
-        env["JAVA_RELEASE"] = str(version)
-    return env
-
-
 def test_java_client(java_version, port):
     java_x = int(java_version.split("java")[1])
     LOG.get_logger().info(" -> java client test: java%s", str(java_x))
-    if not _have_jdk_version(java_x):
+    if not UtilsJDK.have_jdk_version(java_x):
         print("  SKIP: JDK " + str(java_x) + " not available")
         return
-    env = _java_build_env(java_x)
+    env = UtilsJDK.java_build_env(java_x)
     client_dir = os.path.join(ROOT, "tests", "java" + str(java_x) + "-client")
     ret = -1
     with FolderSwitcher(LOG.get_logger(), client_dir) as _:
@@ -366,13 +300,6 @@ def test_java_client(java_version, port):
 # server management
 # ---------------------------------------------------------------------------
 
-def _free_port():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
 
 def start_server(port):
     LOG.get_logger().info("-> Start server on %d port... ", port)
@@ -383,7 +310,7 @@ def start_server(port):
             os.remove(queue_db + suffix)
         except OSError:
             pass
-    proc = subprocess.Popen([SERVER_BIN, "server", "--listen", "127.0.0.1:" + str(port),
+    proc = subprocess.Popen([S5RUN_BIN, "server", "--listen", "127.0.0.1:" + str(port),
                              "--threads", "2", "--queue", "--db", queue_db,
                              "--ttl", "60"], cwd=ROOT,
                             stdout=log, stderr=subprocess.STDOUT)
@@ -443,23 +370,37 @@ def run_with_dispatch(sock):
         raise s5run_wire.WireError("unexpected msg type %d" % t)
 
 
-def test_run_command(port):
+def test_run_command_providers(ports):
     LOG.get_logger().info("-> Run command line client s5run run...")
+    _test_data = os.path.join(ROOT, "tests", "__test_data")
+    _providers_tests = []
+    for _dir in os.listdir(_test_data):
+        if _dir.startswith("provider_"):
+            _providers_tests.append(os.path.join(_test_data, _dir))
 
-    with FolderSwitcher(LOG.get_logger(), ROOT) as _:
-        ret, out = UtilsShell.run_command(
-            [SERVER_BIN, "run", "127.0.0.1:" + str(port),
-                os.path.join(ROOT, "tests", "test_run_script.js"), "1", "2"],
-            _log=LOG.get_logger(),
-            print_output_on_exit=True
-        )
-    assert ret == 0, f"s5run run failed: ${out}"
-    assert "hello from test_run_script.js" in out, out
-    assert "a = 1, b = 2" in out, out
-    assert "a + b = 3" in out, out
-    assert "[warning] this is a warning message" in out
-    assert "{args: [1, 2], loopTotal: 55, ok: true, sum: 3}" in out, out
-    LOG.get_logger().info(" ... Run script test_run_script.js via command line [PASS]")
+    for _dir in _providers_tests:
+        in_args = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "input_arguments.txt"))
+        # TODO add to run args
+        providers = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "providers.txt"))
+        script_js = os.path.join(_dir, "run_script.js")
+        command = [S5RUN_BIN, "run", "127.0.0.1:" + str(ports["S5RUN_SERVER_PORT"]), script_js]
+        command += in_args
+        with FolderSwitcher(LOG.get_logger(), ROOT) as _:
+            ret, out = UtilsShell.run_command(
+                command,
+                _log=LOG.get_logger(),
+                print_output_on_exit=True
+            )
+        # print(out)
+        # TODO improve
+        if _dir.endswith("provider_no"):
+            assert ret == 0, f"s5run run failed: ${out}"
+            assert "hello from test_run_script.js" in out, out
+            assert "a = 1, b = 2" in out, out
+            assert "a + b = 3" in out, out
+            assert "[warning] this is a warning message" in out
+            assert "{args: [1, 2], loopTotal: 55, ok: true, sum: 3}" in out, out
+        LOG.get_logger().info(" ... Run script test_run_script.js via command line [PASS]")
 
 
 def test_happy_path(host, port):
@@ -563,25 +504,43 @@ def main():
     UtilsSmokeTests.step_clean_generated_outputs(LOG.get_logger())
     UtilsSmokeTests.step_generated_client_code(LOG.get_logger())
     UtilsSmokeTests.step_generated_providers_code(LOG.get_logger())
+    cpp98_provider_bin = UtilsSmokeTests.step_compile_tests_cpp(LOG.get_logger(), "cpp98-provider")
+    test_cpp98_provider(cpp98_provider_bin)
 
-    port = _free_port()
-    proc = start_server(port)
+    queue_db = os.path.join(ROOT, "tmp", "smoke-queue.sqlite3")
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(queue_db + suffix)
+        except OSError:
+            pass
+    env_ports = {}
+    s5run_server = UtilsServer(LOG.get_logger(), [
+        S5RUN_BIN, "server", "--listen", "127.0.0.1:$(FREE_PORT)",
+        "--threads", "2", "--queue", "--db", queue_db, "--ttl", "60"
+    ])
+    s5run_server.start()
+    env_ports["S5RUN_SERVER_PORT"] = s5run_server.port()
+    cpp98_provider = UtilsServer(LOG.get_logger(), [
+        cpp98_provider_bin, "127.0.0.1:$(FREE_PORT)"
+    ])
+    cpp98_provider.start()
+    env_ports["CPP98_PROVIDER_PORT"] = cpp98_provider.port()
     try:
-        test_happy_path("127.0.0.1", port)
-        test_queue("127.0.0.1", port)
-        test_server_stats("127.0.0.1", port)
-        test_callback_error("127.0.0.1", port)
-        test_run_command(port)
-        test_cpp_gen_client("cpp98", port)
-        test_cpp98_provider(port)
-        test_cpp_gen_client("cpp11", port)
-        test_py_gen_client(port)
-        test_go_client(port)
-        test_java_client("java11", port)
-        test_java_client("java17", port)
-        test_java_client("java21", port)
+        test_run_command_providers(env_ports)
+        test_happy_path("127.0.0.1", s5run_server.port())
+        test_queue("127.0.0.1", s5run_server.port())
+        test_server_stats("127.0.0.1", s5run_server.port())
+        test_callback_error("127.0.0.1", s5run_server.port())
+        test_cpp_gen_client("cpp98", s5run_server.port())
+        test_cpp_gen_client("cpp11", s5run_server.port())
+        test_py_gen_client(s5run_server.port())
+        test_go_client(s5run_server.port())
+        test_java_client("java11", s5run_server.port())
+        test_java_client("java17", s5run_server.port())
+        test_java_client("java21", s5run_server.port())
     finally:
-        stop_server(proc)
+        s5run_server.stop()
+        cpp98_provider.stop()
         UtilsSmokeTests.step_clean_binaries(LOG.get_logger())
     print("all smoke tests passed")
 

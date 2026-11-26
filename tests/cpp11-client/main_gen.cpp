@@ -235,7 +235,7 @@ static std::vector<std::string> list_test_scenarios() {
     std::string name = entry->d_name;
     if (name == "." || name == "..")
       continue;
-    if (name.rfind("session", 0) == 0 && name.find("_scenario") != std::string::npos)
+    if (name.rfind("client_", 0) == 0 && name.find("_scenario") != std::string::npos)
       out.push_back(name);
   }
   ::closedir(d);
@@ -311,8 +311,9 @@ int main(int argc, char **argv) {
   if (scenarios.empty())
     throw std::runtime_error("no sessionX_scenarioX found in ../__test_data");
   std::vector<test_data> tests;
-  for (const auto &scenario : scenarios)
+  for (const auto &scenario : scenarios) {
     tests.push_back(load_test_data(scenario));
+  }
 
   // == happy path
   std::printf("== cpp11-client: happy path\n");
@@ -364,7 +365,7 @@ int main(int argc, char **argv) {
       }
 
       // side-effect checks (callback state, to be moved into data files)
-      if (test.name == "session0_scenario0") {
+      if (test.name == "client_scenario0") {
         if (MyFileSystem::m_last_path != "test.txt")
           throw std::runtime_error("unexpected FileSystem.GetList path: " + MyFileSystem::m_last_path);
         if (MyCloseFiles::m_closed_sizes.size() != 2

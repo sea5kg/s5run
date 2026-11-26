@@ -1,0 +1,1 @@
+localhost:$(CPP98_PROVIDER_PORT),MassageCrew_Queue,getQueue

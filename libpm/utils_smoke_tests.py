@@ -41,6 +41,8 @@ Helper tool for smoke tests
 
 import os
 import shutil
+import socket
+import subprocess
 
 from .pm_config import FolderSwitcher
 from .utils_shell import UtilsShell
@@ -64,6 +66,28 @@ class UtilsSmokeTests:
                 print_output_on_exit=True
             )
         _log.info(" ... Compiling done. [PASS]")
+
+    @staticmethod
+    def step_compile_tests_cpp(_log, name):
+        """ compile_s5run """
+        _log.info("-> Start compiling %s ...", name)
+        project_dir = os.path.join(ROOT_DIR, "tests", name)
+        build_dir = os.path.join(ROOT_DIR, "tmp", name)
+        with FolderSwitcher(_log, project_dir) as _:
+            UtilsShell.run_command(
+                ["cmake", "-H" + project_dir, "-B" + build_dir,
+                "-DCMAKE_BUILD_TYPE=Release"],
+                _log=_log,
+                print_output_on_exit=True
+            )
+            UtilsShell.run_command(
+                ["cmake", "--build", build_dir, "--config", "Release"],
+                _log=_log,
+                print_output_on_exit=True
+            )
+        _log.info(" ... Compiling done. [PASS]")
+        return os.path.join(project_dir, "bin", name)
+
 
     @staticmethod
     def remove_if_dir_exists(_log, _parent_dir, _sub_dir):

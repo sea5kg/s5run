@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import libs5run_cli_example as m
 
-K_SCRIPT = (Path(__file__).resolve().parent.parent / "__test_data/session0_scenario0/script.js").read_text()
+K_SCRIPT = (Path(__file__).resolve().parent.parent / "__test_data/client_scenario0/script.js").read_text()
 
 
 class MyFile(m.File):
