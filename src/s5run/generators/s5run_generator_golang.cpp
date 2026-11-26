@@ -1401,8 +1401,8 @@ func RunScript(ctx *Context, entry string, args []S5RunVariable) *RunResult {
 
 class generator_golang : public IGenerator {
 public:
-  std::vector<std::string> generate(const schema &s,
-                                     const std::string &output_dir) override;
+  std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) override;
+  std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) override;
 };
 
 static std::string trim(const std::string &s) {
@@ -1426,8 +1426,7 @@ static void write_go_file(const std::string &pkg_dir, const std::string &pkg,
   written.push_back(path);
 }
 
-std::vector<std::string> generator_golang::generate(const schema &s,
-                                                    const std::string &output_dir) {
+std::vector<std::string> generator_golang::generate_client(const schema &s, const std::string &output_dir) {
   std::vector<std::string> written;
   std::string pkg = s.golang()->get_package_name();
   ::mkdir(output_dir.c_str(), 0755);
@@ -1438,6 +1437,10 @@ std::vector<std::string> generator_golang::generate(const schema &s,
   write_go_file(output_dir, pkg, "context", generate_context(s), written);
 
   return written;
+}
+
+std::vector<std::string> generator_golang::generate_provider(const schema &s, const std::string &output_dir) {
+  return {};
 }
 
 std::shared_ptr<IGenerator> make_generator_golang() {

@@ -383,13 +383,14 @@ int s5run_parse_args::cmd_generate() {
     return 1;
   }
 
-  if (subcommand == "provider") {
-    std::cerr << "generate provider: not implemented yet" << std::endl << std::endl;
+  auto gen = all_generators[language];
+  auto files = subcommand == "provider"
+                 ? gen->generate_provider(schema, output_dir)
+                 : gen->generate_client(schema, output_dir);
+  if (files.empty()) {
+    std::cerr << "generate provider: not supported for '" << language << "' yet" << std::endl << std::endl;
     return 1;
   }
-
-  auto gen = all_generators[language];
-  auto files = gen->generate(schema, output_dir);
   for (const auto &f : files)
     std::cout << "generated: " << f << std::endl;
   return 0;

@@ -50,7 +50,8 @@ class IGenerator {
 public:
   virtual ~IGenerator() = default;
 
-  virtual std::vector<std::string> generate(const schema &s, const std::string &output_dir) = 0;
+  virtual std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) = 0;
+  virtual std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) = 0;
 };
 
 std::shared_ptr<IGenerator> make_generator_cpp98();

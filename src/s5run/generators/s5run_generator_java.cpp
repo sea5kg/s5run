@@ -1592,7 +1592,8 @@ public:
     }
   }
 
-  std::vector<std::string> generate(const schema &s, const std::string &output_dir) override;
+  std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) override;
+  std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) override;
 
 private:
   java_flavor m_flavor;
@@ -1635,7 +1636,7 @@ static void write_java_file(
   written.push_back(path);
 }
 
-std::vector<std::string> generator_java::generate(const schema &s, const std::string &output_dir) {
+std::vector<std::string> generator_java::generate_client(const schema &s, const std::string &output_dir) {
   auto options = s.options_java(m_java_xx);
 
   std::vector<std::string> written;
@@ -1753,6 +1754,10 @@ std::vector<std::string> generator_java::generate(const schema &s, const std::st
     written
   );
   return written;
+}
+
+std::vector<std::string> generator_java::generate_provider(const schema &s, const std::string &output_dir) {
+  return {};
 }
 
 std::shared_ptr<IGenerator> make_generator_java11() {

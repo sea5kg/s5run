@@ -67,30 +67,6 @@ LOG = UtilsLog("smoke_tests", SMOKE_TESTS_LOG)
 class CallbackError(Exception):
     pass
 
-def generated_client_code():
-    UtilsSmokeTests.clean_generated_outputs(LOG.get_logger())
-    LOG.get_logger().info("-> Generating client's libs ...")
-
-    _todo_generate = {
-        "cpp98": os.path.join(ROOT, "tests", "cpp98-client", "s5run_cli"),
-        "cpp11": os.path.join(ROOT, "tests", "cpp11-client", "s5run_cli_example"),
-        "go": os.path.join(ROOT, "tests", "go-client", "s5runcli"),
-        "py": os.path.join(ROOT, "tests", "py-client"),
-        "java21": os.path.join(ROOT, "tests", "java21-client", "src"),
-        "java17": os.path.join(ROOT, "tests", "java17-client", "src"),
-        "java11": os.path.join(ROOT, "tests", "java11-client", "src"),
-    }
-    _langs = _todo_generate.keys()
-    _langs = sorted(_langs)
-    for _lang in _langs:
-        LOG.get_logger().info(" ... generate client for %s", _lang)
-        UtilsShell.run_command(
-            [SERVER_BIN, "generate", "client", "--language", _lang], # , "--output-dir", _todo_generate[_lang]],
-            _log=LOG.get_logger(),
-            print_output_on_exit=True
-        )
-
-    LOG.get_logger().info("-> Generating client's libs done. [PASS]")
 
 def test_py_gen_client(port):
     LOG.get_logger().info(" -> python client test: py-client")
@@ -134,6 +110,33 @@ def test_cpp_gen_client(cpp_version, port):
         )
         assert ret == 0, cpp_version + "-client failed with code %d" % ret
     LOG.get_logger().info(" ... %s-client: [PASS]", cpp_version)
+
+
+def test_cpp98_provider(port):
+    LOG.get_logger().info(" -> cpp provider test: cpp98-provider")
+    provider_dir = os.path.join(ROOT, "tests", "cpp98-provider")
+    build_dir = os.path.join(ROOT, "tmp", "cpp98-provider")
+    provider_bin = os.path.join(provider_dir, "bin", "cpp98-provider")
+    with FolderSwitcher(LOG.get_logger(), provider_dir) as _:
+        UtilsShell.run_command(
+            ["cmake", "-H" + provider_dir, "-B" + build_dir,
+              "-DCMAKE_BUILD_TYPE=Release"],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+        UtilsShell.run_command(
+            ["cmake", "--build", build_dir, "--config", "Release"],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+        LOG.get_logger().info(" ... cpp98-provider: scenarios")
+        ret, _ = UtilsShell.run_command(
+            [provider_bin, "127.0.0.1", str(port)],
+            _log=LOG.get_logger(),
+            print_output_on_exit=True
+        )
+        assert ret == 0, "cpp98-provider failed with code %d" % ret
+    LOG.get_logger().info(" ... cpp98-provider: [PASS]")
 
 
 def test_go_client(port):
@@ -439,10 +442,10 @@ def main():
         print("all smoke tests passed")
         return
 
-    LOG.get_logger().info("-> Start compiling...")
-    UtilsSmokeTests.compile_s5run(LOG.get_logger())
-    LOG.get_logger().info("-> Compiling done. [PASS]")
-    generated_client_code()
+    UtilsSmokeTests.step_compile_s5run(LOG.get_logger())
+    UtilsSmokeTests.step_clean_generated_outputs(LOG.get_logger())
+    UtilsSmokeTests.step_generated_client_code(LOG.get_logger())
+    UtilsSmokeTests.step_generated_providers_code(LOG.get_logger())
 
     port = _free_port()
     proc = start_server(port)
@@ -453,6 +456,7 @@ def main():
         test_callback_error("127.0.0.1", port)
         test_run_command(port)
         test_cpp_gen_client("cpp98", port)
+        test_cpp98_provider(port)
         test_cpp_gen_client("cpp11", port)
         test_py_gen_client(port)
         test_go_client(port)
@@ -461,7 +465,7 @@ def main():
         test_java_client("java21", port)
     finally:
         stop_server(proc)
-        UtilsSmokeTests.clean_binaries(LOG.get_logger())
+        UtilsSmokeTests.step_clean_binaries(LOG.get_logger())
     print("all smoke tests passed")
 
 

@@ -46,8 +46,8 @@ namespace generators {
 
 class generator_cpp11 : public IGenerator {
 public:
-  std::vector<std::string> generate(const schema &s,
-                                     const std::string &output_dir) override;
+  std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) override;
+  std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) override;
 
 private:
   std::string generate_header(const schema &s, std::shared_ptr<schema_cpp_options> options) const;
@@ -1589,8 +1589,7 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
   return out;
 }
 
-std::vector<std::string> generator_cpp11::generate(const schema &s,
-                                                    const std::string &output_dir) {
+std::vector<std::string> generator_cpp11::generate_client(const schema &s, const std::string &output_dir) {
   auto options = s.cpp11();
   const std::string &ns = options->get_namespace();
   std::vector<std::string> written;
@@ -1605,6 +1604,10 @@ std::vector<std::string> generator_cpp11::generate(const schema &s,
   written.push_back(impl_path);
 
   return written;
+}
+
+std::vector<std::string> generator_cpp11::generate_provider(const schema &s, const std::string &output_dir) {
+  return {};
 }
 
 std::shared_ptr<IGenerator> make_generator_cpp11() {

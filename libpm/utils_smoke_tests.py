@@ -54,14 +54,16 @@ class UtilsSmokeTests:
     """ UtilsSmokeTests """
 
     @staticmethod
-    def compile_s5run(_log):
+    def step_compile_s5run(_log):
         """ compile_s5run """
+        _log.info("-> Start compiling s5run ...")
         with FolderSwitcher(_log, ROOT_DIR) as _:
             UtilsShell.run_command(
                 ["./build_simple.sh"],
                 _log=_log,
                 print_output_on_exit=True
             )
+        _log.info(" ... Compiling done. [PASS]")
 
     @staticmethod
     def remove_if_dir_exists(_log, _parent_dir, _sub_dir):
@@ -74,8 +76,9 @@ class UtilsSmokeTests:
         return 0
 
     @staticmethod
-    def clean_generated_outputs(_log):
+    def step_clean_generated_outputs(_log):
         """ Delete all generated code AND build artifacts to guarantee a fresh build. """
+        _log.info("-> Cleanup generated code")
         _tests_dir = os.path.join(ROOT_DIR, "tests")
         _tests_dir = os.path.normpath(_tests_dir)
         _counter = 0
@@ -87,6 +90,7 @@ class UtilsSmokeTests:
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_cli")  # cpp
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_cli_example")  # cpp
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "libs5run_cli_example")  # py package
+            _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5run_provider")  # cpp98 provider
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "s5runcli")  # go
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "src/com")  # java
             _counter += UtilsSmokeTests.remove_if_dir_exists(_log, _dir, "bin")  # go, cpp
@@ -99,14 +103,15 @@ class UtilsSmokeTests:
                     _counter += 1
                     _log.debug("Removed: %s", _file)
         if _counter > 0:
-            _log.info("-> Cleanup. " + str(_counter) + " files and dirs cleaned.")
+            _log.info(" ... Cleanup generated code. " + str(_counter) + " files and dirs cleaned. [PASS]")
         else:
-            _log.info("-> Cleanup. Nothing to clean")
+            _log.info(" ... Cleanup generated code. Nothing to clean [PASS]")
         # sys.exit(1)
 
     @staticmethod
-    def clean_binaries(_log):
+    def step_clean_binaries(_log):
         """ Delete all generated code AND build artifacts to guarantee a fresh build. """
+        _log.info("-> Cleanup binaries")
         _tests_dir = os.path.join(ROOT_DIR, "tests")
         _tests_dir = os.path.normpath(_tests_dir)
         _counter = 0
@@ -124,7 +129,47 @@ class UtilsSmokeTests:
                     _counter += 1
                     _log.debug("Removed: %s", _file)
         if _counter > 0:
-            _log.info("-> Cleanup binaries. " + str(_counter) + " files and dirs cleaned.")
+            _log.info(" ... Cleanup binaries. " + str(_counter) + " files and dirs cleaned. [PASS]")
         else:
-            _log.info("-> Cleanup binaries. Nothing to clean")
+            _log.info(" ... Cleanup binaries. Nothing to clean [PASS]")
         # sys.exit(1)
+
+    @staticmethod
+    def step_generated_client_code(_log):
+        _log.info("-> Generating client's libs ...")
+        _server_bin = os.path.join(ROOT_DIR, "s5run")
+        _todo_generate = {
+            "cpp98": os.path.join(ROOT_DIR, "tests", "cpp98-client", "s5run_cli"),
+            "cpp11": os.path.join(ROOT_DIR, "tests", "cpp11-client", "s5run_cli_example"),
+            "go": os.path.join(ROOT_DIR, "tests", "go-client", "s5runcli"),
+            "py": os.path.join(ROOT_DIR, "tests", "py-client"),
+            "java21": os.path.join(ROOT_DIR, "tests", "java21-client", "src"),
+            "java17": os.path.join(ROOT_DIR, "tests", "java17-client", "src"),
+            "java11": os.path.join(ROOT_DIR, "tests", "java11-client", "src"),
+        }
+        _langs = _todo_generate.keys()
+        _langs = sorted(_langs)
+        for _lang in _langs:
+            _log.info(" ... generate client for %s", _lang)
+            UtilsShell.run_command(
+                [_server_bin, "generate", "client", "--language", _lang], # , "--output-dir", _todo_generate[_lang]],
+                _log=_log,
+                print_output_on_exit=True
+            )
+
+        _log.info(" ... Generated client's libs done. [PASS]")
+
+    @staticmethod
+    def step_generated_providers_code(_log):
+        _log.info("-> Generating provider's libs ...")
+        _server_bin = os.path.join(ROOT_DIR, "s5run")
+
+        _log.info(" ... generate provider for cpp98")
+        UtilsShell.run_command(
+            [_server_bin, "generate", "provider", "--language", "cpp98",
+            "--output-dir", os.path.join(ROOT_DIR, "tests", "cpp98-provider", "s5run_provider"),
+            "--schema", os.path.join(ROOT_DIR, "tests", "cpp98-provider", "s5run-schema.json")],
+            _log=_log,
+            print_output_on_exit=True
+        )
+        _log.info(" ... Generated providers's libs done. [PASS]")

@@ -48,12 +48,18 @@ namespace generators {
 
 class generator_cpp98 : public IGenerator {
 public:
-  std::vector<std::string> generate(const schema &s,
-                                     const std::string &output_dir) override;
+  generator_cpp98() : m_provider(false) {
+  }
+
+  std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) override;
+  std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) override;
 
 private:
   std::string generate_header(const schema &s) const;
   std::string generate_impl(const schema &s) const;
+  std::vector<std::string> generate_internal(const schema &s, const std::string &output_dir);
+
+  bool m_provider;
 };
 
 // -----------------------------------------------------------------------
@@ -538,6 +544,9 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += "    class context_impl;\nprivate:\n";
   out += "    friend run_result run_script(context *ctx, const std::string &entry,\n";
   out += "                                 const std::vector<s5run_variable> &args);\n";
+  if (m_provider) {
+    out += "    friend bool serve(context *ctx);\n";
+  }
   out += "    context_impl *m_impl;\n};\n\n";
 
   out += "class run_result {\npublic:\n    run_result();\n";
@@ -551,6 +560,12 @@ std::string generator_cpp98::generate_header(const schema &s) const {
 
   out += "run_result run_script(context *ctx, const std::string &entry, ";
   out += "const std::vector<s5run_variable> &args = std::vector<s5run_variable>());\n\n";
+  if (m_provider) {
+    out += "// Provider mode: connect, register the context and serve incoming\n";
+    out += "// callback requests until the connection closes.\n";
+    out += "// Returns false on a disconnect or an error.\n";
+    out += "bool serve(context *ctx);\n\n";
+  }
   out += "} // namespace " + ns + "\n\n";
   out += "#endif // " + guard + "\n";
   return out;
@@ -1113,7 +1128,11 @@ int remote_server_info::get_port() const { return m_port; }
   out += "                         const std::vector<s5run_property_descriptor> &props);\n";
   out += "    void add_object(s5run_object *obj);\n";
   out += "    void add_function(s5run_function *fn);\n";
-  out += "    run_result run(const std::string &entry, const std::vector<s5run_variable> &args);\n\n";
+  out += "    run_result run(const std::string &entry, const std::vector<s5run_variable> &args);\n";
+  if (m_provider) {
+    out += "    bool serve_loop();\n";
+  }
+  out += "\n";
   out += "private:\n";
   out += "    struct PendingType { std::string name; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };\n";
   out += "    struct PendingObject { std::string name; i32 this_id; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };\n\n";
@@ -1462,13 +1481,51 @@ run_result context::context_impl::run(const std::string &entry,
   out += "context * make_context() { return new context(); }\n\n";
   out += "run_result run_script(context *ctx, const std::string &entry, ";
   out += "const std::vector<s5run_variable> &args) { return ctx->m_impl->run(entry, args); }\n\n";
+  if (m_provider) {
+    out += R"CODE(bool context::context_impl::serve_loop() {
+    try {
+        connect();
+        flush_pending();
+    } catch (const std::exception &) {
+        return false;
+    }
+    while (true) {
+        u8 msg_type = 0;
+        std::vector<u8> body;
+        if (!read_frame(m_sock, msg_type, body))
+            return false; // connection closed
+        if (msg_type == M_CALLBACK_REQ) {
+            try { dispatch_callback(body); }
+            catch (const std::exception &) {}
+            continue;
+        }
+        // unexpected message for a provider
+        return false;
+    }
+}
+
+bool serve(context *ctx) { return ctx->m_impl->serve_loop(); }
+
+)CODE";
+  }
   out += "} // namespace " + ns + "\n";
 
   return out;
 }
 
-std::vector<std::string> generator_cpp98::generate(const schema &s,
-                                                   const std::string &output_dir) {
+std::vector<std::string> generator_cpp98::generate_client(const schema &s, const std::string &output_dir) {
+  m_provider = false;
+  return generate_internal(s, output_dir);
+}
+
+std::vector<std::string> generator_cpp98::generate_provider(const schema &s,
+                                                             const std::string &output_dir) {
+  m_provider = true;
+  return generate_internal(s, output_dir);
+}
+
+std::vector<std::string> generator_cpp98::generate_internal(const schema &s,
+                                                             const std::string &output_dir) {
   const std::string &ns = s.cpp98()->get_namespace();
   std::vector<std::string> written;
   ::mkdir(output_dir.c_str(), 0755);

@@ -1,0 +1,43 @@
+{
+  "client-version": "1.0.0",
+  "options": {
+    "cpp98": {
+      "output-dir": "s5run_provider/",
+      "prefix-filename": "d2_",
+      "namespace": "s5run_provider"
+    }
+  },
+  "version": 1,
+  "functions": [
+    {
+      "name": "getQueue",
+      "return": "MassageCrew_Queue",
+      "arguments": [
+        {
+          "type": "string",
+          "name": "queue_name"
+        }
+      ]
+    }
+  ],
+  "classes": [
+    {
+      "name": "MassageCrew_Queue",
+      "methods": [
+        {
+          "name": "publish",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "msg_id"
+            },
+            {
+              "type": "string",
+              "name": "msg_text"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

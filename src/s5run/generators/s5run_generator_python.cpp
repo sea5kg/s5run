@@ -1066,12 +1066,11 @@ def run_script(ctx: Context, entry: str, args: list[Any] | None = None) -> RunRe
 
 class generator_python : public IGenerator {
 public:
-  std::vector<std::string> generate(const schema &s,
-                                     const std::string &output_dir) override;
+  std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) override;
+  std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) override;
 };
 
-std::vector<std::string> generator_python::generate(const schema &s,
-                                                    const std::string &output_dir) {
+std::vector<std::string> generator_python::generate_client(const schema &s, const std::string &output_dir) {
   std::vector<std::string> written;
   std::string module = s.py() ? s.py()->get_module_name() : "";
   if (module.empty())
@@ -1186,6 +1185,10 @@ std::vector<std::string> generator_python::generate(const schema &s,
     written.push_back(path);
   }
   return written;
+}
+
+std::vector<std::string> generator_python::generate_provider(const schema &s, const std::string &output_dir) {
+  return {};
 }
 
 std::shared_ptr<IGenerator> make_generator_python() {
