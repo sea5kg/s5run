@@ -83,8 +83,7 @@ S_LEN_4 = 0x02
 
 
 class WireError(Exception):
-    """ WireError """
-    pass
+    """ Wire protocol error """
 
 
 class Writer:
