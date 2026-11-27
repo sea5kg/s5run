@@ -295,48 +295,6 @@ def test_java_client(java_version, port):
     assert ret == 0, "java" + str(java_x) + "-client failed with code %d" % ret
     LOG.get_logger().info(" ... java%s-client: [PASS]", str(java_x))
 
-
-# ---------------------------------------------------------------------------
-# server management
-# ---------------------------------------------------------------------------
-
-
-def start_server(port):
-    LOG.get_logger().info("-> Start server on %d port... ", port)
-    log = open(os.path.join(ROOT, "tmp", "smoke-server.log"), "w")
-    queue_db = os.path.join(ROOT, "tmp", "smoke-queue.sqlite3")
-    for suffix in ("", "-wal", "-shm"):
-        try:
-            os.remove(queue_db + suffix)
-        except OSError:
-            pass
-    proc = subprocess.Popen([S5RUN_BIN, "server", "--listen", "127.0.0.1:" + str(port),
-                             "--threads", "2", "--queue", "--db", queue_db,
-                             "--ttl", "60"], cwd=ROOT,
-                            stdout=log, stderr=subprocess.STDOUT)
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        try:
-            s = socket.create_connection(("127.0.0.1", port), timeout=0.5)
-            s.close()
-            return proc
-        except OSError:
-            if proc.poll() is not None:
-                raise SystemExit("!!! FAIL: server exited with code %d" % proc.returncode)
-            time.sleep(0.05)
-    proc.terminate()
-    raise SystemExit("!!! FAIL: server did not start in 10s")
-
-
-def stop_server(proc):
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-
-
 # ---------------------------------------------------------------------------
 # python client scenarios
 # ---------------------------------------------------------------------------
