@@ -128,6 +128,9 @@ public:
 
 class base_context_class_File : public s5run_object {
 public:
+    // 'new File()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual base_context_class_File *s5run_construct() { return 0; }
     virtual ~base_context_class_File() {}
     virtual std::string s5run_class_name() const { return "File"; }
     virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
@@ -154,6 +157,9 @@ public:
 
 class base_context_class_FileSystem : public s5run_object {
 public:
+    // 'new FileSystem()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual base_context_class_FileSystem *s5run_construct() { return 0; }
     virtual ~base_context_class_FileSystem() {}
     virtual std::string s5run_class_name() const { return "FileSystem"; }
     virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
@@ -170,6 +176,9 @@ public:
 
 class base_context_class_console : public s5run_object {
 public:
+    // 'new console()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual base_context_class_console *s5run_construct() { return 0; }
     virtual ~base_context_class_console() {}
     virtual std::string s5run_class_name() const { return "console"; }
     virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
@@ -190,6 +199,9 @@ public:
 
 class base_context_class_KeyValueStorage : public s5run_object {
 public:
+    // 'new KeyValueStorage()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual base_context_class_KeyValueStorage *s5run_construct() { return 0; }
     virtual ~base_context_class_KeyValueStorage() {}
     virtual std::string s5run_class_name() const { return "KeyValueStorage"; }
     virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {
@@ -203,7 +215,7 @@ public:
         return out;
     }
     virtual void SetValueByKey(const std::string & name, const s5run_variable & value) = 0;
-    virtual void GetValueByKey(const std::string & name) = 0;
+    virtual s5run_variable GetValueByKey(const std::string & name) = 0;
 };
 
 class base_context_function_GetFile : public s5run_function {

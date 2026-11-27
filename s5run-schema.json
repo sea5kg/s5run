@@ -222,7 +222,8 @@
               "type": "string",
               "name": "name"
             }
-          ]
+          ],
+          "return": "var"
         }
       ]
     }

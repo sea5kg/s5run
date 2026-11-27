@@ -1294,6 +1294,9 @@ static std::string generate_schema_class(const schema_class &c) {
          props +
          "); }\n"
          "\n"
+         "    /** 'new " + c.name + "()' in scripts; override to enable the JS constructor. */\n"
+         "    default " + c.name + " s5runConstruct() { return null; }\n"
+         "\n"
          "    @Override\n"
          "    default List<String> s5runMethodNames() { return List.of(" +
          names +
@@ -1332,6 +1335,10 @@ static std::string generate_context(java_flavor f, const schema &s) {
       method_handlers +=
         "                handlers.put(\"" + m.name + "\", (cbId, r) -> cbm_" + c.name + "_" + m.name + "(cbId, r));";
     }
+    if (!method_handlers.empty())
+      method_handlers += "\n";
+    method_handlers +=
+      "                handlers.put(\"" + c.name + "\", (cbId, r) -> ctor_" + c.name + "(cbId, r));";
   }
 
   std::string fn_callbacks;
@@ -1437,6 +1444,32 @@ static std::string generate_context(java_flavor f, const schema &s) {
     }
   }
 
+  // constructor handlers: 'new ClassName()' from scripts
+  for (const auto &c : s.classes) {
+    m_callbacks += std::string(first_cb ? "\n" : "\n\n") +
+                   "    private void ctor_" + c.name + "(int cbId, S5RunWire.Reader r) throws Exception {\n"
+                   "        // 'new " + c.name + "()' from a script: construct via the registered sample\n"
+                   "        S5RunObject sample = classSamples.get(\"" + c.name + "\");\n"
+                   "        if (sample == null)\n"
+                   "            throw new RuntimeException(\"" + c.name +
+                   ": no class sample registered (addClass)\");\n"
+                   "        " + c.name + " cls = (" + c.name + ") sample;\n"
+                   "        " + c.name + " inst = cls.s5runConstruct();\n"
+                   "        if (inst == null)\n"
+                   "            throw new RuntimeException(\"" + c.name +
+                   ": not constructible (override srunConstruct)\");\n"
+                   "        int id = registerInstance(inst);\n"
+                   "        S5RunWire.Writer w = new S5RunWire.Writer();\n"
+                   "        w.i32(cbId);\n"
+                   "        w.u8(1);\n"
+                   "        w.u8(S5RunWire.T_REF);\n"
+                   "        w.i32(id);\n"
+                   "        w.str(\"" + c.name + "\");\n"
+                   "        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());\n"
+                   "    }";
+    first_cb = false;
+  }
+
   std::string as_helpers;
   for (const auto &f : s.functions) {
     if (!as_helpers.empty())
@@ -1467,6 +1500,7 @@ public final class S5RunContext implements AutoCloseable {
     }
 
     private final Map<String, ThrowingHandler> handlers = new HashMap<>();
+    private final Map<String, S5RunObject> classSamples = new HashMap<>();
     private final Map<String, S5RunFunction> functions = new HashMap<>();
     private final Map<String, Map<Integer, S5RunObject>> instances = new HashMap<>();
     private final Map<String, List<String>> knownClasses = new HashMap<>();
@@ -1508,6 +1542,7 @@ public final class S5RunContext implements AutoCloseable {
     }
 
     public S5RunContext addClass(S5RunObject sample) {
+        classSamples.put(sample.s5runClassName(), sample);
         return addClass(sample.s5runClassName(), sample.s5runMethodNames(),
                 sample.s5runPropertyDescriptors());
     }

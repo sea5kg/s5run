@@ -10,9 +10,12 @@ public interface KeyValueStorage extends S5RunObject {
     @Override
     default List<S5RunProperty> s5runPropertyDescriptors() { return List.of(); }
 
+    /** 'new KeyValueStorage()' in scripts; override to enable the JS constructor. */
+    default KeyValueStorage s5runConstruct() { return null; }
+
     @Override
     default List<String> s5runMethodNames() { return List.of("SetValueByKey", "GetValueByKey"); }
 
     void SetValueByKey(String name, S5RunVariable value);
-    void GetValueByKey(String name);
+    S5RunVariable GetValueByKey(String name);
 }

@@ -52,6 +52,29 @@ private:
 public:
 };
 
+class MyKeyValueStorage : public s5run_cli_example::KeyValueStorage {
+public:
+  MyKeyValueStorage() {
+  }
+
+  // 'new KeyValueStorage()' in scripts constructs a new instance
+  std::shared_ptr<s5run_cli_example::KeyValueStorage> s5run_construct() override {
+    return std::make_shared<MyKeyValueStorage>();
+  }
+
+  void SetValueByKey(const std::string &name, const s5run_cli_example::s5run_variable &value) override {
+    m_store[name] = value;
+  }
+
+  s5run_cli_example::s5run_variable GetValueByKey(const std::string &name) override {
+    auto it = m_store.find(name);
+    return it == m_store.end() ? s5run_cli_example::s5run_variable() : it->second;
+  }
+
+private:
+  std::map<std::string, s5run_cli_example::s5run_variable> m_store;
+};
+
 class MyGetFile : public s5run_cli_example::GlobalFunction_GetFile {
 public:
   std::shared_ptr<s5run_cli_example::File> execute(const std::string &filepath) override {
@@ -339,6 +362,7 @@ int main(int argc, char **argv) {
     server0->set_api_key("some api key runner");
     ctx->add_server(server0);
     ctx->add_object(con);
+    ctx->add_class(std::make_shared<MyKeyValueStorage>());
 
     for (int i = 0; i < tests.size(); ++i) {
       test_data test = tests[i];

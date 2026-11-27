@@ -361,6 +361,7 @@ public:
 
     void set_script(const std::string &script);
     void add_server(const std::shared_ptr<s5run_remote_server_info> &server);
+    void _keep_sample(const std::shared_ptr<s5run_object> &sample);
     void register_type(const std::string &name, const std::vector<std::string> &methods,
                        const std::vector<s5run_property_descriptor> &props);
     void add_object(const std::shared_ptr<s5run_object> &obj);
@@ -396,6 +397,10 @@ private:
     void _cbm_console_error(int32_t cb_id, Reader &r);
     void _cbm_KeyValueStorage_SetValueByKey(int32_t cb_id, Reader &r);
     void _cbm_KeyValueStorage_GetValueByKey(int32_t cb_id, Reader &r);
+    void _ctor_File(int32_t cb_id, Reader &r);
+    void _ctor_FileSystem(int32_t cb_id, Reader &r);
+    void _ctor_console(int32_t cb_id, Reader &r);
+    void _ctor_KeyValueStorage(int32_t cb_id, Reader &r);
     int32_t _register_instance_File(const std::shared_ptr<File> &obj);
     int32_t _register_instance_FileSystem(const std::shared_ptr<FileSystem> &obj);
     int32_t _register_instance_console(const std::shared_ptr<console> &obj);
@@ -437,6 +442,7 @@ private:
     std::shared_ptr<GlobalFunction_CloseFiles> m_fn_CloseFiles;
     std::shared_ptr<GlobalFunction_GetPi> m_fn_GetPi;
     std::shared_ptr<GlobalFunction_GetServerPort> m_fn_GetServerPort;
+    std::map<std::string, std::shared_ptr<s5run_object>> m_class_samples;
     std::map<int32_t, std::shared_ptr<File>> m_instances_File;
     std::map<int32_t, std::shared_ptr<FileSystem>> m_instances_FileSystem;
     std::map<int32_t, std::shared_ptr<console>> m_instances_console;
@@ -955,9 +961,9 @@ void context::impl::_cbm_KeyValueStorage_GetValueByKey(int32_t cb_id, Reader &r)
     auto it = m_instances_KeyValueStorage.find(this_id);
     if (it == m_instances_KeyValueStorage.end()) { throw std::runtime_error("KeyValueStorage: unknown this_id"); }
         std::string a_name = read_string(r);
-    it->second->GetValueByKey(a_name);
+    s5run_variable res = it->second->GetValueByKey(a_name);
     Writer w; w.put_i32(cb_id); w.put_u8(1);
-        w.put_u8(T_UNDEFINED);
+        encode_value(w, res);
     _send_message(M_CALLBACK_RESP, w.data());
 }
 
@@ -1004,11 +1010,17 @@ void context::impl::_register_method_handlers() {
     m_handlers["SetBufferSize"] = [this](int32_t cb_id, Reader &r) {
         _cbm_File_SetBufferSize(cb_id, r);
     };
+    m_handlers["File"] = [this](int32_t cb_id, Reader &r) {
+        _ctor_File(cb_id, r);
+    };
     m_instance_registrars["FileSystem"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_FileSystem[id] = std::static_pointer_cast<FileSystem>(obj);
     };
     m_handlers["GetList"] = [this](int32_t cb_id, Reader &r) {
         _cbm_FileSystem_GetList(cb_id, r);
+    };
+    m_handlers["FileSystem"] = [this](int32_t cb_id, Reader &r) {
+        _ctor_FileSystem(cb_id, r);
     };
     m_instance_registrars["console"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_console[id] = std::static_pointer_cast<console>(obj);
@@ -1022,6 +1034,9 @@ void context::impl::_register_method_handlers() {
     m_handlers["error"] = [this](int32_t cb_id, Reader &r) {
         _cbm_console_error(cb_id, r);
     };
+    m_handlers["console"] = [this](int32_t cb_id, Reader &r) {
+        _ctor_console(cb_id, r);
+    };
     m_instance_registrars["KeyValueStorage"] = [this](int32_t id, const std::shared_ptr<s5run_object> &obj) {
         m_instances_KeyValueStorage[id] = std::static_pointer_cast<KeyValueStorage>(obj);
     };
@@ -1030,6 +1045,9 @@ void context::impl::_register_method_handlers() {
     };
     m_handlers["GetValueByKey"] = [this](int32_t cb_id, Reader &r) {
         _cbm_KeyValueStorage_GetValueByKey(cb_id, r);
+    };
+    m_handlers["KeyValueStorage"] = [this](int32_t cb_id, Reader &r) {
+        _ctor_KeyValueStorage(cb_id, r);
     };
     m_function_registrars["GetFile"] = [this](const std::shared_ptr<s5run_function> &fn) {
         m_fn_GetFile = std::static_pointer_cast<GlobalFunction_GetFile>(fn);
@@ -1086,6 +1104,95 @@ void context::impl::_register_method_handlers() {
         };
     };
 }
+
+void context::impl::_keep_sample(const std::shared_ptr<s5run_object> &sample) {
+    m_class_samples[sample->s5run_class_name()] = sample;
+}
+
+void context::impl::_ctor_File(int32_t cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    auto it = m_class_samples.find("File");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("File: no class sample registered (add_class)");
+    auto cls = std::dynamic_pointer_cast<File>(it->second);
+    if (!cls)
+        throw std::runtime_error("File: bad class sample");
+    auto inst = cls->s5run_construct();
+    if (!inst)
+        throw std::runtime_error("File: not constructible (override s5run_construct)");
+    int32_t id = _register_instance_File(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("File");
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::impl::_ctor_FileSystem(int32_t cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    auto it = m_class_samples.find("FileSystem");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("FileSystem: no class sample registered (add_class)");
+    auto cls = std::dynamic_pointer_cast<FileSystem>(it->second);
+    if (!cls)
+        throw std::runtime_error("FileSystem: bad class sample");
+    auto inst = cls->s5run_construct();
+    if (!inst)
+        throw std::runtime_error("FileSystem: not constructible (override s5run_construct)");
+    int32_t id = _register_instance_FileSystem(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("FileSystem");
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::impl::_ctor_console(int32_t cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    auto it = m_class_samples.find("console");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("console: no class sample registered (add_class)");
+    auto cls = std::dynamic_pointer_cast<console>(it->second);
+    if (!cls)
+        throw std::runtime_error("console: bad class sample");
+    auto inst = cls->s5run_construct();
+    if (!inst)
+        throw std::runtime_error("console: not constructible (override s5run_construct)");
+    int32_t id = _register_instance_console(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("console");
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::impl::_ctor_KeyValueStorage(int32_t cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    auto it = m_class_samples.find("KeyValueStorage");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("KeyValueStorage: no class sample registered (add_class)");
+    auto cls = std::dynamic_pointer_cast<KeyValueStorage>(it->second);
+    if (!cls)
+        throw std::runtime_error("KeyValueStorage: bad class sample");
+    auto inst = cls->s5run_construct();
+    if (!inst)
+        throw std::runtime_error("KeyValueStorage: not constructible (override s5run_construct)");
+    int32_t id = _register_instance_KeyValueStorage(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("KeyValueStorage");
+    _send_message(M_CALLBACK_RESP, w.data());
+}
+
 
 void context::impl::_flush_pending() {
     for (size_t i = 0; i < m_pending_types.size(); ++i) {
@@ -1301,6 +1408,7 @@ void context::add_object(const std::shared_ptr<s5run_object> &obj) {
 }
 
 void context::add_class(const std::shared_ptr<s5run_object> &sample) {
+    m_impl->_keep_sample(sample);
     m_impl->register_type(sample->s5run_class_name(),
                           sample->s5run_method_names(),
                           sample->s5run_property_descriptors());

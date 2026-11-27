@@ -400,6 +400,16 @@ void client_handler::handle_register_object_type(
 
   m_object_types[name] = object_type_info{methods, properties};
   register_method_callbacks(eng, m_fd, methods);
+
+  // 'new name(...)' in scripts: dispatch a constructor callback to the
+  // client (method = class name); the client creates an instance and
+  // answers with a ref, which becomes the constructed proxy object.
+  eng->register_constructor(name, [this, eng, name](engine::JsContext ctx,
+                                                    const std::vector<variable> &jargs) -> engine::JsValue {
+    ClientChannel channel(m_fd);
+    variable resp = channel.call(name, jargs);
+    return to_js_value(eng, ctx, resp);
+  });
 }
 
 void client_handler::register_method_callbacks(

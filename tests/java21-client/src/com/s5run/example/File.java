@@ -10,6 +10,9 @@ public interface File extends S5RunObject {
     @Override
     default List<S5RunProperty> s5runPropertyDescriptors() { return List.of(new S5RunProperty("Name", "GetName", ""), new S5RunProperty("BufferSize", "GetBufferSize", "SetBufferSize")); }
 
+    /** 'new File()' in scripts; override to enable the JS constructor. */
+    default File s5runConstruct() { return null; }
+
     @Override
     default List<String> s5runMethodNames() { return List.of("GetSize", "ReadBytes", "GetName", "GetBufferSize", "SetBufferSize"); }
 

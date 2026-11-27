@@ -40,14 +40,16 @@ type Context struct {
 	script          string
 	nextID          int
 	conn            net.Conn
+	classSamples    map[string]S5RunObject
 }
 
 // NewContext creates an empty context.
 func NewContext() *Context {
 	ctx := &Context{
-		handlers:  map[string]throwingHandler{},
-		functions: map[string]interface{}{},
-		instances: map[string]map[int]S5RunObject{},
+		handlers:     map[string]throwingHandler{},
+		functions:    map[string]interface{}{},
+		instances:    map[string]map[int]S5RunObject{},
+		classSamples: map[string]S5RunObject{},
 	}
 	for k, v := range map[string]throwingHandler{
 		"GetSize": ctx.callbackmFileGetSize,
@@ -55,12 +57,16 @@ func NewContext() *Context {
 		"GetName": ctx.callbackmFileGetName,
 		"GetBufferSize": ctx.callbackmFileGetBufferSize,
 		"SetBufferSize": ctx.callbackmFileSetBufferSize,
+		"File": ctx.constructFile,
 		"GetList": ctx.callbackmFileSystemGetList,
+		"FileSystem": ctx.constructFileSystem,
 		"log": ctx.callbackmconsoleLog,
 		"warning": ctx.callbackmconsoleWarning,
 		"error": ctx.callbackmconsoleError,
+		"console": ctx.constructconsole,
 		"SetValueByKey": ctx.callbackmKeyValueStorageSetValueByKey,
 		"GetValueByKey": ctx.callbackmKeyValueStorageGetValueByKey,
+		"KeyValueStorage": ctx.constructKeyValueStorage,
 	} {
 		ctx.handlers[k] = v
 	}
@@ -79,6 +85,7 @@ func (ctx *Context) AddServer(server *RemoteServerInfo) *Context {
 
 func (ctx *Context) AddClass(sample S5RunObject) *Context {
 	name := sample.S5RunClassName()
+	ctx.classSamples[name] = sample
 	if ctx.conn != nil {
 		ctx.sendRegisterType(name, sample.S5RunMethodNames(), sample.S5RunPropertyDescriptors())
 	} else {
@@ -455,8 +462,104 @@ func (ctx *Context) callbackmKeyValueStorageGetValueByKey(cbID int32, r *reader)
 		thisID := readInt(r)
 		obj := ctx.instanceByID("KeyValueStorage", int(thisID)).(KeyValueStorage)
 		name := readStrValue(r)
-		obj.GetValueByKey(name)
-		w.u8(tagUndefined)
+		res := obj.GetValueByKey(name)
+		encodeValue(w, res)
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) constructFile(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+	sample, ok := ctx.classSamples["File"]
+	if !ok {
+		panic("File: no class sample registered (AddClass)")
+	}
+	cls, ok := sample.(File)
+	if !ok {
+		panic("File: bad class sample")
+	}
+	inst := cls.S5RunConstruct()
+	if inst == nil {
+		panic("File: not constructible (override S5RunConstruct)")
+	}
+	id := ctx.registerInstance(inst)
+	w.u8(0x0F) // T_REF
+	w.i32(int32(id))
+	w.rawStr("File")
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) constructFileSystem(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+	sample, ok := ctx.classSamples["FileSystem"]
+	if !ok {
+		panic("FileSystem: no class sample registered (AddClass)")
+	}
+	cls, ok := sample.(FileSystem)
+	if !ok {
+		panic("FileSystem: bad class sample")
+	}
+	inst := cls.S5RunConstruct()
+	if inst == nil {
+		panic("FileSystem: not constructible (override S5RunConstruct)")
+	}
+	id := ctx.registerInstance(inst)
+	w.u8(0x0F) // T_REF
+	w.i32(int32(id))
+	w.rawStr("FileSystem")
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) constructconsole(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+	sample, ok := ctx.classSamples["console"]
+	if !ok {
+		panic("console: no class sample registered (AddClass)")
+	}
+	cls, ok := sample.(console)
+	if !ok {
+		panic("console: bad class sample")
+	}
+	inst := cls.S5RunConstruct()
+	if inst == nil {
+		panic("console: not constructible (override S5RunConstruct)")
+	}
+	id := ctx.registerInstance(inst)
+	w.u8(0x0F) // T_REF
+	w.i32(int32(id))
+	w.rawStr("console")
+	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+}
+
+
+func (ctx *Context) constructKeyValueStorage(cbID int32, r *reader) {
+	w := &writer{}
+	w.i32(cbID)
+	w.u8(1)
+	sample, ok := ctx.classSamples["KeyValueStorage"]
+	if !ok {
+		panic("KeyValueStorage: no class sample registered (AddClass)")
+	}
+	cls, ok := sample.(KeyValueStorage)
+	if !ok {
+		panic("KeyValueStorage: bad class sample")
+	}
+	inst := cls.S5RunConstruct()
+	if inst == nil {
+		panic("KeyValueStorage: not constructible (override S5RunConstruct)")
+	}
+	id := ctx.registerInstance(inst)
+	w.u8(0x0F) // T_REF
+	w.i32(int32(id))
+	w.rawStr("KeyValueStorage")
 	_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
 }
 

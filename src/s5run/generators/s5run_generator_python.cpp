@@ -741,6 +741,9 @@ static std::string generate_schema_class(const schema_class &c) {
          "    \"\"\"Schema class '" + c.name + "' — inherit and implement.\"\"\"\n\n"
          "    def s5run_class_name(self) -> str:\n"
          "        return \"" + c.name + "\"\n\n"
+         "    def s5run_construct(self):\n"
+         "        # 'new " + c.name + "()' in scripts; override to return a new instance\n"
+         "        return None\n\n"
          "    def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:\n"
          "        # (name, getter, setter); JS: obj.<name> read/write\n"
          "        return [" + props + "]\n\n"
@@ -770,6 +773,9 @@ static std::string generate_context(const schema &s) {
         method_handlers += "\n";
       method_handlers += "            \"" + m.name + "\": self._cbm_" + c.name + "_" + m.name + ",";
     }
+    if (!method_handlers.empty())
+      method_handlers += "\n";
+    method_handlers += "            \"" + c.name + "\": self._ctor_" + c.name + ",";
   }
 
   std::string fn_defs;
@@ -797,6 +803,26 @@ static std::string generate_context(const schema &s) {
       first_block = false;
     }
   }
+  for (const auto &c : s.classes) {
+    fn_defs += std::string(first_block ? "\n" : "\n\n")
+               + "    def _ctor_" + c.name + "(self, cb_id: int, buf: _Reader) -> None:\n"
+               "        # 'new " + c.name + "()' from a script\n"
+               "        out = _Writer()\n"
+               "        out.i32(cb_id)\n"
+               "        out.u8(1)\n"
+               "        sample = self._class_samples.get(\"" + c.name + "\")\n"
+               "        if sample is None:\n"
+               "            raise RuntimeError(\"" + c.name + ": no class sample registered (add_class)\")\n"
+               "        inst = sample.s5run_construct()\n"
+               "        if inst is None:\n"
+               "            raise RuntimeError(\"" + c.name + ": not constructible (override s5run_construct)\")\n"
+               "        obj_id = self._register_instance(inst)\n"
+               "        out.u8(0x0F) # T_REF\n"
+               "        out.i32(obj_id)\n"
+               "        out.raw_str(\"" + c.name + "\")\n"
+               "        self._send(_Msg.CALLBACK_RESP, out)\n";
+    first_block = false;
+  }
 
   std::string out = R"PY(
 
@@ -805,6 +831,7 @@ class Context:
     """Cacheable execution context: registrations, servers and the script."""
 
     def __init__(self) -> None:
+        self._class_samples: dict[str, S5RunObject] = {}
         self._handlers: dict[str, Callable] = {
 )PY";
   out += method_handlers;
@@ -832,6 +859,7 @@ class Context:
 
     def add_class(self, sample: S5RunObject) -> "Context":
         name = sample.s5run_class_name()
+        self._class_samples[name] = sample
         if self._sock is not None:
             self._send_register_type(name, sample.s5run_method_names(),
                                      sample.s5run_property_descriptors())

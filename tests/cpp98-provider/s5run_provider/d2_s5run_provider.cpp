@@ -658,13 +658,16 @@ public:
     // registry fills (metadata comes from the generated base classes)
     void provider_note_class(s5run_object *sample);
     void provider_note_function(s5run_function *fn);
+    void keep_sample(s5run_object *sample);
 
 private:
     struct PendingType { std::string name; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };
     struct PendingObject { std::string name; i32 this_id; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };
 
+    std::map<std::string, s5run_object *> m_class_samples;
     void cb_getQueue(i32 cb_id, Reader &r);
     void cbm_MassageCrew_Queue_publish(i32 cb_id, Reader &r);
+    void ctor_MassageCrew_Queue(i32 cb_id, Reader &r);
     i32 register_instance_MassageCrew_Queue(base_context_class_MassageCrew_Queue *obj);
     void store_instance(const std::string &cls, i32 id, s5run_object *obj);
     void dispatch_callback(const std::vector<u8> &body);
@@ -822,6 +825,32 @@ void context::context_impl::cbm_MassageCrew_Queue_publish(i32 cb_id, Reader &r) 
 }
 
 
+void context::context_impl::keep_sample(s5run_object *sample) {
+    m_class_samples[sample->s5run_class_name()] = sample;
+}
+
+void context::context_impl::ctor_MassageCrew_Queue(i32 cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    std::map<std::string, s5run_object *>::const_iterator it = m_class_samples.find("MassageCrew_Queue");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("MassageCrew_Queue: no class sample registered (add_class)");
+    base_context_class_MassageCrew_Queue *cls = dynamic_cast<base_context_class_MassageCrew_Queue *>(it->second);
+    if (cls == 0)
+        throw std::runtime_error("MassageCrew_Queue: bad class sample");
+    base_context_class_MassageCrew_Queue *inst = cls->s5run_construct();
+    if (inst == 0)
+        throw std::runtime_error("MassageCrew_Queue: not constructible (override s5run_construct)");
+    i32 id = register_instance_MassageCrew_Queue(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("MassageCrew_Queue");
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
 void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
     Reader r(body.empty() ? 0 : &body[0], body.size());
     i32 cb_id = r.get_i32();
@@ -829,6 +858,7 @@ void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
     try {
         if (method == "getQueue") { cb_getQueue(cb_id, r); return; }
         if (method == "publish") { cbm_MassageCrew_Queue_publish(cb_id, r); return; }
+        if (method == "MassageCrew_Queue") { ctor_MassageCrew_Queue(cb_id, r); return; }
     } catch (const std::exception &e) {
         Writer w; w.put_i32(cb_id); w.put_u8(0); w.put_string(e.what());
         send_message(M_CALLBACK_RESP, w.data());
@@ -1027,7 +1057,7 @@ context::~context() { delete m_impl; }
 
 void context::set_script(const std::string &s) { m_impl->set_script(s); }
 void context::add_server(remote_server_info *s) { m_impl->add_server(s); }
-void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); m_impl->provider_note_class(o); }
+void context::add_class(s5run_object *o) { m_impl->keep_sample(o); m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); m_impl->provider_note_class(o); }
 void context::add_object(s5run_object *o) { m_impl->add_object(o); }
 void context::add_function(s5run_function *f) { m_impl->add_function(f); }
 

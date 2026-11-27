@@ -37,6 +37,10 @@ class File(S5RunObject):
     def s5run_class_name(self) -> str:
         return "File"
 
+    def s5run_construct(self):
+        # 'new File()' in scripts; override to return a new instance
+        return None
+
     def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
         # (name, getter, setter); JS: obj.<name> read/write
         return [("Name", "GetName", ""), ("BufferSize", "GetBufferSize", "SetBufferSize")]
@@ -63,6 +67,10 @@ class FileSystem(S5RunObject):
     def s5run_class_name(self) -> str:
         return "FileSystem"
 
+    def s5run_construct(self):
+        # 'new FileSystem()' in scripts; override to return a new instance
+        return None
+
     def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
         # (name, getter, setter); JS: obj.<name> read/write
         return []
@@ -80,6 +88,10 @@ class console(S5RunObject):
 
     def s5run_class_name(self) -> str:
         return "console"
+
+    def s5run_construct(self):
+        # 'new console()' in scripts; override to return a new instance
+        return None
 
     def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
         # (name, getter, setter); JS: obj.<name> read/write
@@ -103,6 +115,10 @@ class KeyValueStorage(S5RunObject):
     def s5run_class_name(self) -> str:
         return "KeyValueStorage"
 
+    def s5run_construct(self):
+        # 'new KeyValueStorage()' in scripts; override to return a new instance
+        return None
+
     def s5run_property_descriptors(self) -> list[tuple[str, str, str]]:
         # (name, getter, setter); JS: obj.<name> read/write
         return []
@@ -113,7 +129,7 @@ class KeyValueStorage(S5RunObject):
     @abstractmethod
     def SetValueByKey(self, name: str, value: Any): ...
     @abstractmethod
-    def GetValueByKey(self, name: str): ...
+    def GetValueByKey(self, name: str) -> Any: ...
 
 
 

@@ -891,9 +891,14 @@ func parseInt(s string) int {
     out += "type " + c.name + " interface {\n";
     out += "\tS5RunObject\n";
     out += methods;
+    out += "\t// 'new " + c.name + "()' in scripts; the Base returns nil.\n";
+    out += "\tS5RunConstruct() " + c.name + "\n";
     out += "}\n\n";
     out += "type " + go_name(c.name) + "Base struct{}\n\n";
     out += "func (" + go_name(c.name) + "Base) S5RunClassName() string { return \"" + c.name + "\" }\n";
+    out += "// S5RunConstruct: 'new " + c.name + "()' in scripts calls this;\n";
+    out += "// override on your implementation to enable the JS constructor.\n";
+    out += "func (" + go_name(c.name) + "Base) S5RunConstruct() " + c.name + " { return nil }\n";
     if (provider) {
       out += "func (" + go_name(c.name) + "Base) S5RunMetadata() *S5RunClassMetadata { return " +
              go_name(c.name) + "Metadata }\n";
@@ -1121,6 +1126,7 @@ static std::string generate_context(const schema &s, bool provider) {
         method_handlers += "\n";
       method_handlers += "\t\t\"" + m.name + "\": ctx.callbackm" + c.name + go_name(m.name) + ",";
     }
+    method_handlers += "\n\t\t\"" + c.name + "\": ctx.construct" + c.name + ",";
   }
 
   std::vector<std::string> cb_blocks;
@@ -1129,6 +1135,29 @@ static std::string generate_context(const schema &s, bool provider) {
   for (const auto &c : s.classes)
     for (const auto &m : c.methods)
       cb_blocks.push_back(generate_method_cb(c, m));
+  for (const auto &c : s.classes)
+    cb_blocks.push_back("\nfunc (ctx *Context) construct" + c.name + "(cbID int32, r *reader) {\n"
+      "\tw := &writer{}\n"
+      "\tw.i32(cbID)\n"
+      "\tw.u8(1)\n"
+      "\tsample, ok := ctx.classSamples[\"" + c.name + "\"]\n"
+      "\tif !ok {\n"
+      "\t\tpanic(\"" + c.name + ": no class sample registered (AddClass)\")\n"
+      "\t}\n"
+      "\tcls, ok := sample.(" + c.name + ")\n"
+      "\tif !ok {\n"
+      "\t\tpanic(\"" + c.name + ": bad class sample\")\n"
+      "\t}\n"
+      "\tinst := cls.S5RunConstruct()\n"
+      "\tif inst == nil {\n"
+      "\t\tpanic(\"" + c.name + ": not constructible (override S5RunConstruct)\")\n"
+      "\t}\n"
+      "\tid := ctx.registerInstance(inst)\n"
+      "\tw.u8(0x0F) // T_REF\n"
+      "\tw.i32(int32(id))\n"
+      "\tw.rawStr(\"" + c.name + "\")\n"
+      "\t_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())\n"
+      "}\n");
   std::string cb_funcs;
   for (size_t i = 0; i < cb_blocks.size(); ++i) {
     if (i > 0)
@@ -1174,14 +1203,16 @@ type Context struct {
 	script          string
 	nextID          int
 	conn            net.Conn
+	classSamples    map[string]S5RunObject
 @@PROVIDER_FIELDS@@}
 
 // NewContext creates an empty context.
 func NewContext() *Context {
 	ctx := &Context{
-		handlers:  map[string]throwingHandler{},
-		functions: map[string]interface{}{},
-		instances: map[string]map[int]S5RunObject{},
+		handlers:     map[string]throwingHandler{},
+		functions:    map[string]interface{}{},
+		instances:    map[string]map[int]S5RunObject{},
+		classSamples: map[string]S5RunObject{},
 @@PROVIDER_INIT@@	}
 	for k, v := range map[string]throwingHandler{
 )GO";
@@ -1205,6 +1236,7 @@ func (ctx *Context) AddServer(server *RemoteServerInfo) *Context {
 
 func (ctx *Context) AddClass(sample S5RunObject) *Context {
 	name := sample.S5RunClassName()
+	ctx.classSamples[name] = sample
 @@PROVIDER_NOTE_CLASS@@	if ctx.conn != nil {
 		ctx.sendRegisterType(name, sample.S5RunMethodNames(), sample.S5RunPropertyDescriptors())
 	} else {

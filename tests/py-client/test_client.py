@@ -103,6 +103,21 @@ class MyFile(m.File):
         self.buffer_size = bufferSize
 
 
+class MyKeyValueStorage(m.KeyValueStorage):
+    def __init__(self) -> None:
+        self._store: dict = {}
+
+    def s5run_construct(self):
+        # 'new KeyValueStorage()' in scripts constructs a new instance
+        return MyKeyValueStorage()
+
+    def SetValueByKey(self, name: str, value) -> None:
+        self._store[name] = value
+
+    def GetValueByKey(self, name: str):
+        return self._store.get(name)
+
+
 class MyGetFile(m.GlobalFunction_GetFile):
     last_path = ""
 
@@ -188,6 +203,7 @@ def scenarios(address: str) -> None:
                .add_function(MyGetServerPort()) \
                .add_object(MyFileSystem()) \
                .add_object(MyConsole()) \
+               .add_class(MyKeyValueStorage()) \
                .add_server(m.RemoteServerInfo().address(address).api_key("some api key runner")) \
                .set_script(test.script_js)
 

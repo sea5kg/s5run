@@ -651,11 +651,13 @@ public:
     void add_object(s5run_object *obj);
     void add_function(s5run_function *fn);
     run_result run(const std::string &entry, const std::vector<s5run_variable> &args);
+    void keep_sample(s5run_object *sample);
 
 private:
     struct PendingType { std::string name; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };
     struct PendingObject { std::string name; i32 this_id; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };
 
+    std::map<std::string, s5run_object *> m_class_samples;
     void cb_GetFile(i32 cb_id, Reader &r);
     void cb_GetFileSize(i32 cb_id, Reader &r);
     void cb_GetTimeNow(i32 cb_id, Reader &r);
@@ -676,6 +678,10 @@ private:
     void cbm_console_error(i32 cb_id, Reader &r);
     void cbm_KeyValueStorage_SetValueByKey(i32 cb_id, Reader &r);
     void cbm_KeyValueStorage_GetValueByKey(i32 cb_id, Reader &r);
+    void ctor_File(i32 cb_id, Reader &r);
+    void ctor_FileSystem(i32 cb_id, Reader &r);
+    void ctor_console(i32 cb_id, Reader &r);
+    void ctor_KeyValueStorage(i32 cb_id, Reader &r);
     i32 register_instance_File(base_context_class_File *obj);
     i32 register_instance_FileSystem(base_context_class_FileSystem *obj);
     i32 register_instance_console(base_context_class_console *obj);
@@ -1116,9 +1122,98 @@ void context::context_impl::cbm_KeyValueStorage_GetValueByKey(i32 cb_id, Reader 
     std::map<i32, base_context_class_KeyValueStorage *>::const_iterator it = m_instances_KeyValueStorage.find(this_id);
     if (it == m_instances_KeyValueStorage.end()) throw std::runtime_error("KeyValueStorage: unknown this_id");
     std::string a_name = read_string(r);
-    it->second->GetValueByKey(a_name);
+    s5run_variable res = it->second->GetValueByKey(a_name);
     Writer w; w.put_i32(cb_id); w.put_u8(1);
-    w.put_u8(T_UNDEFINED);
+    encode_value(w, res);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
+void context::context_impl::keep_sample(s5run_object *sample) {
+    m_class_samples[sample->s5run_class_name()] = sample;
+}
+
+void context::context_impl::ctor_File(i32 cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    std::map<std::string, s5run_object *>::const_iterator it = m_class_samples.find("File");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("File: no class sample registered (add_class)");
+    base_context_class_File *cls = dynamic_cast<base_context_class_File *>(it->second);
+    if (cls == 0)
+        throw std::runtime_error("File: bad class sample");
+    base_context_class_File *inst = cls->s5run_construct();
+    if (inst == 0)
+        throw std::runtime_error("File: not constructible (override s5run_construct)");
+    i32 id = register_instance_File(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("File");
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::context_impl::ctor_FileSystem(i32 cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    std::map<std::string, s5run_object *>::const_iterator it = m_class_samples.find("FileSystem");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("FileSystem: no class sample registered (add_class)");
+    base_context_class_FileSystem *cls = dynamic_cast<base_context_class_FileSystem *>(it->second);
+    if (cls == 0)
+        throw std::runtime_error("FileSystem: bad class sample");
+    base_context_class_FileSystem *inst = cls->s5run_construct();
+    if (inst == 0)
+        throw std::runtime_error("FileSystem: not constructible (override s5run_construct)");
+    i32 id = register_instance_FileSystem(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("FileSystem");
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::context_impl::ctor_console(i32 cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    std::map<std::string, s5run_object *>::const_iterator it = m_class_samples.find("console");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("console: no class sample registered (add_class)");
+    base_context_class_console *cls = dynamic_cast<base_context_class_console *>(it->second);
+    if (cls == 0)
+        throw std::runtime_error("console: bad class sample");
+    base_context_class_console *inst = cls->s5run_construct();
+    if (inst == 0)
+        throw std::runtime_error("console: not constructible (override s5run_construct)");
+    i32 id = register_instance_console(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("console");
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+void context::context_impl::ctor_KeyValueStorage(i32 cb_id, Reader &r) {
+    (void)r; // constructor args are ignored (the factory is no-arg)
+    std::map<std::string, s5run_object *>::const_iterator it = m_class_samples.find("KeyValueStorage");
+    if (it == m_class_samples.end())
+        throw std::runtime_error("KeyValueStorage: no class sample registered (add_class)");
+    base_context_class_KeyValueStorage *cls = dynamic_cast<base_context_class_KeyValueStorage *>(it->second);
+    if (cls == 0)
+        throw std::runtime_error("KeyValueStorage: bad class sample");
+    base_context_class_KeyValueStorage *inst = cls->s5run_construct();
+    if (inst == 0)
+        throw std::runtime_error("KeyValueStorage: not constructible (override s5run_construct)");
+    i32 id = register_instance_KeyValueStorage(inst);
+    Writer w;
+    w.put_i32(cb_id);
+    w.put_u8(1);
+    w.put_u8(T_REF);
+    w.put_i32(id);
+    w.put_string("KeyValueStorage");
     send_message(M_CALLBACK_RESP, w.data());
 }
 
@@ -1148,6 +1243,10 @@ void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
         if (method == "error") { cbm_console_error(cb_id, r); return; }
         if (method == "SetValueByKey") { cbm_KeyValueStorage_SetValueByKey(cb_id, r); return; }
         if (method == "GetValueByKey") { cbm_KeyValueStorage_GetValueByKey(cb_id, r); return; }
+        if (method == "File") { ctor_File(cb_id, r); return; }
+        if (method == "FileSystem") { ctor_FileSystem(cb_id, r); return; }
+        if (method == "console") { ctor_console(cb_id, r); return; }
+        if (method == "KeyValueStorage") { ctor_KeyValueStorage(cb_id, r); return; }
     } catch (const std::exception &e) {
         Writer w; w.put_i32(cb_id); w.put_u8(0); w.put_string(e.what());
         send_message(M_CALLBACK_RESP, w.data());
@@ -1346,7 +1445,7 @@ context::~context() { delete m_impl; }
 
 void context::set_script(const std::string &s) { m_impl->set_script(s); }
 void context::add_server(remote_server_info *s) { m_impl->add_server(s); }
-void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }
+void context::add_class(s5run_object *o) { m_impl->keep_sample(o); m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }
 void context::add_object(s5run_object *o) { m_impl->add_object(o); }
 void context::add_function(s5run_function *f) { m_impl->add_function(f); }
 

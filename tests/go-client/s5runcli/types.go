@@ -134,11 +134,16 @@ type File interface {
 	GetName() string
 	GetBufferSize() int64
 	SetBufferSize(bufferSize int64)
+	// 'new File()' in scripts; the Base returns nil.
+	S5RunConstruct() File
 }
 
 type FileBase struct{}
 
 func (FileBase) S5RunClassName() string { return "File" }
+// S5RunConstruct: 'new File()' in scripts calls this;
+// override on your implementation to enable the JS constructor.
+func (FileBase) S5RunConstruct() File { return nil }
 func (FileBase) S5RunPropertyDescriptors() []S5RunProperty {
 	return []S5RunProperty{S5RunProperty{Name: "Name", Getter: "GetName", Setter: ""}, S5RunProperty{Name: "BufferSize", Getter: "GetBufferSize", Setter: "SetBufferSize"}}
 }
@@ -151,11 +156,16 @@ func (FileBase) S5RunMethodNames() []string {
 type FileSystem interface {
 	S5RunObject
 	GetList(filepath string) []string
+	// 'new FileSystem()' in scripts; the Base returns nil.
+	S5RunConstruct() FileSystem
 }
 
 type FileSystemBase struct{}
 
 func (FileSystemBase) S5RunClassName() string { return "FileSystem" }
+// S5RunConstruct: 'new FileSystem()' in scripts calls this;
+// override on your implementation to enable the JS constructor.
+func (FileSystemBase) S5RunConstruct() FileSystem { return nil }
 func (FileSystemBase) S5RunPropertyDescriptors() []S5RunProperty {
 	return []S5RunProperty{}
 }
@@ -170,11 +180,16 @@ type console interface {
 	Log(args []string)
 	Warning(args []string)
 	Error(args []string)
+	// 'new console()' in scripts; the Base returns nil.
+	S5RunConstruct() console
 }
 
 type ConsoleBase struct{}
 
 func (ConsoleBase) S5RunClassName() string { return "console" }
+// S5RunConstruct: 'new console()' in scripts calls this;
+// override on your implementation to enable the JS constructor.
+func (ConsoleBase) S5RunConstruct() console { return nil }
 func (ConsoleBase) S5RunPropertyDescriptors() []S5RunProperty {
 	return []S5RunProperty{}
 }
@@ -187,12 +202,17 @@ func (ConsoleBase) S5RunMethodNames() []string {
 type KeyValueStorage interface {
 	S5RunObject
 	SetValueByKey(name string, value S5RunVariable)
-	GetValueByKey(name string)
+	GetValueByKey(name string) S5RunVariable
+	// 'new KeyValueStorage()' in scripts; the Base returns nil.
+	S5RunConstruct() KeyValueStorage
 }
 
 type KeyValueStorageBase struct{}
 
 func (KeyValueStorageBase) S5RunClassName() string { return "KeyValueStorage" }
+// S5RunConstruct: 'new KeyValueStorage()' in scripts calls this;
+// override on your implementation to enable the JS constructor.
+func (KeyValueStorageBase) S5RunConstruct() KeyValueStorage { return nil }
 func (KeyValueStorageBase) S5RunPropertyDescriptors() []S5RunProperty {
 	return []S5RunProperty{}
 }

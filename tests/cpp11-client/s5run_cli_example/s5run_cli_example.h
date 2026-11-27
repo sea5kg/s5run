@@ -278,6 +278,9 @@ public:
         out_.push_back("SetBufferSize");
         return out_;
     }
+    // 'new File()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual std::shared_ptr<File> s5run_construct() { return nullptr; }
     virtual ~File() {}
     virtual int64_t GetSize() = 0;
     virtual std::vector<uint8_t> ReadBytes(int64_t readBytes) = 0;
@@ -297,6 +300,9 @@ public:
         out_.push_back("GetList");
         return out_;
     }
+    // 'new FileSystem()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual std::shared_ptr<FileSystem> s5run_construct() { return nullptr; }
     virtual ~FileSystem() {}
     virtual std::vector<std::string> GetList(const std::string & filepath) = 0;
 };
@@ -314,6 +320,9 @@ public:
         out_.push_back("error");
         return out_;
     }
+    // 'new console()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual std::shared_ptr<console> s5run_construct() { return nullptr; }
     virtual ~console() {}
     virtual void log(const std::vector<std::string> & args) = 0;
     virtual void warning(const std::vector<std::string> & args) = 0;
@@ -332,9 +341,12 @@ public:
         out_.push_back("GetValueByKey");
         return out_;
     }
+    // 'new KeyValueStorage()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual std::shared_ptr<KeyValueStorage> s5run_construct() { return nullptr; }
     virtual ~KeyValueStorage() {}
     virtual void SetValueByKey(const std::string & name, const s5run_variable & value) = 0;
-    virtual void GetValueByKey(const std::string & name) = 0;
+    virtual s5run_variable GetValueByKey(const std::string & name) = 0;
 };
 
 class s5run_function {

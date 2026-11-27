@@ -87,6 +87,11 @@ public:
   // Host function that builds a JS object manually.
   virtual void register_js_callback(const std::string &method, JsCallbackHandler handler) = 0;
 
+  // Register a constructor: 'new name(...)' in scripts calls the handler
+  // (same semantics as register_js_callback); if it returns a proxy object
+  // (from make_object), that object becomes the constructed instance.
+  virtual void register_constructor(const std::string &name, JsCallbackHandler handler) = 0;
+
   // Build a JS object with method stubs. Each method, when called from
   // JS, is dispatched as a simple callback with signature
   //   method(this_id, ...js_args)

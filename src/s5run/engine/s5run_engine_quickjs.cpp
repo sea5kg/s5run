@@ -314,6 +314,24 @@ public:
     JS_FreeValue(ctx_.get(), global);
   }
 
+  void register_constructor(const std::string &name, JsCallbackHandler handler) override {
+    // C functions created by QuickJS are not constructors, so the public
+    // name is a plain JS function (created via eval - JS functions ARE
+    // constructors) that forwards to a hidden C callback. When the handler
+    // returns a proxy object, 'new name(...)' yields that object.
+    std::string hidden = "__s5run_ctor_" + name;
+    register_js_callback(hidden, std::move(handler));
+
+    std::string code = "function " + name + "(...args) { return " + hidden + "(...args); }";
+    JSValue eval_res = JS_Eval(ctx_.get(), code.data(), code.size(), "<ctor>",
+                               JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(eval_res)) {
+      JS_FreeValue(ctx_.get(), eval_res);
+      throw std::runtime_error("register_constructor: eval failed for " + name);
+    }
+    JS_FreeValue(ctx_.get(), eval_res);
+  }
+
   JsValue make_object(JsContext ctx_handle, int64_t this_id,
                        const std::vector<std::string> &methods,
                        const std::vector<object_property> &properties) override {

@@ -159,6 +159,27 @@ public:
 };
 
 
+class MyKeyValueStorage : public s5run_cli_cpp98::base_context_class_KeyValueStorage {
+public:
+    // 'new KeyValueStorage()' in scripts constructs a new instance
+    virtual base_context_class_KeyValueStorage *s5run_construct() {
+        return new MyKeyValueStorage();
+    }
+
+    virtual void SetValueByKey(const std::string &name,
+                               const s5run_cli_cpp98::s5run_variable &value) {
+        m_store[name] = value;
+    }
+
+    virtual s5run_cli_cpp98::s5run_variable GetValueByKey(const std::string &name) {
+        std::map<std::string, s5run_cli_cpp98::s5run_variable>::const_iterator it = m_store.find(name);
+        return it == m_store.end() ? s5run_cli_cpp98::s5run_variable() : it->second;
+    }
+
+private:
+    std::map<std::string, s5run_cli_cpp98::s5run_variable> m_store;
+};
+
 class MyGetFile : public s5run_cli_cpp98::base_context_function_GetFile {
 public:
     static std::string last_path;
@@ -293,6 +314,8 @@ int main(int argc, char **argv) {
                     MyConsole con;
                     ctx->add_object(&fs);
                     ctx->add_object(&con);
+                    MyKeyValueStorage kvs;
+                    ctx->add_class(&kvs);
 
                     s5run_cli_cpp98::remote_server_info server0;
                     server0.set_address(address);

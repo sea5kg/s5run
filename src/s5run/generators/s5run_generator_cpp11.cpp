@@ -1163,6 +1163,7 @@ void context::add_object(const std::shared_ptr<s5run_object> &obj) {
 }
 
 void context::add_class(const std::shared_ptr<s5run_object> &sample) {
+    m_impl->_keep_sample(sample);
     m_impl->register_type(sample->s5run_class_name(),
                           sample->s5run_method_names(),
                           sample->s5run_property_descriptors());
@@ -1328,6 +1329,9 @@ std::string generator_cpp11::generate_header(const schema &s, std::shared_ptr<sc
     for (const auto &m : c.methods)
       out += "        out_.push_back(\"" + m.name + "\");\n";
     out += "        return out_;\n    }\n";
+    out += "    // 'new " + c.name + "()' in scripts calls this; override to return a new\n";
+    out += "    // instance of your implementation (enables the JS constructor).\n";
+    out += "    virtual std::shared_ptr<" + c.name + "> s5run_construct() { return nullptr; }\n";
     out += "    virtual ~" + c.name + "() {}\n";
     for (const auto &m : c.methods) {
       std::string ret = is_void(m.return_type) ? "void" : cpp11_shared(m.return_type);
@@ -1396,6 +1400,7 @@ std::string generator_cpp11::generate_impl(const schema &s, std::shared_ptr<sche
   out += "    ~impl() { _disconnect(); }\n\n";
   out += "    void set_script(const std::string &script);\n";
   out += "    void add_server(const std::shared_ptr<s5run_remote_server_info> &server);\n";
+  out += "    void _keep_sample(const std::shared_ptr<s5run_object> &sample);\n";
   out += "    void register_type(const std::string &name, const std::vector<std::string> &methods,\n";
   out += "                       const std::vector<s5run_property_descriptor> &props);\n";
   out += "    void add_object(const std::shared_ptr<s5run_object> &obj);\n";
@@ -1414,6 +1419,8 @@ std::string generator_cpp11::generate_impl(const schema &s, std::shared_ptr<sche
   for (const auto &c : s.classes)
     for (const auto &m : c.methods)
       out += "    void _cbm_" + c.name + "_" + m.name + "(int32_t cb_id, Reader &r);\n";
+  for (const auto &c : s.classes)
+    out += "    void _ctor_" + c.name + "(int32_t cb_id, Reader &r);\n";
   for (const auto &c : s.classes)
     out += "    int32_t _register_instance_" + c.name + "(const std::shared_ptr<" + c.name + "> &obj);\n";
   out += "    void _register_method_handlers();\n";
@@ -1444,6 +1451,7 @@ std::string generator_cpp11::generate_impl(const schema &s, std::shared_ptr<sche
   out += "    std::map<std::string, fn_registrar_t> m_function_registrars;\n";
   for (const auto &f : s.functions)
     out += "    std::shared_ptr<GlobalFunction_" + f.name + "> m_fn_" + f.name + ";\n";
+  out += "    std::map<std::string, std::shared_ptr<s5run_object>> m_class_samples;\n";
   for (const auto &c : s.classes)
     out += "    std::map<int32_t, std::shared_ptr<" + c.name + ">> m_instances_" + c.name + ";\n";
   out += "};\n\n";
@@ -1579,6 +1587,9 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
       out += "        _cbm_" + c.name + "_" + m.name + "(cb_id, r);\n";
       out += "    };\n";
     }
+    out += "    m_handlers[\"" + c.name + "\"] = [this](int32_t cb_id, Reader &r) {\n";
+    out += "        _ctor_" + c.name + "(cb_id, r);\n";
+    out += "    };\n";
   }
   for (const auto &f : s.functions) {
     out += "    m_function_registrars[\"" + f.name + "\"] = [this](const std::shared_ptr<s5run_function> &fn) {\n";
@@ -1588,7 +1599,32 @@ void context::impl::add_object(const std::shared_ptr<s5run_object> &obj) {
     out += "        };\n";
     out += "    };\n";
   }
-  out += "}\n";
+  out += "}\n\n";
+  out += "void context::impl::_keep_sample(const std::shared_ptr<s5run_object> &sample) {\n";
+  out += "    m_class_samples[sample->s5run_class_name()] = sample;\n";
+  out += "}\n\n";
+  for (const auto &c : s.classes) {
+    out += "void context::impl::_ctor_" + c.name + "(int32_t cb_id, Reader &r) {\n";
+    out += "    (void)r; // constructor args are ignored (the factory is no-arg)\n";
+    out += "    auto it = m_class_samples.find(\"" + c.name + "\");\n";
+    out += "    if (it == m_class_samples.end())\n";
+    out += "        throw std::runtime_error(\"" + c.name + ": no class sample registered (add_class)\");\n";
+    out += "    auto cls = std::dynamic_pointer_cast<" + c.name + ">(it->second);\n";
+    out += "    if (!cls)\n";
+    out += "        throw std::runtime_error(\"" + c.name + ": bad class sample\");\n";
+    out += "    auto inst = cls->s5run_construct();\n";
+    out += "    if (!inst)\n";
+    out += "        throw std::runtime_error(\"" + c.name + ": not constructible (override s5run_construct)\");\n";
+    out += "    int32_t id = _register_instance_" + c.name + "(inst);\n";
+    out += "    Writer w;\n";
+    out += "    w.put_i32(cb_id);\n";
+    out += "    w.put_u8(1);\n";
+    out += "    w.put_u8(T_REF);\n";
+    out += "    w.put_i32(id);\n";
+    out += "    w.put_string(\"" + c.name + "\");\n";
+    out += "    _send_message(M_CALLBACK_RESP, w.data());\n";
+    out += "}\n\n";
+  }
 
   // Flush + run + context methods
   out += std::string("\n") + FLUSH;

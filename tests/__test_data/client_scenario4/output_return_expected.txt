@@ -1,0 +1,5 @@
+K_OBJECT
+BEGIN
+  key_name K_STRING "test_key"
+  key_value K_INT 1
+END

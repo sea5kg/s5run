@@ -157,6 +157,9 @@ public:
 
 class base_context_class_MassageCrew_Queue : public s5run_object {
 public:
+    // 'new MassageCrew_Queue()' in scripts calls this; override to return a new
+    // instance of your implementation (enables the JS constructor).
+    virtual base_context_class_MassageCrew_Queue *s5run_construct() { return 0; }
     virtual ~base_context_class_MassageCrew_Queue() {}
     virtual std::string s5run_class_name() const { return "MassageCrew_Queue"; }
     virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {

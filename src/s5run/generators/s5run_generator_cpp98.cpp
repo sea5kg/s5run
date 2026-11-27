@@ -535,6 +535,9 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   for (size_t i = 0; i < s.classes.size(); ++i) {
     const schema_class &c = s.classes[i];
     out += "class base_context_class_" + c.name + " : public s5run_object {\npublic:\n";
+    out += "    // 'new " + c.name + "()' in scripts calls this; override to return a new\n";
+    out += "    // instance of your implementation (enables the JS constructor).\n";
+    out += "    virtual base_context_class_" + c.name + " *s5run_construct() { return 0; }\n";
     out += "    virtual ~base_context_class_" + c.name + "() {}\n";
     out += "    virtual std::string s5run_class_name() const { return \"" + c.name + "\"; }\n";
     out += "    virtual std::vector<s5run_property_descriptor> s5run_property_descriptors() const {\n";
@@ -1239,10 +1242,13 @@ int remote_server_info::get_port() const { return m_port; }
     out += "    void provider_note_class(s5run_object *sample);\n";
     out += "    void provider_note_function(s5run_function *fn);\n";
   }
+  out += "    void keep_sample(s5run_object *sample);\n";
   out += "\n";
   out += "private:\n";
   out += "    struct PendingType { std::string name; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };\n";
   out += "    struct PendingObject { std::string name; i32 this_id; std::vector<std::string> methods; std::vector<s5run_property_descriptor> props; };\n\n";
+
+  out += "    std::map<std::string, s5run_object *> m_class_samples;\n";
 
   // Callback declarations
   for (auto &f : s.functions)
@@ -1250,6 +1256,8 @@ int remote_server_info::get_port() const { return m_port; }
   for (auto &c : s.classes)
     for (auto &m : c.methods)
       out += "    void cbm_" + c.name + "_" + m.name + "(i32 cb_id, Reader &r);\n";
+  for (auto &c : s.classes)
+    out += "    void ctor_" + c.name + "(i32 cb_id, Reader &r);\n";
 
   // Instance registration declarations
   for (auto &c : s.classes)
@@ -1424,6 +1432,31 @@ void context::context_impl::store_instance(const std::string &cls, i32 id, s5run
       out += "\n" + gen_m_callback(c, m);
 
   // Dispatch
+  out += "\nvoid context::context_impl::keep_sample(s5run_object *sample) {\n";
+  out += "    m_class_samples[sample->s5run_class_name()] = sample;\n";
+  out += "}\n\n";
+  for (const auto &c : s.classes) {
+    out += "void context::context_impl::ctor_" + c.name + "(i32 cb_id, Reader &r) {\n";
+    out += "    (void)r; // constructor args are ignored (the factory is no-arg)\n";
+    out += "    std::map<std::string, s5run_object *>::const_iterator it = m_class_samples.find(\"" + c.name + "\");\n";
+    out += "    if (it == m_class_samples.end())\n";
+    out += "        throw std::runtime_error(\"" + c.name + ": no class sample registered (add_class)\");\n";
+    out += "    base_context_class_" + c.name + " *cls = dynamic_cast<base_context_class_" + c.name + " *>(it->second);\n";
+    out += "    if (cls == 0)\n";
+    out += "        throw std::runtime_error(\"" + c.name + ": bad class sample\");\n";
+    out += "    base_context_class_" + c.name + " *inst = cls->s5run_construct();\n";
+    out += "    if (inst == 0)\n";
+    out += "        throw std::runtime_error(\"" + c.name + ": not constructible (override s5run_construct)\");\n";
+    out += "    i32 id = register_instance_" + c.name + "(inst);\n";
+    out += "    Writer w;\n";
+    out += "    w.put_i32(cb_id);\n";
+    out += "    w.put_u8(1);\n";
+    out += "    w.put_u8(T_REF);\n";
+    out += "    w.put_i32(id);\n";
+    out += "    w.put_string(\"" + c.name + "\");\n";
+    out += "    send_message(M_CALLBACK_RESP, w.data());\n";
+    out += "}\n\n";
+  }
   out += "\nvoid context::context_impl::dispatch_callback(const std::vector<u8> &body) {\n";
   out += "    Reader r(body.empty() ? 0 : &body[0], body.size());\n";
   out += "    i32 cb_id = r.get_i32();\n";
@@ -1434,6 +1467,8 @@ void context::context_impl::store_instance(const std::string &cls, i32 id, s5run
   for (auto &c : s.classes)
     for (auto &m : c.methods)
       out += "        if (method == \"" + m.name + "\") { cbm_" + c.name + "_" + m.name + "(cb_id, r); return; }\n";
+  for (auto &c : s.classes)
+    out += "        if (method == \"" + c.name + "\") { ctor_" + c.name + "(cb_id, r); return; }\n";
   out += "    } catch (const std::exception &e) {\n";
   out += "        Writer w; w.put_i32(cb_id); w.put_u8(0); w.put_string(e.what());\n";
   out += "        send_message(M_CALLBACK_RESP, w.data());\n        return;\n    }\n";
@@ -1632,9 +1667,9 @@ run_result context::context_impl::run(const std::string &entry,
   out += "void context::set_script(const std::string &s) { m_impl->set_script(s); }\n";
   out += "void context::add_server(remote_server_info *s) { m_impl->add_server(s); }\n";
   if (m_provider) {
-    out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); m_impl->provider_note_class(o); }\n";
+    out += "void context::add_class(s5run_object *o) { m_impl->keep_sample(o); m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); m_impl->provider_note_class(o); }\n";
   } else {
-    out += "void context::add_class(s5run_object *o) { m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }\n";
+    out += "void context::add_class(s5run_object *o) { m_impl->keep_sample(o); m_impl->register_type(o->s5run_class_name(), o->s5run_method_names(), o->s5run_property_descriptors()); }\n";
   }
   out += "void context::add_object(s5run_object *o) { m_impl->add_object(o); }\n";
   out += "void context::add_function(s5run_function *f) { m_impl->add_function(f); }\n\n";

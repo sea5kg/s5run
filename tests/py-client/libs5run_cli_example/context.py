@@ -26,18 +26,23 @@ class Context:
     """Cacheable execution context: registrations, servers and the script."""
 
     def __init__(self) -> None:
+        self._class_samples: dict[str, S5RunObject] = {}
         self._handlers: dict[str, Callable] = {
             "GetSize": self._cbm_File_GetSize,
             "ReadBytes": self._cbm_File_ReadBytes,
             "GetName": self._cbm_File_GetName,
             "GetBufferSize": self._cbm_File_GetBufferSize,
             "SetBufferSize": self._cbm_File_SetBufferSize,
+            "File": self._ctor_File,
             "GetList": self._cbm_FileSystem_GetList,
+            "FileSystem": self._ctor_FileSystem,
             "log": self._cbm_console_log,
             "warning": self._cbm_console_warning,
             "error": self._cbm_console_error,
+            "console": self._ctor_console,
             "SetValueByKey": self._cbm_KeyValueStorage_SetValueByKey,
             "GetValueByKey": self._cbm_KeyValueStorage_GetValueByKey,
+            "KeyValueStorage": self._ctor_KeyValueStorage,
         }
         self._functions: dict[str, S5RunFunction] = {}
         self._instances: dict[str, dict[int, S5RunObject]] = {}
@@ -61,6 +66,7 @@ class Context:
 
     def add_class(self, sample: S5RunObject) -> "Context":
         name = sample.s5run_class_name()
+        self._class_samples[name] = sample
         if self._sock is not None:
             self._send_register_type(name, sample.s5run_method_names(),
                                      sample.s5run_property_descriptors())
@@ -372,8 +378,80 @@ class Context:
             raise RuntimeError("KeyValueStorage.GetValueByKey: wrong argument count")
         obj = _instance_by_id('KeyValueStorage', _read_int(buf))
         name = _read_str_value(buf)
-        obj.GetValueByKey(name)
-        _write_undefined(out)
+        res = obj.GetValueByKey(name)
+        _encode_value(out, res)
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _ctor_File(self, cb_id: int, buf: _Reader) -> None:
+        # 'new File()' from a script
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        sample = self._class_samples.get("File")
+        if sample is None:
+            raise RuntimeError("File: no class sample registered (add_class)")
+        inst = sample.s5run_construct()
+        if inst is None:
+            raise RuntimeError("File: not constructible (override s5run_construct)")
+        obj_id = self._register_instance(inst)
+        out.u8(0x0F) # T_REF
+        out.i32(obj_id)
+        out.raw_str("File")
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _ctor_FileSystem(self, cb_id: int, buf: _Reader) -> None:
+        # 'new FileSystem()' from a script
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        sample = self._class_samples.get("FileSystem")
+        if sample is None:
+            raise RuntimeError("FileSystem: no class sample registered (add_class)")
+        inst = sample.s5run_construct()
+        if inst is None:
+            raise RuntimeError("FileSystem: not constructible (override s5run_construct)")
+        obj_id = self._register_instance(inst)
+        out.u8(0x0F) # T_REF
+        out.i32(obj_id)
+        out.raw_str("FileSystem")
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _ctor_console(self, cb_id: int, buf: _Reader) -> None:
+        # 'new console()' from a script
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        sample = self._class_samples.get("console")
+        if sample is None:
+            raise RuntimeError("console: no class sample registered (add_class)")
+        inst = sample.s5run_construct()
+        if inst is None:
+            raise RuntimeError("console: not constructible (override s5run_construct)")
+        obj_id = self._register_instance(inst)
+        out.u8(0x0F) # T_REF
+        out.i32(obj_id)
+        out.raw_str("console")
+        self._send(_Msg.CALLBACK_RESP, out)
+
+
+    def _ctor_KeyValueStorage(self, cb_id: int, buf: _Reader) -> None:
+        # 'new KeyValueStorage()' from a script
+        out = _Writer()
+        out.i32(cb_id)
+        out.u8(1)
+        sample = self._class_samples.get("KeyValueStorage")
+        if sample is None:
+            raise RuntimeError("KeyValueStorage: no class sample registered (add_class)")
+        inst = sample.s5run_construct()
+        if inst is None:
+            raise RuntimeError("KeyValueStorage: not constructible (override s5run_construct)")
+        obj_id = self._register_instance(inst)
+        out.u8(0x0F) # T_REF
+        out.i32(obj_id)
+        out.raw_str("KeyValueStorage")
         self._send(_Msg.CALLBACK_RESP, out)
 
 

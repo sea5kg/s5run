@@ -14,6 +14,7 @@ public final class S5RunContext implements AutoCloseable {
     }
 
     private final Map<String, ThrowingHandler> handlers = new HashMap<>();
+    private final Map<String, S5RunObject> classSamples = new HashMap<>();
     private final Map<String, S5RunFunction> functions = new HashMap<>();
     private final Map<String, Map<Integer, S5RunObject>> instances = new HashMap<>();
     private final Map<String, List<String>> knownClasses = new HashMap<>();
@@ -48,12 +49,16 @@ public final class S5RunContext implements AutoCloseable {
                 handlers.put("GetName", (cbId, r) -> cbm_File_GetName(cbId, r));
                 handlers.put("GetBufferSize", (cbId, r) -> cbm_File_GetBufferSize(cbId, r));
                 handlers.put("SetBufferSize", (cbId, r) -> cbm_File_SetBufferSize(cbId, r));
+                handlers.put("File", (cbId, r) -> ctor_File(cbId, r));
                 handlers.put("GetList", (cbId, r) -> cbm_FileSystem_GetList(cbId, r));
+                handlers.put("FileSystem", (cbId, r) -> ctor_FileSystem(cbId, r));
                 handlers.put("log", (cbId, r) -> cbm_console_log(cbId, r));
                 handlers.put("warning", (cbId, r) -> cbm_console_warning(cbId, r));
                 handlers.put("error", (cbId, r) -> cbm_console_error(cbId, r));
+                handlers.put("console", (cbId, r) -> ctor_console(cbId, r));
                 handlers.put("SetValueByKey", (cbId, r) -> cbm_KeyValueStorage_SetValueByKey(cbId, r));
                 handlers.put("GetValueByKey", (cbId, r) -> cbm_KeyValueStorage_GetValueByKey(cbId, r));
+                handlers.put("KeyValueStorage", (cbId, r) -> ctor_KeyValueStorage(cbId, r));
     }
 
     public static String clientVersion() {
@@ -76,6 +81,7 @@ public final class S5RunContext implements AutoCloseable {
     }
 
     public S5RunContext addClass(S5RunObject sample) {
+        classSamples.put(sample.s5runClassName(), sample);
         return addClass(sample.s5runClassName(), sample.s5runMethodNames(),
                 sample.s5runPropertyDescriptors());
     }
@@ -432,11 +438,87 @@ public final class S5RunContext implements AutoCloseable {
         int thisId = (int) r.readLongInt();
         KeyValueStorage obj = instanceById("KeyValueStorage", thisId);
             String name = r.strValue();
-        obj.GetValueByKey(name);
+        var res = obj.GetValueByKey(name);
         S5RunWire.Writer w = new S5RunWire.Writer();
         w.i32(cbId);
         w.u8(1);
-            w.u8(S5RunWire.T_UNDEFINED);
+            S5RunWire.encodeValue(w, res);
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void ctor_File(int cbId, S5RunWire.Reader r) throws Exception {
+        // 'new File()' from a script: construct via the registered sample
+        S5RunObject sample = classSamples.get("File");
+        if (sample == null)
+            throw new RuntimeException("File: no class sample registered (addClass)");
+        File cls = (File) sample;
+        File inst = cls.s5runConstruct();
+        if (inst == null)
+            throw new RuntimeException("File: not constructible (override srunConstruct)");
+        int id = registerInstance(inst);
+        S5RunWire.Writer w = new S5RunWire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+        w.u8(S5RunWire.T_REF);
+        w.i32(id);
+        w.str("File");
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void ctor_FileSystem(int cbId, S5RunWire.Reader r) throws Exception {
+        // 'new FileSystem()' from a script: construct via the registered sample
+        S5RunObject sample = classSamples.get("FileSystem");
+        if (sample == null)
+            throw new RuntimeException("FileSystem: no class sample registered (addClass)");
+        FileSystem cls = (FileSystem) sample;
+        FileSystem inst = cls.s5runConstruct();
+        if (inst == null)
+            throw new RuntimeException("FileSystem: not constructible (override srunConstruct)");
+        int id = registerInstance(inst);
+        S5RunWire.Writer w = new S5RunWire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+        w.u8(S5RunWire.T_REF);
+        w.i32(id);
+        w.str("FileSystem");
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void ctor_console(int cbId, S5RunWire.Reader r) throws Exception {
+        // 'new console()' from a script: construct via the registered sample
+        S5RunObject sample = classSamples.get("console");
+        if (sample == null)
+            throw new RuntimeException("console: no class sample registered (addClass)");
+        console cls = (console) sample;
+        console inst = cls.s5runConstruct();
+        if (inst == null)
+            throw new RuntimeException("console: not constructible (override srunConstruct)");
+        int id = registerInstance(inst);
+        S5RunWire.Writer w = new S5RunWire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+        w.u8(S5RunWire.T_REF);
+        w.i32(id);
+        w.str("console");
+        sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
+    }
+
+    private void ctor_KeyValueStorage(int cbId, S5RunWire.Reader r) throws Exception {
+        // 'new KeyValueStorage()' from a script: construct via the registered sample
+        S5RunObject sample = classSamples.get("KeyValueStorage");
+        if (sample == null)
+            throw new RuntimeException("KeyValueStorage: no class sample registered (addClass)");
+        KeyValueStorage cls = (KeyValueStorage) sample;
+        KeyValueStorage inst = cls.s5runConstruct();
+        if (inst == null)
+            throw new RuntimeException("KeyValueStorage: not constructible (override srunConstruct)");
+        int id = registerInstance(inst);
+        S5RunWire.Writer w = new S5RunWire.Writer();
+        w.i32(cbId);
+        w.u8(1);
+        w.u8(S5RunWire.T_REF);
+        w.i32(id);
+        w.str("KeyValueStorage");
         sendMessage(S5RunWire.M_CALLBACK_RESP, w.toByteArray());
     }
 

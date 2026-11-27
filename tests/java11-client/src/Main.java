@@ -42,6 +42,27 @@ public class Main {
         }
     }
 
+    static final class MyKeyValueStorage implements KeyValueStorage {
+        private final java.util.Map<String, S5RunVariable> store = new java.util.HashMap<>();
+
+        @Override
+        public KeyValueStorage s5runConstruct() {
+            // 'new KeyValueStorage()' in scripts constructs a new instance
+            return new MyKeyValueStorage();
+        }
+
+        @Override
+        public void SetValueByKey(String name, S5RunVariable value) {
+            store.put(name, value);
+        }
+
+        @Override
+        public S5RunVariable GetValueByKey(String name) {
+            S5RunVariable v = store.get(name);
+            return v != null ? v : S5RunVariable.Undefined.INSTANCE;
+        }
+    }
+
     static final class MyGetFile implements GlobalFunction_GetFile {
         static String lastPath = "";
 
@@ -275,6 +296,7 @@ public class Main {
                     .addFunction(new MyGetServerPort())
                     .addObject(new MyFileSystem())
                     .addObject(new MyConsole())
+                    .addClass(new MyKeyValueStorage())
                     .addServer(new S5RunRemoteServerInfo().address(address).apiKey("some api key runner"))
                     .setScript(test.scriptJs)) {
 

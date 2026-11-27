@@ -145,6 +145,30 @@ func (f *MyFile) GetName() string       { return "example.txt" }
 func (f *MyFile) GetBufferSize() int64  { return f.bufferSize }
 func (f *MyFile) SetBufferSize(v int64) { f.bufferSize = v }
 
+type MyKeyValueStorage struct {
+	s5runcli.KeyValueStorageBase
+	store map[string]s5runcli.S5RunVariable
+}
+
+// S5RunConstruct: 'new KeyValueStorage()' in scripts constructs a new instance.
+func (k *MyKeyValueStorage) S5RunConstruct() s5runcli.KeyValueStorage {
+	return &MyKeyValueStorage{}
+}
+
+func (k *MyKeyValueStorage) SetValueByKey(name string, value s5runcli.S5RunVariable) {
+	if k.store == nil {
+		k.store = map[string]s5runcli.S5RunVariable{}
+	}
+	k.store[name] = value
+}
+
+func (k *MyKeyValueStorage) GetValueByKey(name string) s5runcli.S5RunVariable {
+	if v, ok := k.store[name]; ok {
+		return v
+	}
+	return s5runcli.Undefined{}
+}
+
 var lastGetFilePath string
 
 type MyGetFile struct{}
@@ -244,6 +268,7 @@ func main() {
 				AddFunction(MyCloseFiles{}).
 				AddObject(MyFileSystem{}).
 				AddObject(MyConsole{}).
+				AddClass(&MyKeyValueStorage{}).
 				AddServer(s5runcli.NewRemoteServerInfo().Address(address)).
 				SetScript(test.scriptJs)
 
