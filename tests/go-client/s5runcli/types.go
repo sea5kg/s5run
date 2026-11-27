@@ -2,6 +2,34 @@
 // TODO: not compiled yet (no Go toolchain available at generation time).
 package s5runcli
 
+// S5RunArgMetadata describes a function/method argument.
+type S5RunArgMetadata struct {
+	Name string
+	Type string
+}
+
+// S5RunMethodMetadata describes a method signature.
+type S5RunMethodMetadata struct {
+	Name       string
+	ReturnType string
+	Args       []S5RunArgMetadata
+}
+
+// S5RunClassMetadata describes a class: methods and properties.
+type S5RunClassMetadata struct {
+	Name       string
+	Methods    []S5RunMethodMetadata
+	Properties []S5RunProperty
+}
+
+// S5RunFunctionMetadata describes a global function.
+type S5RunFunctionMetadata struct {
+	Name       string
+	ReturnType string
+	Args       []S5RunArgMetadata
+}
+
+
 // S5RunProperty describes a JS accessor property: reading obj.<Name>
 // calls the Getter method, writing calls the Setter.
 type S5RunProperty struct {
@@ -15,6 +43,17 @@ type S5RunObject interface {
 	S5RunClassName() string
 	S5RunMethodNames() []string
 	S5RunPropertyDescriptors() []S5RunProperty
+}
+
+// S5RunMetaObject is implemented by the generated base types
+// (returns nil for custom types without a generated base).
+type S5RunMetaObject interface {
+	S5RunMetadata() *S5RunClassMetadata
+}
+
+// S5RunMetaFunction is implemented by the generated function bases.
+type S5RunMetaFunction interface {
+	S5RunMetadata() *S5RunFunctionMetadata
 }
 
 // S5RunFunction is the root of all generated global functions.

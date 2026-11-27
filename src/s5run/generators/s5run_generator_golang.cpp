@@ -192,6 +192,8 @@ const (
 	msgStatsReq      uint8 = 0x09
 	msgStatsResp     uint8 = 0x0A
 	msgServerHello   uint8 = 0x0F
+	msgProviderMetaReq  uint8 = 0x10
+	msgProviderMetaResp uint8 = 0x11
 )
 
 // readHello consumes the server greeting "s5run <version> <protocol>".
@@ -724,8 +726,50 @@ func valueToString(v S5RunVariable) string {
 // types.go
 // -----------------------------------------------------------------------
 
-static std::string generate_types(const schema &s) {
-  std::string out = R"GO(
+static std::string s5run_replace_token(const std::string &text, const std::string &token,
+                                        const std::string &replacement) {
+  std::string out = text;
+  std::string::size_type pos = 0;
+  while ((pos = out.find(token, pos)) != std::string::npos) {
+    out.replace(pos, token.size(), replacement);
+    pos += replacement.size();
+  }
+  return out;
+}
+
+static std::string generate_types(const schema &s, bool provider) {
+  std::string meta_decls;
+  if (true) {
+    meta_decls = R"GO(// S5RunArgMetadata describes a function/method argument.
+type S5RunArgMetadata struct {
+	Name string
+	Type string
+}
+
+// S5RunMethodMetadata describes a method signature.
+type S5RunMethodMetadata struct {
+	Name       string
+	ReturnType string
+	Args       []S5RunArgMetadata
+}
+
+// S5RunClassMetadata describes a class: methods and properties.
+type S5RunClassMetadata struct {
+	Name       string
+	Methods    []S5RunMethodMetadata
+	Properties []S5RunProperty
+}
+
+// S5RunFunctionMetadata describes a global function.
+type S5RunFunctionMetadata struct {
+	Name       string
+	ReturnType string
+	Args       []S5RunArgMetadata
+}
+
+)GO";
+  }
+  std::string out = meta_decls + R"GO(
 // S5RunProperty describes a JS accessor property: reading obj.<Name>
 // calls the Getter method, writing calls the Setter.
 type S5RunProperty struct {
@@ -739,6 +783,17 @@ type S5RunObject interface {
 	S5RunClassName() string
 	S5RunMethodNames() []string
 	S5RunPropertyDescriptors() []S5RunProperty
+}
+
+// S5RunMetaObject is implemented by the generated base types
+// (returns nil for custom types without a generated base).
+type S5RunMetaObject interface {
+	S5RunMetadata() *S5RunClassMetadata
+}
+
+// S5RunMetaFunction is implemented by the generated function bases.
+type S5RunMetaFunction interface {
+	S5RunMetadata() *S5RunFunctionMetadata
 }
 
 // S5RunFunction is the root of all generated global functions.
@@ -836,6 +891,10 @@ func parseInt(s string) int {
     out += "}\n\n";
     out += "type " + go_name(c.name) + "Base struct{}\n\n";
     out += "func (" + go_name(c.name) + "Base) S5RunClassName() string { return \"" + c.name + "\" }\n";
+    if (provider) {
+      out += "func (" + go_name(c.name) + "Base) S5RunMetadata() *S5RunClassMetadata { return " +
+             go_name(c.name) + "Metadata }\n";
+    }
     std::string props;
     for (const auto &p : c.properties) {
       if (!props.empty())
@@ -849,6 +908,27 @@ func parseInt(s string) int {
     out += "func (" + go_name(c.name) + "Base) S5RunMethodNames() []string {\n";
     out += "\treturn []string{" + names + "}\n";
     out += "}\n";
+    if (provider) {
+      out += "var " + go_name(c.name) + "Metadata = &S5RunClassMetadata{\n";
+      out += "\tName: \"" + c.name + "\",\n";
+      out += "\tMethods: []S5RunMethodMetadata{\n";
+      for (const auto &m : c.methods) {
+        out += "\t\t{Name: \"" + m.name + "\", ReturnType: \"" + m.return_type + "\", Args: []S5RunArgMetadata{";
+        for (const auto &a : m.arguments) {
+          out += "{Name: \"" + a.name + "\", Type: \"" + a.type + "\"},";
+        }
+        out += "}},\n";
+      }
+      out += "\t},\n";
+      out += "\tProperties: []S5RunProperty{";
+      for (const auto &p : c.properties) {
+        out += "{Name: \"" + p.name + "\"," +
+               " Getter: \"" + p.getter + "\"," +
+               " Setter: \"" + p.setter + "\"},";
+      }
+      out += "},\n";
+      out += "}\n";
+    }
   }
 
   for (const auto &f : s.functions) {
@@ -866,6 +946,19 @@ func parseInt(s string) int {
     out += "}\n\n";
     out += "type globalFunction" + f.name + "Base struct{}\n\n";
     out += "func (globalFunction" + f.name + "Base) S5RunFunctionName() string { return \"" + f.name + "\" }\n";
+  if (provider) {
+    out += "func (globalFunction" + f.name + "Base) S5RunMetadata() *S5RunFunctionMetadata { return " +
+           f.name + "Metadata }\n";
+    out += "var " + f.name + "Metadata = &S5RunFunctionMetadata{\n";
+    out += "\tName: \"" + f.name + "\",\n";
+    out += "\tReturnType: \"" + f.return_type + "\",\n";
+    out += "\tArgs: []S5RunArgMetadata{";
+    for (const auto &a : f.arguments) {
+      out += "{Name: \"" + a.name + "\", Type: \"" + a.type + "\"},";
+    }
+    out += "},\n";
+    out += "}\n";
+  }
   }
   return out;
 }
@@ -1009,7 +1102,7 @@ static std::string generate_method_cb(const schema_class &c, const schema_method
 // context.go
 // -----------------------------------------------------------------------
 
-static std::string generate_context(const schema &s) {
+static std::string generate_context(const schema &s, bool provider) {
   std::string fn_switch;
   for (const auto &f : s.functions) {
     if (!fn_switch.empty())
@@ -1077,7 +1170,7 @@ type Context struct {
 	script          string
 	nextID          int
 	conn            net.Conn
-}
+@@PROVIDER_FIELDS@@}
 
 // NewContext creates an empty context.
 func NewContext() *Context {
@@ -1085,7 +1178,7 @@ func NewContext() *Context {
 		handlers:  map[string]throwingHandler{},
 		functions: map[string]interface{}{},
 		instances: map[string]map[int]S5RunObject{},
-	}
+@@PROVIDER_INIT@@	}
 	for k, v := range map[string]throwingHandler{
 )GO";
   out += method_handlers;
@@ -1108,7 +1201,7 @@ func (ctx *Context) AddServer(server *RemoteServerInfo) *Context {
 
 func (ctx *Context) AddClass(sample S5RunObject) *Context {
 	name := sample.S5RunClassName()
-	if ctx.conn != nil {
+@@PROVIDER_NOTE_CLASS@@	if ctx.conn != nil {
 		ctx.sendRegisterType(name, sample.S5RunMethodNames(), sample.S5RunPropertyDescriptors())
 	} else {
 		ctx.pendingTypes = append(ctx.pendingTypes, pendingType{name, sample.S5RunMethodNames(), sample.S5RunPropertyDescriptors()})
@@ -1123,7 +1216,7 @@ func (ctx *Context) AddObject(obj S5RunObject) *Context {
 		ctx.instances[cls] = map[int]S5RunObject{}
 	}
 	ctx.instances[cls][ctx.nextID] = obj
-	if ctx.conn != nil {
+@@PROVIDER_NOTE_OBJECT@@	if ctx.conn != nil {
 		ctx.sendRegisterObject(cls, ctx.nextID, obj.S5RunMethodNames(), obj.S5RunPropertyDescriptors())
 	} else {
 		ctx.pendingObjects = append(ctx.pendingObjects, pendingObject{cls, ctx.nextID, obj.S5RunMethodNames(), obj.S5RunPropertyDescriptors()})
@@ -1134,6 +1227,7 @@ func (ctx *Context) AddObject(obj S5RunObject) *Context {
 func (ctx *Context) AddFunction(fn interface{}) *Context {
 	name := s5runFunctionName(fn)
 	ctx.functions[name] = fn
+@@PROVIDER_NOTE_FUNCTION@@
 	switch name {
 )GO";
   out += fn_switch;
@@ -1398,6 +1492,165 @@ func RunScript(ctx *Context, entry string, args []S5RunVariable) *RunResult {
 	}
 }
 )GO";
+  if (provider) {
+    out += R"GO(
+
+// ---- provider mode ----
+
+type metaObjectEntry struct {
+	meta   *S5RunClassMetadata
+	thisID int
+}
+
+func (ctx *Context) writeMetaFunction(w *writer, m *S5RunFunctionMetadata) {
+	w.u8(1) // function
+	w.rawStr(m.Name)
+	w.rawStr(m.ReturnType)
+	w.u32(uint32(len(m.Args)))
+	for _, a := range m.Args {
+		w.rawStr(a.Name)
+		w.rawStr(a.Type)
+	}
+}
+
+func (ctx *Context) writeMetaClass(w *writer, kind uint8, m *S5RunClassMetadata, thisID int) {
+	w.u8(kind)
+	w.rawStr(m.Name)
+	w.u32(uint32(len(m.Methods)))
+	for _, mm := range m.Methods {
+		w.rawStr(mm.Name)
+		w.rawStr(mm.ReturnType)
+		w.u32(uint32(len(mm.Args)))
+		for _, a := range mm.Args {
+			w.rawStr(a.Name)
+			w.rawStr(a.Type)
+		}
+	}
+	w.u32(uint32(len(m.Properties)))
+	for _, p := range m.Properties {
+		w.rawStr(p.Name)
+		w.rawStr(p.Getter)
+		w.rawStr(p.Setter)
+	}
+	if kind == 3 {
+		w.i32(int32(thisID))
+	}
+}
+
+// handleMetaReq answers M_PROVIDER_META_REQ: metadata by name
+// ("" = list everything registered).
+func (ctx *Context) handleMetaReq(body []byte) {
+	r := &reader{data: body}
+	name := r.rawStr()
+	w := &writer{}
+	if name == "" {
+		count := len(ctx.metaFunctions) + len(ctx.metaObjects) + len(ctx.metaClasses)
+		w.u8(uint8(count))
+		for _, m := range ctx.metaFunctions {
+			ctx.writeMetaFunction(w, m)
+		}
+		for _, mo := range ctx.metaObjects {
+			ctx.writeMetaClass(w, 3, mo.meta, mo.thisID)
+		}
+		for _, m := range ctx.metaClasses {
+			ctx.writeMetaClass(w, 2, m, 0)
+		}
+	} else if m, ok := ctx.metaFunctions[name]; ok {
+		w.u8(1)
+		ctx.writeMetaFunction(w, m)
+	} else if mo, ok := ctx.metaObjects[name]; ok {
+		w.u8(1)
+		ctx.writeMetaClass(w, 3, mo.meta, mo.thisID)
+	} else if m, ok := ctx.metaClasses[name]; ok {
+		w.u8(1)
+		ctx.writeMetaClass(w, 2, m, 0)
+	} else {
+		w.u8(0) // not found
+	}
+	_ = writeFrame(ctx.conn, msgProviderMetaResp, w.buf.Bytes())
+}
+
+// Serve starts the provider server on host:port, waits for one client
+// and serves metadata requests + API calls until the client disconnects.
+func Serve(ctx *Context, host string, port int) error {
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+	if err != nil {
+		return err
+	}
+	conn, err := ln.Accept()
+	ln.Close()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetNoDelay(true)
+	}
+	ctx.conn = conn
+
+	// hello: "s5run <version> <protocol>"
+	hello := "s5run " + ClientVersion() + " 2"
+	if err := writeFrame(conn, msgServerHello, []byte(hello)); err != nil {
+		return err
+	}
+
+	for {
+		msgType, body, err := readFrame(conn)
+		if err != nil {
+			return nil // client disconnected
+		}
+		switch msgType {
+		case msgProviderMetaReq:
+			ctx.handleMetaReq(body)
+		case msgCallbackReq:
+			func() {
+				defer func() {
+					if e := recover(); e != nil {
+						w := &writer{}
+						w.i32(0)
+						w.u8(0)
+						w.rawStr(fmt.Sprintf("%v", e))
+						_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+					}
+				}()
+				ctx.dispatchCallback(body)
+			}()
+		default:
+			return nil // unexpected message
+		}
+	}
+}
+)GO";
+  }
+  // token substitution
+  if (provider) {
+    out = s5run_replace_token(out, "@@PROVIDER_FIELDS@@", R"GO(	metaClasses   map[string]*S5RunClassMetadata
+	metaFunctions map[string]*S5RunFunctionMetadata
+	metaObjects   map[string]metaObjectEntry
+)GO");
+    out = s5run_replace_token(out, "@@PROVIDER_INIT@@", R"GO(		metaClasses:   map[string]*S5RunClassMetadata{},
+		metaFunctions: map[string]*S5RunFunctionMetadata{},
+		metaObjects:   map[string]metaObjectEntry{},
+)GO");
+    out = s5run_replace_token(out, "@@PROVIDER_NOTE_CLASS@@", R"GO(	if m, ok := sample.(S5RunMetaObject); ok && m.S5RunMetadata() != nil {
+		ctx.metaClasses[name] = m.S5RunMetadata()
+	}
+)GO");
+    out = s5run_replace_token(out, "@@PROVIDER_NOTE_OBJECT@@", R"GO(	if m, ok := obj.(S5RunMetaObject); ok && m.S5RunMetadata() != nil {
+		ctx.metaObjects[m.S5RunMetadata().Name] = metaObjectEntry{m.S5RunMetadata(), ctx.nextID}
+	}
+)GO");
+    out = s5run_replace_token(out, "@@PROVIDER_NOTE_FUNCTION@@", R"GO(	if m, ok := fn.(S5RunMetaFunction); ok && m.S5RunMetadata() != nil {
+		ctx.metaFunctions[m.S5RunMetadata().Name] = m.S5RunMetadata()
+	}
+)GO");
+  } else {
+    out = s5run_replace_token(out, "@@PROVIDER_FIELDS@@", "");
+    out = s5run_replace_token(out, "@@PROVIDER_INIT@@", "");
+    out = s5run_replace_token(out, "@@PROVIDER_NOTE_CLASS@@", "");
+    out = s5run_replace_token(out, "@@PROVIDER_NOTE_OBJECT@@", "");
+    out = s5run_replace_token(out, "@@PROVIDER_NOTE_FUNCTION@@", "");
+  }
   return out;
 }
 
@@ -1407,8 +1660,16 @@ func RunScript(ctx *Context, entry string, args []S5RunVariable) *RunResult {
 
 class generator_golang : public IGenerator {
 public:
+  generator_golang() : m_provider(false) {
+  }
+
   std::vector<std::string> generate_client(const schema &s, const std::string &output_dir) override;
   std::vector<std::string> generate_provider(const schema &s, const std::string &output_dir) override;
+
+private:
+  std::vector<std::string> generate_internal(const schema &s, const std::string &output_dir);
+
+  bool m_provider;
 };
 
 static std::string trim(const std::string &s) {
@@ -1433,21 +1694,28 @@ static void write_go_file(const std::string &pkg_dir, const std::string &pkg,
 }
 
 std::vector<std::string> generator_golang::generate_client(const schema &s, const std::string &output_dir) {
+  m_provider = false;
+  return generate_internal(s, output_dir);
+}
+
+std::vector<std::string> generator_golang::generate_provider(const schema &s, const std::string &output_dir) {
+  m_provider = true;
+  return generate_internal(s, output_dir);
+}
+
+std::vector<std::string> generator_golang::generate_internal(const schema &s, const std::string &output_dir) {
   std::vector<std::string> written;
   std::string pkg = s.golang()->get_package_name();
   ::mkdir(output_dir.c_str(), 0755);
 
   write_go_file(output_dir, pkg, "wire", WIRE_TEMPLATE, written);
   write_go_file(output_dir, pkg, "variable", VALUE_TEMPLATE, written);
-  write_go_file(output_dir, pkg, "types", generate_types(s), written);
-  write_go_file(output_dir, pkg, "context", generate_context(s), written);
+  write_go_file(output_dir, pkg, "types", generate_types(s, m_provider), written);
+  write_go_file(output_dir, pkg, "context", generate_context(s, m_provider), written);
 
   return written;
 }
 
-std::vector<std::string> generator_golang::generate_provider(const schema &s, const std::string &output_dir) {
-  return {};
-}
 
 std::shared_ptr<IGenerator> make_generator_golang() {
   return std::make_shared<generator_golang>();

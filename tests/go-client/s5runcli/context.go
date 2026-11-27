@@ -103,6 +103,7 @@ func (ctx *Context) AddObject(obj S5RunObject) *Context {
 func (ctx *Context) AddFunction(fn interface{}) *Context {
 	name := s5runFunctionName(fn)
 	ctx.functions[name] = fn
+
 	switch name {
 		case "GetFile":
 			ctx.handlers["GetFile"] = ctx.callbackGetFile

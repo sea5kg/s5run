@@ -45,6 +45,8 @@ const (
 	msgStatsReq      uint8 = 0x09
 	msgStatsResp     uint8 = 0x0A
 	msgServerHello   uint8 = 0x0F
+	msgProviderMetaReq  uint8 = 0x10
+	msgProviderMetaResp uint8 = 0x11
 )
 
 // readHello consumes the server greeting "s5run <version> <protocol>".
