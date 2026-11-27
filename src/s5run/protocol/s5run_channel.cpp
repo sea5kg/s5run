@@ -207,9 +207,9 @@ void channel::read_hello() {
   m_server_version = text.substr(first_space + 1, last_space - first_space - 1);
 
   int protocol = std::atoi(text.substr(last_space + 1).c_str());
-  if (protocol != 2)
+  if (protocol != S5RUN_PROTOCOL_VERSION)
     throw std::runtime_error("channel: server protocol " + std::to_string(protocol)
-                             + " not supported (client supports 2)");
+                             + " not supported (client supports " + std::to_string(S5RUN_PROTOCOL_VERSION) + ")");
 }
 
 void channel::write_hello() {

@@ -43,7 +43,7 @@ using s5run::object_ref;
 namespace {
 
 void write_hello(int fd) {
-  std::string hello = "s5run v0.2.0 2";
+  std::string hello = "s5run v0.2.0 " + std::to_string(s5run::S5RUN_PROTOCOL_VERSION);
   std::vector<uint8_t> body(hello.begin(), hello.end());
   s5run::write_message(fd, s5run::M_SERVER_HELLO, body);
 }
