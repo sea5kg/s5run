@@ -1,0 +1,78 @@
+{
+  "client-version": "1.0.0",
+  "options": {
+    "go": {
+      "output-dir": "s5runprovider/",
+      "package": "s5runprovider"
+    }
+  },
+  "version": 1,
+  "functions": [],
+  "classes": [
+    {
+      "name": "db",
+      "methods": [
+        {
+          "name": "insert",
+          "return": "string",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "collection"
+            },
+            {
+              "type": "var",
+              "name": "doc"
+            }
+          ]
+        },
+        {
+          "name": "find",
+          "return": "array<var>",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "collection"
+            },
+            {
+              "type": "var",
+              "name": "filter"
+            }
+          ]
+        },
+        {
+          "name": "update",
+          "return": "bool",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "collection"
+            },
+            {
+              "type": "string",
+              "name": "id"
+            },
+            {
+              "type": "var",
+              "name": "doc"
+            }
+          ]
+        },
+        {
+          "name": "delete",
+          "return": "bool",
+          "arguments": [
+            {
+              "type": "string",
+              "name": "collection"
+            },
+            {
+              "type": "string",
+              "name": "id"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
