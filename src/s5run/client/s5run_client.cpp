@@ -145,10 +145,6 @@ void client_context::connect(const std::string &host, uint16_t port) {
 void client_context::disconnect() {
   delete m_channel;
   m_channel = nullptr;
-  for (auto &link : m_providers)
-    delete link.ch;
-  m_providers.clear();
-  m_method_owner.clear();
   m_console_registered = false;
   m_console_id = 0;
 }
@@ -190,146 +186,28 @@ void client_context::send_register_object(const std::string &name, int32_t this_
     throw std::runtime_error("register_object(" + name + "): " + r.get_string());
 }
 
-void client_context::send_register_type(const std::string &name,
-                                        const std::vector<std::string> &methods,
-                                        const provider_entry &entry) {
-  wire::Writer w;
-  w.put_string(name);
-  w.put_u32(static_cast<uint32_t>(methods.size()));
-  for (const auto &m : methods)
-    w.put_string(m);
-  w.put_u32(static_cast<uint32_t>(entry.prop_names.size()));
-  for (size_t i = 0; i < entry.prop_names.size(); ++i) {
-    w.put_string(entry.prop_names[i]);
-    w.put_string(entry.prop_getters[i]);
-    w.put_string(entry.prop_setters[i]);
-  }
-
-  uint8_t resp_type = 0;
-  std::vector<uint8_t> resp;
-  if (!m_channel->send_and_expect(protocol_msg_type::M_REGISTER_TYPE, w.data(),
-                                  protocol_msg_type::M_REGISTER_RESP, resp))
-    throw std::runtime_error("register_type(" + name + "): no response");
-  wire::Reader r(resp.data(), resp.size());
-  if (r.get_u8() == 0)
-    throw std::runtime_error("register_type(" + name + "): " + r.get_string());
-}
-
-void client_context::send_register_function(const std::string &name) {
-  wire::Writer w;
-  w.put_string(name);
-  uint8_t resp_type = 0;
-  std::vector<uint8_t> resp;
-  if (!m_channel->send_and_expect(protocol_msg_type::M_REGISTER_FUNC, w.data(),
-                                  protocol_msg_type::M_REGISTER_RESP, resp))
-    throw std::runtime_error("register_function(" + name + "): no response");
-  wire::Reader r(resp.data(), resp.size());
-  if (r.get_u8() == 0)
-    throw std::runtime_error("register_function(" + name + "): " + r.get_string());
-}
-
-// Parse one metadata entry from the META_RESP body (see protocol comments).
-static bool parse_provider_entry(wire::Reader &r, provider_entry &out) {
-  out.kind = r.get_u8();
-  out.name = r.get_string();
-  if (out.kind == provider_entry::FUNCTION) {
-    (void)r.get_string(); // return type
-    uint32_t argc = r.get_u32();
-    for (uint32_t i = 0; i < argc; ++i) {
-      (void)r.get_string(); // arg name
-      (void)r.get_string(); // arg type
-    }
-    return true;
-  }
-  if (out.kind == provider_entry::CLASS || out.kind == provider_entry::OBJECT) {
-    uint32_t method_count = r.get_u32();
-    for (uint32_t i = 0; i < method_count; ++i) {
-      std::string mname = r.get_string();
-      (void)r.get_string(); // return type
-      uint32_t argc = r.get_u32();
-      for (uint32_t j = 0; j < argc; ++j) {
-        (void)r.get_string(); // arg name
-        (void)r.get_string(); // arg type
-      }
-      out.methods.push_back(mname);
-    }
-    uint32_t prop_count = r.get_u32();
-    for (uint32_t i = 0; i < prop_count; ++i) {
-      out.prop_names.push_back(r.get_string());
-      out.prop_getters.push_back(r.get_string());
-      out.prop_setters.push_back(r.get_string());
-    }
-    if (out.kind == provider_entry::OBJECT)
-      out.this_id = r.get_i32();
-    return true;
-  }
-  return false;
-}
-
 void client_context::add_provider(const std::string &host, uint16_t port,
                                   const std::vector<std::string> &names) {
-  provider_link link;
-  link.ch = new channel(host, port); // connect + provider hello
+  if (m_channel == nullptr)
+    throw std::runtime_error("client_context: not connected");
 
-  for (const auto &name : names) {
-    wire::Writer w;
+  // ask the server to mount the entries from the remote provider;
+  // the server connects to the provider itself and relays callbacks
+  wire::Writer w;
+  w.put_string(host);
+  w.put_u16(port);
+  w.put_u32(static_cast<uint32_t>(names.size()));
+  for (const auto &name : names)
     w.put_string(name);
-    uint8_t resp_type = 0;
-    std::vector<uint8_t> resp;
-    if (!link.ch->send_and_expect(protocol_msg_type::M_PROVIDER_META_REQ, w.data(),
-                                  protocol_msg_type::M_PROVIDER_META_RESP, resp))
-      throw std::runtime_error("provider: no metadata for '" + name + "'");
-    wire::Reader r(resp.data(), resp.size());
-    uint8_t count = r.get_u8();
-    if (count == 0)
-      throw std::runtime_error("provider: not found: " + name);
-    provider_entry entry;
-    if (!parse_provider_entry(r, entry))
-      throw std::runtime_error("provider: bad metadata for '" + name + "'");
-    link.entries.push_back(entry);
-  }
 
-  size_t idx = m_providers.size();
-  for (const auto &entry : link.entries) {
-    if (entry.kind == provider_entry::FUNCTION)
-      m_method_owner[entry.name] = idx;
-    for (const auto &m : entry.methods)
-      m_method_owner[m] = idx;
-  }
-  m_providers.push_back({link.ch, link.entries});
-}
-
-void client_context::register_provider_entries() {
-  for (const auto &link : m_providers) {
-    for (const auto &entry : link.entries) {
-      if (entry.kind == provider_entry::FUNCTION) {
-        send_register_function(entry.name);
-      } else if (entry.kind == provider_entry::CLASS) {
-        send_register_type(entry.name, entry.methods, entry);
-      } else {
-        send_register_object(entry.name, entry.this_id, entry.methods);
-      }
-    }
-  }
-}
-
-// Relay a CALLBACK_REQ body to the provider 1:1 and forward the
-// CALLBACK_RESP body back to the server (the callback id matches).
-bool client_context::relay_to_provider(size_t provider_index,
-                                        const std::vector<uint8_t> &body) {
-  channel *p = m_providers[provider_index].ch;
-  if (!p->send(protocol_msg_type::M_CALLBACK_REQ, body))
-    return false;
-  while (true) {
-    uint8_t msg_type = 0;
-    std::vector<uint8_t> resp;
-    if (!p->recv(msg_type, resp))
-      return false;
-    if (msg_type == protocol_msg_type::M_CALLBACK_RESP)
-      return m_channel->send(protocol_msg_type::M_CALLBACK_RESP, resp);
-    // unexpected message from the provider
-    return false;
-  }
+  uint8_t resp_type = 0;
+  std::vector<uint8_t> resp;
+  if (!m_channel->send_and_expect(protocol_msg_type::M_PROVIDER_MOUNT_REQ, w.data(),
+                                  protocol_msg_type::M_PROVIDER_MOUNT_RESP, resp))
+    throw std::runtime_error("no response from the server");
+  wire::Reader r(resp.data(), resp.size());
+  if (r.get_u8() == 0)
+    throw std::runtime_error(r.get_string());
 }
 
 void client_context::send_callback_ok(int32_t cb_id, const variable &result) {
@@ -353,16 +231,6 @@ void client_context::dispatch_callback(const std::vector<uint8_t> &body) {
   int32_t cb_id = r.get_i32();
   std::string method = r.get_string();
   uint32_t argc = r.get_u32();
-
-  // provider-owned methods are relayed 1:1 (the body format is the same)
-  if (method != "log" && method != "warning" && method != "error") {
-    auto it = m_method_owner.find(method);
-    if (it != m_method_owner.end()) {
-      if (!relay_to_provider(it->second, body))
-        send_callback_error(cb_id, "provider relay failed: " + method);
-      return;
-    }
-  }
 
   try {
     // args[0] is the this_id of the target object
@@ -401,9 +269,6 @@ run_result client_context::run(const std::string &script, const std::string &ent
 
   run_result result;
 
-  // mount the remote provider entries on the server
-  if (!m_providers.empty())
-    register_provider_entries();
 
   wire::Writer w;
   w.put_string(script);

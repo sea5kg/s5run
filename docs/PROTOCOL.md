@@ -88,6 +88,8 @@ The most compact prefix that fits is used.
 | `M_SERVER_HELLO` | 0x0F | server -> client | greeting (see above) |
 | `M_PROVIDER_META_REQ` | 0x10 | client -> provider | context metadata request |
 | `M_PROVIDER_META_RESP` | 0x11 | provider -> client | context metadata |
+| `M_PROVIDER_MOUNT_REQ` | 0x12 | client -> server | mount provider entries on the server |
+| `M_PROVIDER_MOUNT_RESP` | 0x13 | server -> client | mount result |
 
 ## Values
 
@@ -289,6 +291,34 @@ if status == 1:
 A provider is a backend server (see `s5run generate provider`). After the
 hello it answers metadata requests and serves API calls. API calls reuse
 `M_CALLBACK_REQ` / `M_CALLBACK_RESP` with the same body format.
+
+### M_PROVIDER_MOUNT_REQ
+
+Client -> **server**: mount context entries from a remote provider. The
+server connects to the provider itself, fetches the metadata for the
+requested names, registers the entries (functions / classes / global
+objects) in the script engine and relays the API callbacks to the
+provider **directly** - the mounting client does not participate in the
+callback chain. The provider connection lives as long as the client
+connection.
+
+```
+str host
+u16 port
+u32 name_count
+str name [name_count]
+```
+
+### M_PROVIDER_MOUNT_RESP
+
+```
+u8  ok
+str error (empty when ok)
+```
+
+This is how `s5run run --provider "host:port,name1,name2" script.js`
+works (the FrontendModel: the script server talks to the backend
+provider directly).
 
 ### M_PROVIDER_META_REQ
 

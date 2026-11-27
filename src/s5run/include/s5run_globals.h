@@ -65,6 +65,11 @@ enum protocol_msg_type : uint8_t {
   // metadata and serves API calls (reuses M_CALLBACK_REQ/M_CALLBACK_RESP
   // for invocations: req id, method, [this_id, args...]).
 
+  M_PROVIDER_MOUNT_REQ = 0x12, // client -> server: mount context entries
+                               //   from a remote provider:
+                               //   str host; u16 port; u32 count; str names[]
+  M_PROVIDER_MOUNT_RESP = 0x13, // server -> client: u8 ok, str error
+
   M_PROVIDER_META_REQ = 0x10, // client -> provider: str name ("" = list all)
   M_PROVIDER_META_RESP = 0x11, // provider -> client:
                               //   u8 count, entries[]:

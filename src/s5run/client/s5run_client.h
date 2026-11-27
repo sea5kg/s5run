@@ -37,7 +37,6 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
 #include <string>
 #include <vector>
 
@@ -69,19 +68,6 @@ public:
   virtual void error(const std::vector<std::string> &args);
 };
 
-// Remote context provider entry (from the provider metadata):
-// a function, a class or a global object to mount into the script.
-struct provider_entry {
-  enum kind_t { FUNCTION = 1, CLASS = 2, OBJECT = 3 };
-  uint8_t kind = 0;
-  std::string name;
-  std::vector<std::string> methods; // method names (classes/objects)
-  std::vector<std::string> prop_names;
-  std::vector<std::string> prop_getters;
-  std::vector<std::string> prop_setters;
-  int32_t this_id = 0; // objects
-};
-
 // Client-side execution context: connects to a server, registers the built-in
 // console object and runs scripts. Server-side callbacks (console.log etc.)
 // are dispatched locally while the script is running. Context entries from
@@ -104,9 +90,9 @@ public:
   // Pass nullptr to use the default implementation.
   void register_console(console_object *console);
 
-  // Connect to a remote context provider (host:port) and fetch metadata for
-  // the given names. The entries are registered on the server inside run()
-  // and their callbacks are relayed to the provider.
+  // Ask the server to mount context entries (functions/classes/objects)
+  // from a remote provider (host:port, names). The server connects to the
+  // provider itself and relays the callbacks directly.
   void add_provider(const std::string &host, uint16_t port,
                     const std::vector<std::string> &names);
 
@@ -117,15 +103,9 @@ public:
 private:
   void send_register_object(const std::string &name, int32_t this_id,
                             const std::vector<std::string> &methods);
-  void send_register_type(const std::string &name,
-                          const std::vector<std::string> &methods,
-                          const provider_entry &entry);
-  void send_register_function(const std::string &name);
-  void register_provider_entries();
   void send_callback_ok(int32_t cb_id, const variable &result);
   void send_callback_error(int32_t cb_id, const std::string &error);
   void dispatch_callback(const std::vector<uint8_t> &body);
-  bool relay_to_provider(size_t provider_index, const std::vector<uint8_t> &body);
 
   channel *m_channel;
   console_object *m_console;
@@ -134,13 +114,6 @@ private:
   int32_t m_console_id;
   int32_t m_next_id;
 
-  // remote providers: connection + mounted entries
-  struct provider_link {
-    channel *ch;
-    std::vector<provider_entry> entries;
-  };
-  std::vector<provider_link> m_providers;
-  std::map<std::string, size_t> m_method_owner; // method/function name -> provider
 };
 
 } // namespace s5run

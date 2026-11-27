@@ -148,16 +148,29 @@ private:
     return out;
   }
   void handle_register_function(engine::IScriptEngine *, const std::vector<uint8_t> &body);
-  void handle_register_object(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
-  void handle_register_object_type(engine::IScriptEngine *, ClientChannel &channel, const std::vector<uint8_t> &body);
+  void handle_register_object(engine::IScriptEngine *, const std::vector<uint8_t> &body);
+  void handle_register_object_type(engine::IScriptEngine *, const std::vector<uint8_t> &body);
   void handle_exec(engine::IScriptEngine *, const std::vector<uint8_t> &body, int fd);
   void send_exec_error(int fd, std::string);
   void send_stats(int fd);
   void handle_job_submit(const std::vector<uint8_t> &body, int fd);
   void handle_job_result(const std::vector<uint8_t> &body, int fd);
   void send_register_resp(int fd, bool, std::string);
-  void register_method_callbacks(engine::IScriptEngine *, ClientChannel &,
+  // Register method callbacks dispatching to the given fd (the client or
+  // a mounted provider).
+  void register_method_callbacks(engine::IScriptEngine *, int fd,
                                 const std::vector<std::string> &methods);
+  // Register a global function callback dispatched to the given fd.
+  void register_function_callback(engine::IScriptEngine *, const std::string &name, int fd);
+  // Convert a callback response to a JS value (refs become proxy objects).
+  engine::JsValue to_js_value(engine::IScriptEngine *eng, engine::JsContext ctx,
+                              const variable &resp);
+  // Mount context entries from a remote provider (server connects,
+  // fetches the metadata and registers the entries; callbacks are
+  // relayed to the provider directly).
+  void handle_provider_mount(engine::IScriptEngine *eng, const std::vector<uint8_t> &body, int fd);
+  // provider connections (closed when the client disconnects)
+  std::vector<int> m_provider_fds;
 };
 
 client_handler::client_handler(int fd, thread_pool *pool)
@@ -186,8 +199,6 @@ void client_handler::handle() {
     return;
   }
 
-  ClientChannel channel(m_fd);
-
   while (true) {
     uint8_t msg_type;
     std::vector<uint8_t> body;
@@ -201,12 +212,15 @@ void client_handler::handle() {
         send_register_resp(m_fd, true, "");
         break;
       case protocol_msg_type::M_REGISTER_OBJ:
-        handle_register_object(eng.get(), channel, body);
+        handle_register_object(eng.get(), body);
         send_register_resp(m_fd, true, "");
         break;
       case protocol_msg_type::M_REGISTER_TYPE:
-        handle_register_object_type(eng.get(), channel, body);
+        handle_register_object_type(eng.get(), body);
         send_register_resp(m_fd, true, "");
+        break;
+      case protocol_msg_type::M_PROVIDER_MOUNT_REQ:
+        handle_provider_mount(eng.get(), body, m_fd);
         break;
       case protocol_msg_type::M_STATS_REQ:
         send_stats(m_fd);
@@ -232,6 +246,8 @@ void client_handler::handle() {
     }
   }
   g_connected_clients.fetch_sub(1);
+  for (int pfd : m_provider_fds)
+    ::close(pfd);
   ::close(m_fd);
 }
 
@@ -291,50 +307,61 @@ void client_handler::send_stats(int fd) {
 void client_handler::handle_register_function(engine::IScriptEngine *eng, const std::vector<uint8_t> &body) {
   wire::Reader r(body.data(), body.size());
   std::string name = r.get_string();
+  register_function_callback(eng, name, m_fd);
+}
 
+// Register a global function whose callback is dispatched to the given fd
+// (the client connection or a mounted provider).
+void client_handler::register_function_callback(engine::IScriptEngine *eng,
+                                                const std::string &name, int fd) {
   eng->register_js_callback(
-    name, [this, eng, name](engine::JsContext ctx, const std::vector<variable> &jargs) -> engine::JsValue {
-      ClientChannel channel(m_fd);
+    name, [this, eng, name, fd](engine::JsContext ctx, const std::vector<variable> &jargs) -> engine::JsValue {
+      ClientChannel channel(fd);
       variable resp = channel.call(name, jargs);
-      if (resp.is_ref()) {
-        auto it = m_object_types.find(resp.as_ref().type);
-        if (it == m_object_types.end())
-          throw std::runtime_error("unknown object type: " + resp.as_ref().type);
-        return eng->make_object(ctx, resp.as_ref().this_id, it->second.methods,
-                                it->second.properties);
-      }
-      if (resp.is_array()) {
-        bool has_refs = false;
-        for (const auto &e : resp.as_array()) {
-          if (e.is_ref()) {
-            has_refs = true;
-            break;
-          }
-        }
-        if (has_refs) {
-          std::vector<engine::JsValue> items;
-          items.reserve(resp.as_array().size());
-          for (const auto &e : resp.as_array()) {
-            if (e.is_ref()) {
-              auto it = m_object_types.find(e.as_ref().type);
-              if (it == m_object_types.end())
-                throw std::runtime_error("unknown object type: " + e.as_ref().type);
-              items.push_back(eng->make_object(ctx, e.as_ref().this_id, it->second.methods,
-                                               it->second.properties));
-            } else {
-              items.push_back(eng->make_value(ctx, e));
-            }
-          }
-          return eng->make_array(ctx, items.size(), items.empty() ? nullptr : items.data());
-        }
-      }
-      return eng->make_value(ctx, resp);
+      return to_js_value(eng, ctx, resp);
     }
   );
 }
 
+engine::JsValue client_handler::to_js_value(engine::IScriptEngine *eng, engine::JsContext ctx,
+                                            const variable &resp) {
+  if (resp.is_ref()) {
+    auto it = m_object_types.find(resp.as_ref().type);
+    if (it == m_object_types.end())
+      throw std::runtime_error("unknown object type: " + resp.as_ref().type);
+    return eng->make_object(ctx, resp.as_ref().this_id, it->second.methods,
+                            it->second.properties);
+  }
+  if (resp.is_array()) {
+    bool has_refs = false;
+    for (const auto &e : resp.as_array()) {
+      if (e.is_ref()) {
+        has_refs = true;
+        break;
+      }
+    }
+    if (has_refs) {
+      std::vector<engine::JsValue> items;
+      items.reserve(resp.as_array().size());
+      for (const auto &e : resp.as_array()) {
+        if (e.is_ref()) {
+          auto it = m_object_types.find(e.as_ref().type);
+          if (it == m_object_types.end())
+            throw std::runtime_error("unknown object type: " + e.as_ref().type);
+          items.push_back(eng->make_object(ctx, e.as_ref().this_id, it->second.methods,
+                                           it->second.properties));
+        } else {
+          items.push_back(eng->make_value(ctx, e));
+        }
+      }
+      return eng->make_array(ctx, items.size(), items.empty() ? nullptr : items.data());
+    }
+  }
+  return eng->make_value(ctx, resp);
+}
+
 void client_handler::handle_register_object(
-  engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body
+  engine::IScriptEngine *eng, const std::vector<uint8_t> &body
 ) {
   wire::Reader r(body.data(), body.size());
   std::string name = r.get_string();
@@ -349,7 +376,7 @@ void client_handler::handle_register_object(
   std::vector<engine::object_property> properties =
     parse_properties(r, "register_object(" + name + ")");
 
-  register_method_callbacks(eng, channel, methods);
+  register_method_callbacks(eng, m_fd, methods);
 
   if (!type_name.empty())
     m_object_types[type_name] = object_type_info{methods, properties};
@@ -358,7 +385,7 @@ void client_handler::handle_register_object(
 }
 
 void client_handler::handle_register_object_type(
-  engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<uint8_t> &body
+  engine::IScriptEngine *eng, const std::vector<uint8_t> &body
 ) {
   wire::Reader r(body.data(), body.size());
   std::string name = r.get_string();
@@ -372,17 +399,163 @@ void client_handler::handle_register_object_type(
     parse_properties(r, "register_type(" + name + ")");
 
   m_object_types[name] = object_type_info{methods, properties};
-  register_method_callbacks(eng, channel, methods);
+  register_method_callbacks(eng, m_fd, methods);
 }
 
 void client_handler::register_method_callbacks(
-  engine::IScriptEngine *eng, ClientChannel &channel, const std::vector<std::string> &methods
+  engine::IScriptEngine *eng, int fd, const std::vector<std::string> &methods
 ) {
   for (const auto &method : methods) {
-    eng->register_callback(method, [&channel](const std::string &cb_method, const std::vector<variable> &args) {
+    eng->register_callback(method, [fd](const std::string &cb_method, const std::vector<variable> &args) {
+      ClientChannel channel(fd);
       return channel.call(cb_method, args);
     });
   }
+}
+
+
+void client_handler::handle_provider_mount(engine::IScriptEngine *eng,
+                                            const std::vector<uint8_t> &body, int fd) {
+  wire::Reader r(body.data(), body.size());
+  std::string host = r.get_string();
+  uint16_t port = r.get_u16();
+  uint32_t name_count = r.get_u32();
+  std::vector<std::string> names;
+  names.reserve(name_count);
+  for (uint32_t i = 0; i < name_count; ++i)
+    names.push_back(r.get_string());
+
+  auto fail = [&](const std::string &error) {
+    wire::Writer w;
+    w.put_u8(0);
+    w.put_string(error);
+    s5run::write_message(fd, protocol_msg_type::M_PROVIDER_MOUNT_RESP, w.data());
+  };
+
+  // connect to the provider (host name or numeric IP)
+  addrinfo hints{};
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  addrinfo *resolved = nullptr;
+  if (::getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &resolved) != 0
+      || resolved == nullptr) {
+    fail("provider mount: cannot resolve " + host);
+    return;
+  }
+  int pfd = -1;
+  for (addrinfo *ai = resolved; ai != nullptr; ai = ai->ai_next) {
+    pfd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+    if (pfd < 0)
+      continue;
+    if (::connect(pfd, ai->ai_addr, ai->ai_addrlen) == 0)
+      break;
+    ::close(pfd);
+    pfd = -1;
+  }
+  ::freeaddrinfo(resolved);
+  if (pfd < 0) {
+    fail("provider mount: connect failed to " + host + ":" + std::to_string(port));
+    return;
+  }
+  s5run::set_recv_timeout(pfd, 10'000);
+  int nodelay = 1;
+  ::setsockopt(pfd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+
+  // provider hello: "s5run <version> <protocol>"
+  {
+    uint8_t hello_type = 0;
+    std::vector<uint8_t> hello_body;
+    if (!s5run::read_message(pfd, hello_type, hello_body)
+        || hello_type != protocol_msg_type::M_SERVER_HELLO) {
+      ::close(pfd);
+      fail("provider mount: expected provider hello");
+      return;
+    }
+    std::string text(hello_body.begin(), hello_body.end());
+    if (text.compare(0, 6, "s5run ") != 0) {
+      ::close(pfd);
+      fail("provider mount: bad provider hello: " + text);
+      return;
+    }
+  }
+
+  // fetch and mount the metadata for every requested name
+  for (const auto &name : names) {
+    wire::Writer w;
+    w.put_string(name);
+    if (!s5run::write_message(pfd, protocol_msg_type::M_PROVIDER_META_REQ, w.data())) {
+      ::close(pfd);
+      fail("provider mount: meta request failed for '" + name + "'");
+      return;
+    }
+    uint8_t resp_type = 0;
+    std::vector<uint8_t> resp;
+    if (!s5run::read_message(pfd, resp_type, resp)
+        || resp_type != protocol_msg_type::M_PROVIDER_META_RESP) {
+      ::close(pfd);
+      fail("provider mount: no metadata for '" + name + "'");
+      return;
+    }
+    wire::Reader mr(resp.data(), resp.size());
+    uint8_t count = mr.get_u8();
+    if (count == 0) {
+      ::close(pfd);
+      fail("provider mount: not found: " + name);
+      return;
+    }
+
+    uint8_t kind = mr.get_u8();
+    std::string entry_name = mr.get_string();
+    if (kind == 1) {
+      // function: skip the signature (return type + args)
+      (void)mr.get_string();
+      uint32_t argc = mr.get_u32();
+      for (uint32_t j = 0; j < argc; ++j) {
+        (void)mr.get_string();
+        (void)mr.get_string();
+      }
+      register_function_callback(eng, entry_name, pfd);
+    } else {
+      // class (2) or global object (3)
+      std::vector<std::string> methods;
+      uint32_t method_count = mr.get_u32();
+      methods.reserve(method_count);
+      for (uint32_t j = 0; j < method_count; ++j) {
+        methods.push_back(mr.get_string()); // method name
+        (void)mr.get_string();              // return type
+        uint32_t argc = mr.get_u32();
+        for (uint32_t k = 0; k < argc; ++k) {
+          (void)mr.get_string();
+          (void)mr.get_string();
+        }
+      }
+      std::vector<engine::object_property> properties;
+      uint32_t prop_count = mr.get_u32();
+      properties.reserve(prop_count);
+      for (uint32_t j = 0; j < prop_count; ++j) {
+        engine::object_property p;
+        p.name = mr.get_string();
+        p.getter = mr.get_string();
+        p.setter = mr.get_string();
+        properties.push_back(p);
+      }
+      int32_t this_id = 0;
+      if (kind == 3)
+        this_id = mr.get_i32();
+
+      register_method_callbacks(eng, pfd, methods);
+      m_object_types[entry_name] = object_type_info{methods, properties};
+      if (kind == 3)
+        eng->register_global_object(entry_name, this_id, methods, properties);
+    }
+  }
+
+  m_provider_fds.push_back(pfd);
+
+  wire::Writer w;
+  w.put_u8(1);
+  w.put_string("");
+  s5run::write_message(fd, protocol_msg_type::M_PROVIDER_MOUNT_RESP, w.data());
 }
 
 void client_handler::handle_exec(engine::IScriptEngine *eng, const std::vector<uint8_t> &body, int fd) {
