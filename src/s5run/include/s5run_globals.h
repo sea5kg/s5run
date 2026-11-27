@@ -40,7 +40,7 @@
 
 namespace s5run {
 
-constexpr int S5RUN_PROTOCOL_VERSION = 2;
+constexpr int S5RUN_PROTOCOL_VERSION = 3;
 
 enum protocol_msg_type : uint8_t {
   M_EXEC_REQ = 0x01,      // client -> server: script, entry, args

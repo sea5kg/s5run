@@ -1,6 +1,6 @@
 # s5run binary protocol
 
-Protocol version: **2** (announced in the server hello).
+Protocol version: **3** (announced in the server hello).
 
 s5run speaks a compact binary protocol over a single TCP connection.
 One side registers a script context (functions, classes, objects), the

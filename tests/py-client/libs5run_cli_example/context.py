@@ -17,7 +17,7 @@ from .variable import (
 )
 from .wire import _Msg, _Reader, _Writer
 
-S5RUN_PROTOCOL_VERSION = 2
+S5RUN_PROTOCOL_VERSION = 3
 
 
 

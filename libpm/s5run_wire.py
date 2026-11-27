@@ -58,7 +58,7 @@ M_JOB_RESULT_REQ = 0x0D
 M_JOB_RESULT_RESP = 0x0E
 M_SERVER_HELLO = 0x0F
 
-SUPPORTED_PROTOCOL_VERSION = 2
+S5RUN_PROTOCOL_VERSION = 3
 
 T_UNDEF = 0x00
 T_BOOL = 0x01
@@ -310,8 +310,8 @@ def read_hello(sock):
     if len(parts) != 3 or parts[0] != "s5run":
         raise WireError(f"bad server hello: {text!r}")
     protocol = int(parts[2])
-    if protocol != SUPPORTED_PROTOCOL_VERSION:
-        raise WireError(f"server protocol {protocol}, client supports {SUPPORTED_PROTOCOL_VERSION}")
+    if protocol != S5RUN_PROTOCOL_VERSION:
+        raise WireError(f"server protocol {protocol}, client supports {S5RUN_PROTOCOL_VERSION}")
     return parts[1], protocol
 
 

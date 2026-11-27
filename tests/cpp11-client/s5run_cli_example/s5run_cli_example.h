@@ -10,7 +10,7 @@
 
 namespace s5run_cli_example {
 
-const int S5RUN_PROTOCOL_VERSION = 2;
+const int S5RUN_PROTOCOL_VERSION = 3;
 
 class context;
 class s5run_remote_server_info;
