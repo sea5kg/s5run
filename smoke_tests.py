@@ -343,12 +343,11 @@ def test_run_command_providers(ports):
         output_expected = UtilsFiles.safe_read_file(os.path.join(_dir, "output_console_expected.txt"))
         output_expected = "".join(output_expected)
         command = [S5RUN_BIN, "run", "127.0.0.1:" + str(ports["S5RUN_SERVER_PORT"])]
-        # TODO
-        # providers = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "providers.txt"))
-        # for _provider in providers:
-        #     for k,v in ports.items():
-        #         _provider = _provider.replace("$(" + k + ")", str(v))
-        #     command += ["--provider", _provider]
+        providers = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "providers.txt"))
+        for _provider in providers:
+            for k,v in ports.items():
+                _provider = _provider.replace("$(" + k + ")", str(v))
+            command += ["--provider", _provider]
         script_js = os.path.join(_dir, "run_script.js")
         command.append(script_js)
         command += in_args

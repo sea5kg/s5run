@@ -11,20 +11,22 @@
 //   [warning] this is a warning message
 //   {ok: true, sum: 42, args: [21, 21]}
 
-function main(a, b) {
+function main(key, value) {
   console.log("hello from test_run_script.js");
-  console.log("a = " + a + ", b = " + b);
-  console.log("a + b = " + (a + b));
+  console.log("a = " + key + ", b = " + value);
+  console.log("a + b = " + (key + value));
   console.warning("this is a warning message from provider_cpp98-provider");
-
   var total = 0;
   for (var i = 1; i <= 10; ++i)
     total += i;
 
+  var q = getQueue("test_q");
+  q.publish(key, value);
+
   return {
     ok: true,
-    sum: a + b,
+    sum: key + value,
     loopTotal: total,
-    args: [a, b]
+    args: [key, value]
   };
 }

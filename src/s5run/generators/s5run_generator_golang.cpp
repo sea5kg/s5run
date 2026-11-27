@@ -1613,47 +1613,60 @@ func Serve(ctx *Context, host string, port int) error {
 	if err != nil {
 		return err
 	}
-	conn, err := ln.Accept()
-	ln.Close()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if tcp, ok := conn.(*net.TCPConn); ok {
-		_ = tcp.SetNoDelay(true)
-	}
-	ctx.conn = conn
-
-	// hello: "s5run <version> <protocol>"
-	hello := "s5run " + ClientVersion() + " 2"
-	if err := writeFrame(conn, msgServerHello, []byte(hello)); err != nil {
-		return err
-	}
-
-	for {
-		msgType, body, err := readFrame(conn)
+	defer ln.Close()
+	for { // accept loop (empty connections like port probes are skipped)
+		conn, err := ln.Accept()
 		if err != nil {
-			return nil // client disconnected
+			return err
 		}
-		switch msgType {
-		case msgProviderMetaReq:
-			ctx.handleMetaReq(body)
-		case msgCallbackReq:
-			func() {
-				defer func() {
-					if e := recover(); e != nil {
-						w := &writer{}
-						w.i32(0)
-						w.u8(0)
-						w.rawStr(fmt.Sprintf("%v", e))
-						_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
-					}
+		if tcp, ok := conn.(*net.TCPConn); ok {
+			_ = tcp.SetNoDelay(true)
+		}
+		ctx.conn = conn
+
+		// hello: "s5run <version> <protocol>"
+		hello := "s5run " + ClientVersion() + " 2"
+		if err := writeFrame(conn, msgServerHello, []byte(hello)); err != nil {
+			conn.Close()
+			continue
+		}
+
+		hadTraffic := false
+		for {
+			msgType, body, err := readFrame(conn)
+			if err != nil {
+				break // client disconnected
+			}
+			hadTraffic = true
+			switch msgType {
+			case msgProviderMetaReq:
+				ctx.handleMetaReq(body)
+			case msgCallbackReq:
+				func() {
+					defer func() {
+						if e := recover(); e != nil {
+							w := &writer{}
+							w.i32(0)
+							w.u8(0)
+							w.rawStr(fmt.Sprintf("%v", e))
+							_ = writeFrame(ctx.conn, msgCallbackResp, w.buf.Bytes())
+						}
+					}()
+					ctx.dispatchCallback(body)
 				}()
-				ctx.dispatchCallback(body)
-			}()
-		default:
-			return nil // unexpected message
+			default:
+				hadTraffic = false // unexpected message - treat as empty
+			}
+			if !hadTraffic {
+				break
+			}
 		}
+		conn.Close()
+		ctx.conn = nil
+		if hadTraffic {
+			return nil // a real client finished
+		}
+		// empty connection (e.g. a port probe) - accept the next one
 	}
 }
 )GO";

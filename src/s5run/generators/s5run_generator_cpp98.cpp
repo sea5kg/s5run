@@ -1765,37 +1765,50 @@ bool context::context_impl::serve(const std::string &host, int port) {
         s5run_close_socket(lfd);
         return false;
     }
-    m_sock = ::accept(lfd, 0, 0);
-    s5run_close_socket(lfd);
-    if (m_sock == S5RUN_BAD_SOCKET)
-        return false;
-    s5run_set_nodelay(m_sock);
+    while (true) { // accept loop (empty connections like port probes are skipped)
+        m_sock = ::accept(lfd, 0, 0);
+        if (m_sock == S5RUN_BAD_SOCKET) {
+            s5run_close_socket(lfd);
+            return false;
+        }
+        s5run_set_nodelay(m_sock);
 
-    // hello: "s5run <version> <protocol>"
-    {
-        std::string hello = std::string("s5run ") + client_version() + " 2";
-        std::vector<u8> hb(hello.begin(), hello.end());
-        send_message(M_SERVER_HELLO, hb);
-    }
-
-    while (true) {
-        u8 msg_type = 0;
-        std::vector<u8> body;
-        if (!read_frame(m_sock, msg_type, body))
-            break; // client disconnected
-        if (msg_type == M_PROVIDER_META_REQ) {
-            handle_meta_req(body);
+        // hello: "s5run <version> <protocol>"
+        try {
+            std::string hello = std::string("s5run ") + client_version() + " 2";
+            std::vector<u8> hb(hello.begin(), hello.end());
+            send_message(M_SERVER_HELLO, hb);
+        } catch (const std::exception &) {
+            // the client closed immediately (a port probe) - accept the next one
+            disconnect();
             continue;
         }
-        if (msg_type == M_CALLBACK_REQ) {
-            try { dispatch_callback(body); }
-            catch (const std::exception &) {}
-            continue;
+
+        bool had_traffic = false;
+        while (true) {
+            u8 msg_type = 0;
+            std::vector<u8> body;
+            if (!read_frame(m_sock, msg_type, body))
+                break; // client disconnected
+            had_traffic = true;
+            if (msg_type == M_PROVIDER_META_REQ) {
+                handle_meta_req(body);
+                continue;
+            }
+            if (msg_type == M_CALLBACK_REQ) {
+                try { dispatch_callback(body); }
+                catch (const std::exception &) {}
+                continue;
+            }
+            break; // unexpected message
         }
-        break; // unexpected message
+        disconnect();
+        if (had_traffic) {
+            s5run_close_socket(lfd);
+            return true; // a real client finished
+        }
+        // empty connection (e.g. a port probe) - accept the next one
     }
-    disconnect();
-    return true;
 }
 
 bool serve(context *ctx, const std::string &host, int port) { return ctx->m_impl->serve(host, port); }
