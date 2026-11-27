@@ -183,6 +183,12 @@ const s5run_class_metadata &base_context_class_MassageCrew_Queue::metadata() {
             mm.args.push_back(s5run_arg_metadata("msg_text", "string"));
             meta.methods.push_back(mm);
         }
+        {
+            s5run_method_metadata mm;
+            mm.name = "consume";
+            mm.return_type = "var";
+            meta.methods.push_back(mm);
+        }
     }
     return meta;
 }
@@ -667,6 +673,7 @@ private:
     std::map<std::string, s5run_object *> m_class_samples;
     void cb_getQueue(i32 cb_id, Reader &r);
     void cbm_MassageCrew_Queue_publish(i32 cb_id, Reader &r);
+    void cbm_MassageCrew_Queue_consume(i32 cb_id, Reader &r);
     void ctor_MassageCrew_Queue(i32 cb_id, Reader &r);
     i32 register_instance_MassageCrew_Queue(base_context_class_MassageCrew_Queue *obj);
     void store_instance(const std::string &cls, i32 id, s5run_object *obj);
@@ -825,6 +832,19 @@ void context::context_impl::cbm_MassageCrew_Queue_publish(i32 cb_id, Reader &r) 
 }
 
 
+void context::context_impl::cbm_MassageCrew_Queue_consume(i32 cb_id, Reader &r) {
+    u32 n = r.get_u32();
+    if (n != 1) throw std::runtime_error("MassageCrew_Queue.consume: wrong argument count");
+    i32 this_id = (i32)read_int(r);
+    std::map<i32, base_context_class_MassageCrew_Queue *>::const_iterator it = m_instances_MassageCrew_Queue.find(this_id);
+    if (it == m_instances_MassageCrew_Queue.end()) throw std::runtime_error("MassageCrew_Queue: unknown this_id");
+    s5run_variable res = it->second->consume();
+    Writer w; w.put_i32(cb_id); w.put_u8(1);
+    encode_value(w, res);
+    send_message(M_CALLBACK_RESP, w.data());
+}
+
+
 void context::context_impl::keep_sample(s5run_object *sample) {
     m_class_samples[sample->s5run_class_name()] = sample;
 }
@@ -858,6 +878,7 @@ void context::context_impl::dispatch_callback(const std::vector<u8> &body) {
     try {
         if (method == "getQueue") { cb_getQueue(cb_id, r); return; }
         if (method == "publish") { cbm_MassageCrew_Queue_publish(cb_id, r); return; }
+        if (method == "consume") { cbm_MassageCrew_Queue_consume(cb_id, r); return; }
         if (method == "MassageCrew_Queue") { ctor_MassageCrew_Queue(cb_id, r); return; }
     } catch (const std::exception &e) {
         Writer w; w.put_i32(cb_id); w.put_u8(0); w.put_string(e.what());

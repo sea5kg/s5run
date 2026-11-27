@@ -341,6 +341,7 @@ def test_run_command_providers(ports):
         LOG.get_logger().info(" ... Running script %s", _name)
         in_args = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "input_arguments.txt"))
         output_expected = UtilsFiles.safe_read_file(os.path.join(_dir, "output_console_expected.txt"))
+        output_expected[-1] = output_expected[-1].rstrip()
         output_expected = "".join(output_expected)
         command = [S5RUN_BIN, "run", "127.0.0.1:" + str(ports["S5RUN_SERVER_PORT"])]
         providers = UtilsFiles.safe_read_file_no_empty(os.path.join(_dir, "providers.txt"))
@@ -452,14 +453,6 @@ def test_callback_error(host, port):
 
 def main():
     os.makedirs(os.path.join(ROOT, "tmp"), exist_ok=True)
-
-    if len(sys.argv) >= 2:
-        host = sys.argv[1]
-        port = int(sys.argv[2]) if len(sys.argv) > 2 else int(sys.argv[1])
-        test_happy_path(host, port)
-        test_callback_error(host, port)
-        print("all smoke tests passed")
-        return
 
     UtilsSmokeTests.step_compile_s5run(LOG.get_logger())
     UtilsSmokeTests.step_clean_generated_outputs(LOG.get_logger())

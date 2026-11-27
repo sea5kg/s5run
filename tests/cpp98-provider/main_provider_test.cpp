@@ -9,6 +9,7 @@
 #include "d2_s5run_provider.h"
 
 #include <cstdio>
+#include <deque>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -30,10 +31,23 @@ public:
 
   virtual void publish(const std::string &msg_id, const std::string &msg_text) {
     g_published.push_back(m_name + "|" + msg_id + "|" + msg_text);
+    m_messages.push_back(std::make_pair(msg_id, msg_text));
+  }
+
+  // take one message from the queue; undefined when empty
+  virtual s5run_provider::s5run_variable consume() {
+    if (m_messages.empty())
+      return s5run_provider::s5run_variable();  // undefined
+    std::map<std::string, s5run_provider::s5run_variable> msg;
+    msg["msg_id"] = s5run_provider::s5run_variable(m_messages.front().first);
+    msg["msg_text"] = s5run_provider::s5run_variable(m_messages.front().second);
+    m_messages.pop_front();
+    return s5run_provider::s5run_variable(msg);
   }
 
 private:
   std::string m_name;
+  std::deque<std::pair<std::string, std::string> > m_messages;
 };
 
 static std::string g_last_queue_name;

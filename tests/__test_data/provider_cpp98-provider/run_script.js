@@ -21,7 +21,17 @@ function main(key, value) {
     total += i;
 
   var q = getQueue("test_q");
-  q.publish(key, value);
+  for (var i = 0; i < 10; i++)
+    q.publish(key, value + " (" + i + ")");
+
+  var msg = q.consume();
+  while (msg) {
+    console.log(msg);
+    msg = q.consume();
+  }
+
+  var q2 = getQueue("test_scenario5");
+  q2.publish("msg1", "Hello from scenario4 to scenario5");
 
   return {
     ok: true,

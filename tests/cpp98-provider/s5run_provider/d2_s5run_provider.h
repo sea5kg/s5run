@@ -171,9 +171,11 @@ public:
     virtual std::vector<std::string> s5run_method_names() const {
         std::vector<std::string> out;
         out.push_back("publish");
+        out.push_back("consume");
         return out;
     }
     virtual void publish(const std::string & msg_id, const std::string & msg_text) = 0;
+    virtual s5run_variable consume() = 0;
 };
 
 class base_context_function_getQueue : public s5run_function {

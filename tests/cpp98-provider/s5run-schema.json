@@ -36,6 +36,11 @@
               "name": "msg_text"
             }
           ]
+        },
+        {
+          "name": "consume",
+          "return": "var",
+          "arguments": []
         }
       ]
     }

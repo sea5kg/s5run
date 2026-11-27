@@ -11,4 +11,14 @@ hello from test_run_script.js
 a = msg1, b = This is text
 a + b = msg1This is text
 [warning] this is a warning message from provider_cpp98-provider
+{msg_id: msg1, msg_text: This is text (0)}
+{msg_id: msg1, msg_text: This is text (1)}
+{msg_id: msg1, msg_text: This is text (2)}
+{msg_id: msg1, msg_text: This is text (3)}
+{msg_id: msg1, msg_text: This is text (4)}
+{msg_id: msg1, msg_text: This is text (5)}
+{msg_id: msg1, msg_text: This is text (6)}
+{msg_id: msg1, msg_text: This is text (7)}
+{msg_id: msg1, msg_text: This is text (8)}
+{msg_id: msg1, msg_text: This is text (9)}
 {args: [msg1, This is text], loopTotal: 55, ok: true, sum: msg1This is text}
