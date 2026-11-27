@@ -60,6 +60,10 @@ public final class S5RunContext implements AutoCloseable {
         return S5RunClientVersion.VERSION;
     }
 
+    public static int protocolVersion() {
+        return S5RunProtocolVersion.S5RUN_PROTOCOL_VERSION;
+    }
+
     public S5RunContext setScript(String script) {
         this.script = script;
         return this;
@@ -573,9 +577,9 @@ public final class S5RunContext implements AutoCloseable {
         if (parts.length != 3 || !parts[0].equals("s5run"))
             throw new RuntimeException("s5run: bad server hello: " + text);
         int protocol = Integer.parseInt(parts[2]);
-        if (protocol != 2)
+        if (protocol != S5RunProtocolVersion.S5RUN_PROTOCOL_VERSION)
             throw new RuntimeException("s5run: server protocol version " + protocol
-                    + " is not supported (client supports 2)");
+                    + " is not supported (client supports " + S5RunProtocolVersion.S5RUN_PROTOCOL_VERSION + ")");
     }
 
     private static long probeServerLoad(S5RunRemoteServerInfo server) {

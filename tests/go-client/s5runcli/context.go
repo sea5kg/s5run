@@ -11,6 +11,8 @@ import (
 
 const clientVersion = "1.0.0"
 
+const S5RUN_PROTOCOL_VERSION = 2
+
 type throwingHandler func(cbID int32, r *reader)
 
 type pendingType struct {

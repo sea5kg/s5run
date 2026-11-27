@@ -17,6 +17,8 @@ from .variable import (
 )
 from .wire import _Msg, _Reader, _Writer
 
+S5RUN_PROTOCOL_VERSION = 2
+
 
 
 
@@ -534,9 +536,9 @@ def _read_hello(sock: socket.socket) -> None:
     parts = text.split(" ")
     if len(parts) != 3 or parts[0] != "s5run":
         raise RuntimeError(f"s5run: bad server hello: {text!r}")
-    if int(parts[2]) != 2:
+    if int(parts[2]) != S5RUN_PROTOCOL_VERSION:
         raise RuntimeError(
-            f"s5run: server protocol version {parts[2]} is not supported (client supports 2)")
+            f"s5run: server protocol version {parts[2]} is not supported (client supports {S5RUN_PROTOCOL_VERSION})")
 
 
 def _probe_server_load(server: RemoteServerInfo) -> int:

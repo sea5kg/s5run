@@ -36,6 +36,7 @@
 
 #include "s5run_generators.h"
 #include "s5run_schema.h"
+#include "s5run_globals.h"
 
 #include <sys/stat.h>
 
@@ -1037,9 +1038,9 @@ def _read_hello(sock: socket.socket) -> None:
     parts = text.split(" ")
     if len(parts) != 3 or parts[0] != "s5run":
         raise RuntimeError(f"s5run: bad server hello: {text!r}")
-    if int(parts[2]) != 2:
+    if int(parts[2]) != S5RUN_PROTOCOL_VERSION:
         raise RuntimeError(
-            f"s5run: server protocol version {parts[2]} is not supported (client supports 2)")
+            f"s5run: server protocol version {parts[2]} is not supported (client supports {S5RUN_PROTOCOL_VERSION})")
 
 
 def _probe_server_load(server: RemoteServerInfo) -> int:
@@ -1218,6 +1219,8 @@ std::vector<std::string> generator_python::generate_client(const schema &s, cons
   context += "    _write_str_value, _write_undefined,\n";
   context += ")\n";
   context += "from .wire import _Msg, _Reader, _Writer\n";
+  context += "\n";
+  context += "S5RUN_PROTOCOL_VERSION = " + std::to_string(S5RUN_PROTOCOL_VERSION) + "\n";
   context += "\n";
   context += generate_context(s);
   context += "\n";

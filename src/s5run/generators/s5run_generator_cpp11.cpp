@@ -36,6 +36,7 @@
 
 #include "s5run_generators.h"
 #include "s5run_schema.h"
+#include "s5run_globals.h"
 
 #include <cstdio>
 #include <fstream>
@@ -819,8 +820,8 @@ void context::impl::_read_hello(int fd) {
     if (last_space == std::string::npos)
         throw std::runtime_error("s5run: bad server hello: " + text);
     int protocol = atoi(text.substr(last_space + 1).c_str());
-    if (protocol != 2)
-        throw std::runtime_error("s5run: server protocol version " + std::to_string(protocol) + " is not supported (client supports 2)");
+    if (protocol != S5RUN_PROTOCOL_VERSION)
+        throw std::runtime_error("s5run: server protocol version " + std::to_string(protocol) + " is not supported (client supports " + std::to_string(S5RUN_PROTOCOL_VERSION) + ")");
 }
 
 void context::impl::_disconnect() {
@@ -1298,6 +1299,7 @@ std::string generator_cpp11::generate_header(const schema &s, std::shared_ptr<sc
   out += "// AUTO-GENERATED. DO NOT EDIT.\n#pragma once\n\n";
   out += "#include <cstdint>\n#include <cstdio>\n#include <map>\n#include <memory>\n#include <string>\n#include <vector>\n\n";
   out += "namespace " + ns + " {\n\n";
+  out += "const int S5RUN_PROTOCOL_VERSION = " + std::to_string(S5RUN_PROTOCOL_VERSION) + ";\n\n";
   out += "class context;\nclass s5run_remote_server_info;\nclass run_result;\n";
   out += "std::shared_ptr<context> make_context();\n\n";
   out += VALUE_CLASS;

@@ -85,8 +85,10 @@ func readHello(conn net.Conn) error {
 	}
 	for i := len(text) - 1; i > 5; i-- {
 		if text[i] == ' ' {
-			if parseInt(text[i+1:]) != 2 {
-				return errors.New("s5run: server protocol version is not supported (client supports 2)")
+			serverProtocolVersion := parseInt(text[i+1:])
+			if serverProtocolVersion != S5RUN_PROTOCOL_VERSION {
+				errorMsg := fmt.Sprintf("s5run: server protocol version %d is not supported (client supports %d)", serverProtocolVersion, S5RUN_PROTOCOL_VERSION)
+				return errors.New(errorMsg)
 			}
 			return nil
 		}

@@ -501,8 +501,8 @@ void context::impl::_read_hello(int fd) {
     if (last_space == std::string::npos)
         throw std::runtime_error("s5run: bad server hello: " + text);
     int protocol = atoi(text.substr(last_space + 1).c_str());
-    if (protocol != 2)
-        throw std::runtime_error("s5run: server protocol version " + std::to_string(protocol) + " is not supported (client supports 2)");
+    if (protocol != S5RUN_PROTOCOL_VERSION)
+        throw std::runtime_error("s5run: server protocol version " + std::to_string(protocol) + " is not supported (client supports " + std::to_string(S5RUN_PROTOCOL_VERSION) + ")");
 }
 
 void context::impl::_disconnect() {

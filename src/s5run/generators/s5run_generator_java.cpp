@@ -36,6 +36,7 @@
 
 #include "s5run_generators.h"
 #include "s5run_schema.h"
+#include "s5run_globals.h"
 
 #include <sys/stat.h>
 
@@ -1491,6 +1492,10 @@ public final class S5RunContext implements AutoCloseable {
         return S5RunClientVersion.VERSION;
     }
 
+    public static int protocolVersion() {
+        return S5RunProtocolVersion.S5RUN_PROTOCOL_VERSION;
+    }
+
     public S5RunContext setScript(String script) {
         this.script = script;
         return this;
@@ -1702,9 +1707,9 @@ public final class S5RunContext implements AutoCloseable {
         if (parts.length != 3 || !parts[0].equals("s5run"))
             throw new RuntimeException("s5run: bad server hello: " + text);
         int protocol = Integer.parseInt(parts[2]);
-        if (protocol != 2)
+        if (protocol != S5RunProtocolVersion.S5RUN_PROTOCOL_VERSION)
             throw new RuntimeException("s5run: server protocol version " + protocol
-                    + " is not supported (client supports 2)");
+                    + " is not supported (client supports " + S5RunProtocolVersion.S5RUN_PROTOCOL_VERSION + ")");
     }
 
     private static long probeServerLoad(S5RunRemoteServerInfo server) {
@@ -2010,14 +2015,26 @@ std::vector<std::string> generator_java::generate_client(const schema &s, const 
     pkg,
     "S5RunClientVersion",
     "\npublic final class S5RunClientVersion {\n"
-    "    public static final String VERSION = \"" +
-      s.client_version +
-      "\";\n"
+    "    public static final String VERSION = \"" + s.client_version + "\";\n"
       "\n"
       "    public static String get() {\n"
       "        return VERSION;\n"
       "    }\n"
       "    private S5RunClientVersion() {}\n"
+      "}\n",
+    written
+  );
+  write_java_file(
+    pkg_dir,
+    pkg,
+    "S5RunProtocolVersion",
+    "\npublic final class S5RunProtocolVersion {\n"
+    "    public static final int S5RUN_PROTOCOL_VERSION = " + std::to_string(S5RUN_PROTOCOL_VERSION) + ";\n" +
+      "\n"
+      "    public static int get() {\n"
+      "        return S5RUN_PROTOCOL_VERSION;\n"
+      "    }\n"
+      "    private S5RunProtocolVersion() {}\n"
       "}\n",
     written
   );

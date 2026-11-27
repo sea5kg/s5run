@@ -875,9 +875,9 @@ void context::context_impl::read_hello(sock_t s) {
     if (last_space == std::string::npos)
         throw std::runtime_error("s5run: bad server hello: " + text);
     int protocol = 0; std::sscanf(text.substr(last_space + 1).c_str(), "%d", &protocol);
-    if (protocol != 2)
+    if (protocol != S5RUN_PROTOCOL_VERSION)
         throw std::runtime_error("s5run: server protocol version " + num_to_str(protocol)
-                                 + " is not supported (client supports 2)");
+                                 + " is not supported (client supports " + num_to_str(S5RUN_PROTOCOL_VERSION) + ")");
 }
 
 void context::context_impl::disconnect() {

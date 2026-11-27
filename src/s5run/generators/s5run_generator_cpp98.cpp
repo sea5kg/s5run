@@ -35,6 +35,7 @@
  ***********************************************************************************/
 
 #include "s5run_generators.h"
+#include "s5run_globals.h"
 
 #include "nlohmann/json.hpp"
 
@@ -438,6 +439,7 @@ std::string generator_cpp98::generate_header(const schema &s) const {
   out += UNDEF_WIN32_MACROS;
   out += "\n";
   out += "namespace " + ns + " {\n\n";
+  out += "const int S5RUN_PROTOCOL_VERSION = " + std::to_string(S5RUN_PROTOCOL_VERSION) + ";\n\n";
   out += "typedef unsigned char u8;\ntypedef unsigned short u16;\ntypedef unsigned int u32;\n";
   out += "#ifdef _MSC_VER\ntypedef __int64 i64;\ntypedef unsigned __int64 u64;\n#else\n";
   out += "typedef long long i64;\ntypedef unsigned long long u64;\n#endif\n";
@@ -1476,9 +1478,9 @@ void context::context_impl::read_hello(sock_t s) {
     if (last_space == std::string::npos)
         throw std::runtime_error("s5run: bad server hello: " + text);
     int protocol = 0; std::sscanf(text.substr(last_space + 1).c_str(), "%d", &protocol);
-    if (protocol != 2)
+    if (protocol != S5RUN_PROTOCOL_VERSION)
         throw std::runtime_error("s5run: server protocol version " + num_to_str(protocol)
-                                 + " is not supported (client supports 2)");
+                                 + " is not supported (client supports " + num_to_str(S5RUN_PROTOCOL_VERSION) + ")");
 }
 
 void context::context_impl::disconnect() {
